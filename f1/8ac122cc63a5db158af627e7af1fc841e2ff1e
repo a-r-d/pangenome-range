@@ -1,0 +1,55 @@
+.gitignore
+  s_54fde64f62d445::t_be49a069c73d87 146-149
+  s_54fde64f62d445::t_99baf3a2c9e0f1 144-145
+crates/panrange-cli/Cargo.toml
+  s_54fde64f62d445::t_96304d8e9ad832 1-22
+Cargo.toml
+  s_54fde64f62d445::t_be49a069c73d87 1-32
+crates/panrange-cli/src/main.rs
+  s_54fde64f62d445::t_d1a034d26b4c1d 111
+  s_54fde64f62d445::t_96304d8e9ad832 1-77,79-110,112-122,137-163,168-204
+  s_54fde64f62d445::t_b324ebea39c42a 78,123-136
+  s_54fde64f62d445::t_53aa2eafa66b8f 164-167
+crates/panrange-format/src/source.rs
+  s_54fde64f62d445::t_dde027c03b0918 336-337
+  s_54fde64f62d445::t_f4c939ca42b899 196-197,239
+  s_54fde64f62d445::t_53aa2eafa66b8f 5,57-60,180-181,183,306-307,315-318
+  s_54fde64f62d445::t_be49a069c73d87 1-4,6-12,17-19,24-28,33-44,49-56,61-179,184-190,192-195,198-237,240-271,273-289,291-305,308-314,319-335,338-352
+  s_54fde64f62d445::t_7492b0d2daf401 13-16,20-23,29-32,45-48,182,191,238,272,290
+crates/panrange-build/Cargo.toml
+  s_54fde64f62d445::t_96304d8e9ad832 1-15
+crates/panrange-build/src/lib.rs
+  s_54fde64f62d445::t_268fe7a997cfc6 21-26
+  s_54fde64f62d445::t_53aa2eafa66b8f 27
+  s_54fde64f62d445::t_96304d8e9ad832 1-20,28
+crates/panrange-query/src/lib.rs
+  s_54fde64f62d445::t_96304d8e9ad832 1-142,147-173
+  s_54fde64f62d445::t_53aa2eafa66b8f 143-146
+crates/panrange-format/src/lib.rs
+  s_54fde64f62d445::t_be49a069c73d87 1-10
+crates/panrange-query/Cargo.toml
+  s_54fde64f62d445::t_96304d8e9ad832 1-16
+crates/panrange-format/Cargo.toml
+  s_54fde64f62d445::t_be49a069c73d87 1-12
+crates/panrange-format/src/cost.rs
+  s_54fde64f62d445::t_7492b0d2daf401 57-58,105-107
+  s_54fde64f62d445::t_be49a069c73d87 1-56,59-104,108-109
+Cargo.lock
+  s_54fde64f62d445::t_dee50583e4a6cb 1-182
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.24",
+  "base_commit_sha": "f18ac122cc63a5db158af627e7af1fc841e2ff1e",
+  "prompts": {},
+  "sessions": {
+    "s_54fde64f62d445": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a03960-ddaf-7240-9dd8-9234e3e1a812",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "aaron decker <aaron@ard.ninja>"
+    }
+  }
+}
