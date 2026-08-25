@@ -78,7 +78,8 @@ cargo run --release -p pangenome-range-cli -- \
 ```
 
 Before paying for all 20 window/compression builds on a new input, run the
-previously selected 256 KiB, zstd-6, exact-deduplication configuration alone:
+current small-query candidate alone: 16 KiB windows, zstd-3, the v2 two-level
+directory, and no deduplication:
 
 ```bash
 cargo run --release -p pangenome-range-cli -- \

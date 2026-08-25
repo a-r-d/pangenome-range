@@ -11,16 +11,18 @@ use std::collections::{BTreeMap, BTreeSet, BinaryHeap, HashMap};
 use std::error::Error;
 use std::fs::File;
 use std::io::{self, BufWriter, Write};
+use std::ops::Range;
 use std::path::Path;
 use std::time::Instant;
 
 pub type ExperimentResult<T> = Result<T, Box<dyn Error + Send + Sync>>;
 
-const ARCHIVE_MAGIC: &[u8; 8] = b"PNGRNG01";
+const ARCHIVE_MAGIC: &[u8; 8] = b"PNGRNG02";
 const REGION_MAGIC: &[u8; 8] = b"PNGRGN01";
-const ARCHIVE_VERSION: u32 = 1;
+const ARCHIVE_VERSION: u32 = 2;
 const REGION_VERSION: u32 = 1;
 const HEADER_LEN: usize = 64;
+const DIRECTORY_PAGE_TARGET_BYTES: usize = 4 * 1024;
 pub const BOOTSTRAP_LEN: usize = 16 * 1024;
 pub const CONSTRUCTION_CONTEXT: u64 = 100;
 
@@ -123,6 +125,8 @@ pub struct ArchiveBuildMetrics {
     pub expansion_ratio: f64,
     pub index_bytes: u64,
     pub index_ratio: f64,
+    pub root_index_bytes: u64,
+    pub directory_pages: u64,
     pub directory_entries: u64,
     pub physical_chunks: u64,
     pub deduplicated_entries: u64,
@@ -150,6 +154,8 @@ pub struct QueryMeasurement {
     pub duplicate_bytes_fetched: u64,
     pub bootstrap_bytes_fetched: u64,
     pub logical_index_bytes: u64,
+    pub directory_page_bytes_fetched: u64,
+    pub directory_pages_selected: u64,
     pub data_bytes_fetched: u64,
     pub required_compressed_payload_bytes: u64,
     pub canonical_payload_bytes: u64,
@@ -189,8 +195,33 @@ struct ArchiveEntry {
 
 #[derive(Clone, Debug)]
 struct ArchiveIndex {
-    logical_bytes: u64,
     entries: Vec<ArchiveEntry>,
+}
+
+#[derive(Clone, Debug)]
+struct DirectoryPageRef {
+    sample: String,
+    contig: String,
+    start: u64,
+    end: u64,
+    offset: u64,
+    length: u64,
+    entry_count: u64,
+}
+
+#[derive(Clone, Debug)]
+struct RootIndex {
+    logical_bytes: u64,
+    pages: Vec<DirectoryPageRef>,
+}
+
+#[derive(Clone, Debug)]
+struct DirectoryLookup {
+    entries: Vec<ArchiveEntry>,
+    logical_bytes: u64,
+    fetched_bytes: u64,
+    fetched_ranges: u64,
+    selected_pages: u64,
 }
 
 #[derive(Clone, Debug)]
@@ -252,7 +283,7 @@ impl ByteRange {
 #[derive(Clone, Debug)]
 struct Bootstrap {
     bytes: Vec<u8>,
-    index: ArchiveIndex,
+    root: RootIndex,
     dependency_rounds: u64,
 }
 
@@ -383,34 +414,7 @@ pub fn build_fixed_archive(
         }
     }
 
-    let mut entries = Vec::with_capacity(pending_entries.len());
-    for entry in &pending_entries {
-        entries.push(ArchiveEntry {
-            sample: entry.sample.clone(),
-            contig: entry.contig.clone(),
-            start: entry.start,
-            end: entry.end,
-            offset: 0,
-            compressed_len: usize_to_u64(chunks[entry.chunk_id].compressed.len())?,
-            uncompressed_len: chunks[entry.chunk_id].uncompressed_len,
-            codec: config.codec,
-        });
-    }
-    let provisional_index = encode_index(&entries)?;
-    let data_offset = usize_to_u64(HEADER_LEN)?
-        .checked_add(usize_to_u64(provisional_index.len())?)
-        .ok_or_else(|| invalid_data("archive data offset overflow"))?;
-    let mut next_offset = data_offset;
-    for chunk in &mut chunks {
-        chunk.offset = next_offset;
-        next_offset = next_offset
-            .checked_add(usize_to_u64(chunk.compressed.len())?)
-            .ok_or_else(|| invalid_data("archive size overflow"))?;
-    }
-    for (entry, pending) in entries.iter_mut().zip(&pending_entries) {
-        entry.offset = chunks[pending.chunk_id].offset;
-    }
-    entries.sort_by(|left, right| {
+    pending_entries.sort_by(|left, right| {
         (&left.sample, &left.contig, left.start, left.end).cmp(&(
             &right.sample,
             &right.contig,
@@ -418,18 +422,67 @@ pub fn build_fixed_archive(
             right.end,
         ))
     });
-    let index = encode_index(&entries)?;
-    if index.len() != provisional_index.len() {
-        return Err(invalid_data("index size changed after assigning offsets").into());
+    let provisional_entries = archive_entries(&pending_entries, &chunks, config.codec)?;
+    let page_ranges = partition_directory_pages(&provisional_entries)?;
+    let provisional_page_payloads = page_ranges
+        .iter()
+        .map(|range| encode_index(&provisional_entries[range.clone()]))
+        .collect::<ExperimentResult<Vec<_>>>()?;
+    let mut directory_pages = Vec::with_capacity(page_ranges.len());
+    for (range, payload) in page_ranges.iter().zip(&provisional_page_payloads) {
+        directory_pages.push(DirectoryPageRef {
+            sample: provisional_entries[range.start].sample.clone(),
+            contig: provisional_entries[range.start].contig.clone(),
+            start: provisional_entries[range.start].start,
+            end: provisional_entries[range.end - 1].end,
+            offset: 0,
+            length: usize_to_u64(payload.len())?,
+            entry_count: usize_to_u64(range.len())?,
+        });
+    }
+    let provisional_root = encode_root_index(&directory_pages)?;
+    let mut next_page_offset = usize_to_u64(HEADER_LEN)?
+        .checked_add(usize_to_u64(provisional_root.len())?)
+        .ok_or_else(|| invalid_data("directory page offset overflow"))?;
+    for page in &mut directory_pages {
+        page.offset = next_page_offset;
+        next_page_offset = next_page_offset
+            .checked_add(page.length)
+            .ok_or_else(|| invalid_data("archive data offset overflow"))?;
+    }
+    let data_offset = next_page_offset;
+    let mut next_offset = data_offset;
+    for chunk in &mut chunks {
+        chunk.offset = next_offset;
+        next_offset = next_offset
+            .checked_add(usize_to_u64(chunk.compressed.len())?)
+            .ok_or_else(|| invalid_data("archive size overflow"))?;
+    }
+    let entries = archive_entries(&pending_entries, &chunks, config.codec)?;
+    let page_payloads = page_ranges
+        .iter()
+        .map(|range| encode_index(&entries[range.clone()]))
+        .collect::<ExperimentResult<Vec<_>>>()?;
+    for (page, payload) in directory_pages.iter().zip(&page_payloads) {
+        if page.length != usize_to_u64(payload.len())? {
+            return Err(invalid_data("directory page size changed after assigning offsets").into());
+        }
+    }
+    let root = encode_root_index(&directory_pages)?;
+    if root.len() != provisional_root.len() {
+        return Err(invalid_data("root index size changed after assigning offsets").into());
     }
     let header = encode_header(
-        usize_to_u64(index.len())?,
+        usize_to_u64(root.len())?,
         usize_to_u64(entries.len())?,
         data_offset,
     );
     let mut writer = BufWriter::new(File::create(output)?);
     writer.write_all(&header)?;
-    writer.write_all(&index)?;
+    writer.write_all(&root)?;
+    for page in &page_payloads {
+        writer.write_all(page)?;
+    }
     for chunk in &chunks {
         writer.write_all(&chunk.compressed)?;
     }
@@ -441,7 +494,8 @@ pub fn build_fixed_archive(
         .map(|chunk| usize_to_u64(chunk.compressed.len()))
         .collect::<Result<Vec<_>, _>>()?;
     chunk_sizes.sort_unstable();
-    let index_bytes = usize_to_u64(HEADER_LEN + index.len())?;
+    let index_bytes = data_offset;
+    let root_index_bytes = usize_to_u64(HEADER_LEN + root.len())?;
     let directory_entries = usize_to_u64(entries.len())?;
     let physical_chunks = usize_to_u64(chunks.len())?;
     Ok(ArchiveBuildMetrics {
@@ -451,6 +505,8 @@ pub fn build_fixed_archive(
         expansion_ratio: ratio(archive_bytes, source_gbz_bytes),
         index_bytes,
         index_ratio: ratio(index_bytes, archive_bytes),
+        root_index_bytes,
+        directory_pages: usize_to_u64(directory_pages.len())?,
         directory_entries,
         physical_chunks,
         deduplicated_entries: directory_entries.saturating_sub(physical_chunks),
@@ -505,22 +561,14 @@ pub fn query_fixed_archive(
     let bootstrap = load_bootstrap(&source)?;
 
     let lookup_started = Instant::now();
-    let entries = bootstrap
-        .index
-        .entries
-        .iter()
-        .filter(|entry| {
-            entry.sample == query.sample
-                && entry.contig == query.contig
-                && entry.start < query.end
-                && entry.end > query.start
-        })
-        .cloned()
-        .collect::<Vec<_>>();
+    let DirectoryLookup {
+        entries,
+        logical_bytes: logical_index_bytes,
+        fetched_bytes: directory_page_bytes_fetched,
+        fetched_ranges: directory_page_ranges_fetched,
+        selected_pages: directory_pages_selected,
+    } = lookup_directory(&source, &bootstrap, query)?;
     let index_lookup_us = lookup_started.elapsed().as_secs_f64() * 1_000_000.0;
-    if entries.is_empty() {
-        return Err(invalid_data(format!("no chunks cover query {}", query.id)).into());
-    }
 
     let bootstrap_end = usize_to_u64(bootstrap.bytes.len())?;
     let mut needed_ranges = BTreeSet::new();
@@ -541,7 +589,7 @@ pub fn query_fixed_archive(
         fetched.push((*range, bytes));
     }
 
-    let mut regional = RegionalGraph::default();
+    let mut regional: Option<RegionalGraph> = None;
     let mut decoded_chunks = BTreeSet::new();
     let mut decompression_us = 0.0;
     let mut decode_us = 0.0;
@@ -556,8 +604,13 @@ pub fn query_fixed_archive(
         let decode_started = Instant::now();
         let chunk = RegionalGraph::decode(&raw)?;
         decode_us += decode_started.elapsed().as_secs_f64() * 1_000_000.0;
-        regional.merge(chunk)?;
+        if let Some(existing) = &mut regional {
+            existing.merge(chunk)?;
+        } else {
+            regional = Some(chunk);
+        }
     }
+    let regional = regional.ok_or_else(|| invalid_data("query selected no regional chunks"))?;
 
     let reconstruction_started = Instant::now();
     let selected = regional.select_nodes(query)?;
@@ -578,10 +631,15 @@ pub fn query_fixed_archive(
     let trace = source.summary();
     let data_bytes_fetched = planned_ranges.iter().map(|range| range.len()).sum::<u64>();
     let logical_data_round = u64::from(!planned_ranges.is_empty());
-    let dependency_rounds = bootstrap.dependency_rounds + logical_data_round;
+    let logical_directory_round = u64::from(directory_page_ranges_fetched > 0);
+    let dependency_rounds =
+        bootstrap.dependency_rounds + logical_directory_round + logical_data_round;
     let required_compressed_payload_bytes = usize_to_u64(required_compressed.len())?;
     let canonical_payload_bytes = usize_to_u64(oracle.encoded.len())?;
     let mut dependency_groups = vec![1_u64; u64_to_usize(bootstrap.dependency_rounds)?];
+    if directory_page_ranges_fetched > 0 {
+        dependency_groups.push(directory_page_ranges_fetched);
+    }
     if !planned_ranges.is_empty() {
         dependency_groups.push(usize_to_u64(planned_ranges.len())?);
     }
@@ -607,7 +665,9 @@ pub fn query_fixed_archive(
         unique_bytes_fetched: trace.unique_bytes_requested,
         duplicate_bytes_fetched: trace.duplicate_bytes_requested,
         bootstrap_bytes_fetched: usize_to_u64(bootstrap.bytes.len())?,
-        logical_index_bytes: bootstrap.index.logical_bytes,
+        logical_index_bytes,
+        directory_page_bytes_fetched,
+        directory_pages_selected,
         data_bytes_fetched,
         required_compressed_payload_bytes,
         canonical_payload_bytes,
@@ -1126,40 +1186,128 @@ fn load_bootstrap(source: &impl RangeSource) -> ExperimentResult<Bootstrap> {
         return Err(invalid_data("archive is shorter than its header").into());
     }
     let header = decode_header(&bytes[..HEADER_LEN])?;
-    let index_end = usize_to_u64(HEADER_LEN)?
-        .checked_add(header.index_len)
-        .ok_or_else(|| invalid_data("index end overflow"))?;
+    let root_end = usize_to_u64(HEADER_LEN)?
+        .checked_add(header.root_len)
+        .ok_or_else(|| invalid_data("root index end overflow"))?;
+    if root_end > header.data_offset || header.data_offset > source_len {
+        return Err(invalid_data("archive directory offsets are inconsistent").into());
+    }
     let mut dependency_rounds = 1;
-    if index_end > first_len {
-        let remainder = source.read_range(first_len, u64_to_usize(index_end - first_len)?)?;
+    if root_end > first_len {
+        let remainder = source.read_range(first_len, u64_to_usize(root_end - first_len)?)?;
         bytes.extend_from_slice(&remainder);
         dependency_rounds += 1;
     }
-    let index = decode_index(
-        &bytes[HEADER_LEN..u64_to_usize(index_end)?],
-        header.entry_count,
-        index_end,
-    )?;
+    let root = decode_root_index(&bytes[HEADER_LEN..u64_to_usize(root_end)?], header)?;
     Ok(Bootstrap {
         bytes,
-        index,
+        root,
         dependency_rounds,
+    })
+}
+
+fn lookup_directory(
+    source: &impl RangeSource,
+    bootstrap: &Bootstrap,
+    query: &QuerySpec,
+) -> ExperimentResult<DirectoryLookup> {
+    let pages = bootstrap
+        .root
+        .pages
+        .iter()
+        .filter(|page| {
+            page.sample == query.sample
+                && page.contig == query.contig
+                && page.start < query.end
+                && page.end > query.start
+        })
+        .collect::<Vec<_>>();
+    if pages.is_empty() {
+        return Err(invalid_data(format!("no directory pages cover query {}", query.id)).into());
+    }
+
+    let bootstrap_end = usize_to_u64(bootstrap.bytes.len())?;
+    let mut needed_ranges = BTreeSet::new();
+    for page in &pages {
+        let page_end = page
+            .offset
+            .checked_add(page.length)
+            .ok_or_else(|| invalid_data("directory page range overflow"))?;
+        let start = page.offset.max(bootstrap_end);
+        if start < page_end {
+            needed_ranges.insert(ByteRange {
+                start,
+                end: page_end,
+            });
+        }
+    }
+    let planned_ranges = coalesce_ranges(needed_ranges.into_iter().collect(), 0);
+    let mut fetched = Vec::with_capacity(planned_ranges.len());
+    for range in &planned_ranges {
+        let bytes = source.read_range(range.start, u64_to_usize(range.len())?)?;
+        fetched.push((*range, bytes));
+    }
+
+    let mut entries = Vec::new();
+    let mut logical_bytes = bootstrap.root.logical_bytes;
+    for page in &pages {
+        logical_bytes = logical_bytes
+            .checked_add(page.length)
+            .ok_or_else(|| invalid_data("logical directory byte count overflow"))?;
+        let bytes = collect_stored_range(
+            ByteRange {
+                start: page.offset,
+                end: page
+                    .offset
+                    .checked_add(page.length)
+                    .ok_or_else(|| invalid_data("directory page range overflow"))?,
+            },
+            &bootstrap.bytes,
+            &fetched,
+        )?;
+        let page_index = decode_index(&bytes, page.entry_count)?;
+        for entry in page_index.entries {
+            if entry.sample != page.sample
+                || entry.contig != page.contig
+                || entry.start < page.start
+                || entry.end > page.end
+            {
+                return Err(
+                    invalid_data("directory page entry is outside its root descriptor").into(),
+                );
+            }
+            if entry.start < query.end && entry.end > query.start {
+                entries.push(entry);
+            }
+        }
+    }
+    if entries.is_empty() {
+        return Err(invalid_data(format!("no chunks cover query {}", query.id)).into());
+    }
+
+    Ok(DirectoryLookup {
+        entries,
+        logical_bytes,
+        fetched_bytes: planned_ranges.iter().map(|range| range.len()).sum(),
+        fetched_ranges: usize_to_u64(planned_ranges.len())?,
+        selected_pages: usize_to_u64(pages.len())?,
     })
 }
 
 #[derive(Clone, Copy, Debug)]
 struct Header {
-    index_len: u64,
+    root_len: u64,
     entry_count: u64,
+    data_offset: u64,
 }
 
-fn encode_header(index_len: u64, entry_count: u64, data_offset: u64) -> [u8; HEADER_LEN] {
+fn encode_header(root_len: u64, entry_count: u64, data_offset: u64) -> [u8; HEADER_LEN] {
     let mut output = [0_u8; HEADER_LEN];
     output[..8].copy_from_slice(ARCHIVE_MAGIC);
     output[8..12].copy_from_slice(&ARCHIVE_VERSION.to_le_bytes());
     output[12..16].copy_from_slice(&64_u32.to_le_bytes());
     output[16..24].copy_from_slice(&64_u64.to_le_bytes());
-    output[24..32].copy_from_slice(&index_len.to_le_bytes());
+    output[24..32].copy_from_slice(&root_len.to_le_bytes());
     output[32..40].copy_from_slice(&entry_count.to_le_bytes());
     output[40..48].copy_from_slice(&data_offset.to_le_bytes());
     output
@@ -1171,14 +1319,152 @@ fn decode_header(bytes: &[u8]) -> io::Result<Header> {
     }
     let version = u32::from_le_bytes(bytes[8..12].try_into().expect("fixed header slice"));
     let header_len = u32::from_le_bytes(bytes[12..16].try_into().expect("fixed header slice"));
-    if version != ARCHIVE_VERSION || usize::try_from(header_len).ok() != Some(HEADER_LEN) {
+    let root_offset = u64::from_le_bytes(bytes[16..24].try_into().expect("fixed header slice"));
+    if version != ARCHIVE_VERSION
+        || usize::try_from(header_len).ok() != Some(HEADER_LEN)
+        || root_offset != 64
+    {
         return Err(invalid_data(format!(
-            "unsupported archive version {version} or header length {header_len}"
+            "unsupported archive version {version}, header length {header_len}, or root offset {root_offset}"
         )));
     }
     Ok(Header {
-        index_len: u64::from_le_bytes(bytes[24..32].try_into().expect("fixed header slice")),
+        root_len: u64::from_le_bytes(bytes[24..32].try_into().expect("fixed header slice")),
         entry_count: u64::from_le_bytes(bytes[32..40].try_into().expect("fixed header slice")),
+        data_offset: u64::from_le_bytes(bytes[40..48].try_into().expect("fixed header slice")),
+    })
+}
+
+fn archive_entries(
+    pending_entries: &[PendingEntry],
+    chunks: &[ChunkBlob],
+    codec: ChunkCodec,
+) -> ExperimentResult<Vec<ArchiveEntry>> {
+    pending_entries
+        .iter()
+        .map(|entry| {
+            let chunk = chunks
+                .get(entry.chunk_id)
+                .ok_or_else(|| invalid_data("directory entry refers to an absent chunk"))?;
+            Ok(ArchiveEntry {
+                sample: entry.sample.clone(),
+                contig: entry.contig.clone(),
+                start: entry.start,
+                end: entry.end,
+                offset: chunk.offset,
+                compressed_len: usize_to_u64(chunk.compressed.len())?,
+                uncompressed_len: chunk.uncompressed_len,
+                codec,
+            })
+        })
+        .collect()
+}
+
+fn partition_directory_pages(entries: &[ArchiveEntry]) -> ExperimentResult<Vec<Range<usize>>> {
+    let mut result = Vec::new();
+    let mut page_start = 0;
+    let mut page_bytes = std::mem::size_of::<u64>();
+    for (index, entry) in entries.iter().enumerate() {
+        if entry.start >= entry.end {
+            return Err(invalid_data("directory entry has an empty coordinate interval").into());
+        }
+        let entry_bytes = encoded_index_entry_len(entry)?;
+        let starts_new_reference = index > page_start
+            && (entry.sample != entries[page_start].sample
+                || entry.contig != entries[page_start].contig);
+        let exceeds_target = index > page_start
+            && page_bytes
+                .checked_add(entry_bytes)
+                .is_none_or(|bytes| bytes > DIRECTORY_PAGE_TARGET_BYTES);
+        if starts_new_reference || exceeds_target {
+            result.push(page_start..index);
+            page_start = index;
+            page_bytes = std::mem::size_of::<u64>();
+        }
+        page_bytes = page_bytes
+            .checked_add(entry_bytes)
+            .ok_or_else(|| invalid_data("directory page length overflow"))?;
+    }
+    if page_start < entries.len() {
+        result.push(page_start..entries.len());
+    }
+    Ok(result)
+}
+
+fn encoded_index_entry_len(entry: &ArchiveEntry) -> ExperimentResult<usize> {
+    // Two string lengths, five numeric fields, and one codec/reserved word.
+    let fixed_bytes = 8_usize
+        .checked_mul(std::mem::size_of::<u64>())
+        .ok_or_else(|| invalid_data("directory entry length overflow"))?;
+    fixed_bytes
+        .checked_add(entry.sample.len())
+        .and_then(|bytes| bytes.checked_add(entry.contig.len()))
+        .ok_or_else(|| invalid_data("directory entry length overflow").into())
+}
+
+fn encode_root_index(pages: &[DirectoryPageRef]) -> ExperimentResult<Vec<u8>> {
+    let mut output = Vec::new();
+    put_u64(&mut output, usize_to_u64(pages.len())?);
+    for page in pages {
+        put_string(&mut output, &page.sample)?;
+        put_string(&mut output, &page.contig)?;
+        put_u64(&mut output, page.start);
+        put_u64(&mut output, page.end);
+        put_u64(&mut output, page.offset);
+        put_u64(&mut output, page.length);
+        put_u64(&mut output, page.entry_count);
+    }
+    Ok(output)
+}
+
+fn decode_root_index(bytes: &[u8], header: Header) -> ExperimentResult<RootIndex> {
+    let mut reader = BinaryReader::new(bytes);
+    let count = reader.u64()?;
+    let mut pages = Vec::with_capacity(u64_to_usize(count)?);
+    let root_end = usize_to_u64(HEADER_LEN)?
+        .checked_add(header.root_len)
+        .ok_or_else(|| invalid_data("root index end overflow"))?;
+    let mut previous_end = root_end;
+    let mut total_entries = 0_u64;
+    for _ in 0..count {
+        let page = DirectoryPageRef {
+            sample: reader.string()?,
+            contig: reader.string()?,
+            start: reader.u64()?,
+            end: reader.u64()?,
+            offset: reader.u64()?,
+            length: reader.u64()?,
+            entry_count: reader.u64()?,
+        };
+        let page_end = page
+            .offset
+            .checked_add(page.length)
+            .ok_or_else(|| invalid_data("directory page end overflow"))?;
+        if page.start >= page.end
+            || page.length == 0
+            || page.entry_count == 0
+            || page.offset < previous_end
+            || page_end > header.data_offset
+        {
+            return Err(invalid_data("invalid root directory page descriptor").into());
+        }
+        previous_end = page_end;
+        total_entries = total_entries
+            .checked_add(page.entry_count)
+            .ok_or_else(|| invalid_data("directory entry count overflow"))?;
+        pages.push(page);
+    }
+    reader.finish()?;
+    if total_entries != header.entry_count {
+        return Err(invalid_data(format!(
+            "header entry count {} does not match root directory {total_entries}",
+            header.entry_count
+        ))
+        .into());
+    }
+    Ok(RootIndex {
+        logical_bytes: root_end,
+        pages,
     })
 }
 
@@ -1199,11 +1485,7 @@ fn encode_index(entries: &[ArchiveEntry]) -> ExperimentResult<Vec<u8>> {
     Ok(output)
 }
 
-fn decode_index(
-    bytes: &[u8],
-    expected_count: u64,
-    logical_bytes: u64,
-) -> ExperimentResult<ArchiveIndex> {
+fn decode_index(bytes: &[u8], expected_count: u64) -> ExperimentResult<ArchiveIndex> {
     let mut reader = BinaryReader::new(bytes);
     let count = reader.u64()?;
     if count != expected_count {
@@ -1235,10 +1517,7 @@ fn decode_index(
         });
     }
     reader.finish()?;
-    Ok(ArchiveIndex {
-        logical_bytes,
-        entries,
-    })
+    Ok(ArchiveIndex { entries })
 }
 
 fn collect_chunk(
@@ -1246,7 +1525,6 @@ fn collect_chunk(
     bootstrap: &[u8],
     fetched: &[(ByteRange, Vec<u8>)],
 ) -> ExperimentResult<Vec<u8>> {
-    let mut output = vec![0_u8; u64_to_usize(entry.compressed_len)?];
     let chunk = ByteRange {
         start: entry.offset,
         end: entry
@@ -1254,9 +1532,18 @@ fn collect_chunk(
             .checked_add(entry.compressed_len)
             .ok_or_else(|| invalid_data("chunk end overflow"))?,
     };
+    collect_stored_range(chunk, bootstrap, fetched)
+}
+
+fn collect_stored_range(
+    stored: ByteRange,
+    bootstrap: &[u8],
+    fetched: &[(ByteRange, Vec<u8>)],
+) -> ExperimentResult<Vec<u8>> {
+    let mut output = vec![0_u8; u64_to_usize(stored.len())?];
     let bootstrap_end = usize_to_u64(bootstrap.len())?;
     copy_intersection(
-        chunk,
+        stored,
         ByteRange {
             start: 0,
             end: bootstrap_end,
@@ -1265,7 +1552,7 @@ fn collect_chunk(
         &mut output,
     )?;
     for (range, bytes) in fetched {
-        copy_intersection(chunk, *range, bytes, &mut output)?;
+        copy_intersection(stored, *range, bytes, &mut output)?;
     }
     Ok(output)
 }
@@ -1614,5 +1901,73 @@ mod tests {
 
         graph.nodes.insert(to.id, b"C".to_vec());
         assert_eq!(graph.adjacency().get(&from), Some(&BTreeSet::from([to])));
+    }
+
+    #[test]
+    fn directory_pages_are_bounded_and_do_not_mix_references() {
+        let entries = (0..100_u64)
+            .map(|index| ArchiveEntry {
+                sample: if index < 70 { "sample-a" } else { "sample-b" }.into(),
+                contig: "chr1".into(),
+                start: index * 16_384,
+                end: (index + 1) * 16_384,
+                offset: 0,
+                compressed_len: 100,
+                uncompressed_len: 200,
+                codec: ChunkCodec::Zstd3,
+            })
+            .collect::<Vec<_>>();
+
+        let pages = partition_directory_pages(&entries).unwrap();
+        assert!(pages.len() > 2);
+        for page in pages {
+            let encoded = encode_index(&entries[page.clone()]).unwrap();
+            assert!(encoded.len() <= DIRECTORY_PAGE_TARGET_BYTES);
+            assert!(
+                entries[page.clone()]
+                    .iter()
+                    .all(|entry| entry.sample == entries[page.start].sample)
+            );
+        }
+    }
+
+    #[test]
+    fn root_index_round_trip_preserves_leaf_page_descriptors() {
+        let mut pages = vec![
+            DirectoryPageRef {
+                sample: "sample".into(),
+                contig: "chr1".into(),
+                start: 0,
+                end: 16_384,
+                offset: 0,
+                length: 256,
+                entry_count: 2,
+            },
+            DirectoryPageRef {
+                sample: "sample".into(),
+                contig: "chr1".into(),
+                start: 16_384,
+                end: 32_768,
+                offset: 0,
+                length: 384,
+                entry_count: 3,
+            },
+        ];
+        let provisional = encode_root_index(&pages).unwrap();
+        let root_end = u64::try_from(HEADER_LEN + provisional.len()).unwrap();
+        pages[0].offset = root_end;
+        pages[1].offset = root_end + pages[0].length;
+        let encoded = encode_root_index(&pages).unwrap();
+        let header = Header {
+            root_len: u64::try_from(encoded.len()).unwrap(),
+            entry_count: 5,
+            data_offset: root_end + pages.iter().map(|page| page.length).sum::<u64>(),
+        };
+
+        let decoded = decode_root_index(&encoded, header).unwrap();
+        assert_eq!(decoded.pages.len(), pages.len());
+        assert_eq!(decoded.pages[0].offset, pages[0].offset);
+        assert_eq!(decoded.pages[1].entry_count, pages[1].entry_count);
+        assert_eq!(decoded.logical_bytes, root_end);
     }
 }

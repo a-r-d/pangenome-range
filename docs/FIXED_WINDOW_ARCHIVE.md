@@ -1,4 +1,4 @@
-# Fixed-window archive v1 (Candidate 0)
+# Fixed-window archive v2 (Candidate 1)
 
 Status: research prototype. This document describes the format implemented by
 `pangenome-range-build`, not a stable or production-ready interchange format.
@@ -25,7 +25,9 @@ byte 0
 ┌──────────────────────────────┐
 │ 64-byte archive header       │
 ├──────────────────────────────┤
-│ flat regional directory      │
+│ compact root directory       │
+├──────────────────────────────┤
+│ regional directory pages     │
 ├──────────────────────────────┤
 │ independently compressed     │
 │ regional chunk 0             │
@@ -42,29 +44,48 @@ that many bytes; strings use the same representation and must be UTF-8.
 
 ## Archive header
 
-The v1 header is exactly 64 bytes.
+The v2 header is exactly 64 bytes.
 
 | Byte range | Type | Meaning |
 |---|---|---|
-| `0..8` | `[u8; 8]` | Magic: `PNGRNG01` |
-| `8..12` | `u32` | Archive version: `1` |
+| `0..8` | `[u8; 8]` | Magic: `PNGRNG02` |
+| `8..12` | `u32` | Archive version: `2` |
 | `12..16` | `u32` | Header length: `64` |
-| `16..24` | `u64` | Directory offset: `64` |
-| `24..32` | `u64` | Directory length in bytes |
-| `32..40` | `u64` | Directory-entry count |
-| `40..48` | `u64` | First data byte: `64 + directory_length` |
+| `16..24` | `u64` | Root-directory offset: `64` |
+| `24..32` | `u64` | Root-directory length in bytes |
+| `32..40` | `u64` | Total leaf-directory entry count |
+| `40..48` | `u64` | First regional-payload byte, after all directory pages |
 | `48..64` | 16 bytes | Reserved, currently zero |
 
 The current reader validates the magic, version, and header length. It reads
-the directory directly after the header and does not yet validate the stored
-directory or data offsets. Those fields make the intended layout explicit, but
-they must not yet be treated as relocatable-section support.
+the root directly after the header and validates that every referenced leaf page
+is ordered, nonempty, and contained before the first regional payload.
 
-## Regional directory
+## Root directory
 
-The directory begins with a `u64` entry count, followed by that many entries.
-The count must match the count in the archive header. Entries are sorted by
-`(sample, contig, start, end)`.
+The root begins with a `u64` page count. Each page descriptor contains:
+
+| Field | Type | Meaning |
+|---|---|---|
+| `sample` | UTF-8 string | Reference sample name |
+| `contig` | UTF-8 string | Reference contig name |
+| `start` | `u64` | First coordinate covered by the page |
+| `end` | `u64` | Exclusive last coordinate covered by the page |
+| `page_offset` | `u64` | Absolute archive offset of the leaf page |
+| `page_length` | `u64` | Encoded leaf-page length |
+| `entry_count` | `u64` | Directory entries stored in the page |
+
+The builder targets at most 4 KiB per leaf page (except an unavoidable single
+oversized entry) and never mixes reference sample/contig pairs in one page. The
+root is scanned in memory after the initial 16 KiB bootstrap; only overlapping
+leaf pages are decoded.
+
+## Regional directory page
+
+Each leaf page begins with a `u64` entry count, followed by that many entries.
+The count must match its root descriptor, and all leaf counts must sum to the
+total in the archive header. Entries are globally sorted by
+`(sample, contig, start, end)` before paging.
 
 Each entry is encoded as:
 
@@ -82,8 +103,8 @@ Each entry is encoded as:
 
 More than one directory entry may point to the same physical payload. This is
 how exact chunk deduplication is represented. The directory is currently a
-flat array and the reader scans it linearly; the sort order is not yet used for
-a binary or hierarchical lookup.
+paged sorted array; root and selected-page scans are still linear within their
+small bounded collections.
 
 ## Regional chunk
 
@@ -194,7 +215,8 @@ small query from following a dangling edge while preserving topology when a
 larger query fetches both endpoint regions.
 
 Physical chunks are written in source reference-path and coordinate order. The
-separately encoded directory is sorted by its lookup key.
+root and leaf directories precede those chunks; leaf pages follow their sorted
+coordinate order.
 
 ## Exact chunk deduplication
 
@@ -216,18 +238,22 @@ to the small fixture and its identical regional payloads.
 
 The reader performs these steps:
 
-1. Read the first `min(16 KiB, object_length)` bytes. Decode the header and flat
-   directory. If the directory extends past 16 KiB, fetch its remainder in an
-   additional dependent read.
-2. Select directory entries whose sample and contig match and whose interval
-   overlaps the requested interval:
+1. Read the first `min(16 KiB, object_length)` bytes and decode the header plus
+   compact root directory. If the root itself extends past 16 KiB, fetch only
+   its remainder.
+2. Select root descriptors overlapping the requested sample, contig, and
+   interval. Decode a selected leaf directly from the bootstrap when it is
+   already resident there; otherwise fetch only the missing part of that leaf
+   in one logical directory round.
+3. Select leaf entries whose interval overlaps the requested interval:
    `entry.start < query.end && entry.end > query.start`.
-3. Remove bytes already present in the bootstrap, collapse identical physical
+4. Remove bytes already present in the bootstrap, collapse identical physical
    chunk ranges, and coalesce nearby ranges using the configured gap.
-4. Fetch the remaining data ranges as one logical parallel data round.
-5. Independently decompress and decode each unique chunk, then merge nodes,
-   edges, paths, and reference visits by their original identifiers.
-6. Use overlapping reference visits as seeds and traverse graph sides up to the
+5. Fetch the remaining data ranges as one logical parallel data round.
+6. Independently decompress and decode each unique chunk. Adopt the first
+   decoded regional graph directly; only later chunks pay the ordered-map/set
+   merge cost for nodes, edges, paths, and reference visits.
+7. Use overlapping reference visits as seeds and traverse graph sides up to the
    requested context distance. Emit only the exact requested canonical
    subgraph, including node sequences, oriented edges, path traversals and
    multiplicity, and the reference interval.
@@ -290,6 +316,25 @@ assemble larger subgraphs. Unlike the tiny fixture, none of the 20 MHC layouts
 contained exact duplicate regional payloads, so the sweep did not add an
 unjustified deduplication follow-up.
 
+### Candidate 1 small-query smoke
+
+The v2 two-level directory was then exercised with the 16 KiB/zstd-3 layout on
+the same 40 deterministic MHC queries and all six coalescing gaps. All 240
+candidate rows remained canonically exact. The 5,776,885-byte archive contains
+304 regional chunks, a 486-byte root, and six leaf-directory pages; the complete
+header/root/leaves occupy 23,942 bytes.
+
+At 64 KiB coalescing, 1 kb p95 local time was 1.00 ms versus 0.46 ms for
+GBZ-base (2.16x slower), while 10 kb p95 was 6.30 ms versus 15.38 ms (2.44x
+faster). Compared with the earlier flat-directory 16 KiB run, the 1 kb p95 fell
+from 1.47 ms and p95 bytes fell from 45,750 to 39,112; the 10 kb p95 fell from
+7.55 ms to 6.30 ms. Cache state remains uncontrolled, so these cross-run timing
+differences are directional rather than a release-grade microbenchmark.
+
+The 1 kb query is still exact; 16 KiB describes storage granularity, not the
+returned interval. The root selects a 16 KiB regional payload, and canonical
+reconstruction trims the result back to the requested coordinates and context.
+
 ## Limits and next experiment
 
 These numbers are directional, not a general performance claim:
@@ -301,8 +346,8 @@ These numbers are directional, not a general performance claim:
   object-store timings;
 - the tiny fixture cannot exercise 100 kb or 1 Mb ranges; the MHC run exercised
   both, but the planned 10,000-query load remains outstanding;
-- a flat directory that fits in the 16 KiB bootstrap will not scale to a whole
-  genome;
+- the two-level root is compact on MHC, but will itself eventually require a
+  higher-level or searchable representation at whole-genome scale;
 - path metadata and halo duplication may dominate at chromosome scale;
 - chunks do not preserve compressed GBWT records;
 - there are no per-section checksums, authentication, corruption recovery, or
@@ -313,4 +358,5 @@ directory and a GBZ-record-preserving candidate tested beside this materialized
 encoding. See the retained reports for the
 [tiny-locus sweep](../results/2026-08-25-fixed-window-c0-final/REPORT.md) and the
 [medium MHC sweep](../results/2026-08-25-mhc-fixed-window-c0-full/REPORT.md),
+plus the [Candidate 1 small-query smoke](../results/2026-08-25-mhc-two-level-w16k-smoke-c1/REPORT.md),
 including workload qualifications and raw result-file locations.

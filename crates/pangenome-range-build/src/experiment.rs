@@ -76,6 +76,8 @@ struct QueryRow {
     duplicate_bytes_fetched: Option<u64>,
     bootstrap_bytes_fetched: Option<u64>,
     logical_index_bytes: Option<u64>,
+    directory_page_bytes_fetched: Option<u64>,
+    directory_pages_selected: Option<u64>,
     data_bytes_fetched: Option<u64>,
     required_compressed_payload_bytes: Option<u64>,
     canonical_payload_bytes: Option<u64>,
@@ -114,6 +116,8 @@ struct QueryAggregate {
     correctness: bool,
     physical_reads: Distribution,
     bytes_fetched: Distribution,
+    directory_page_bytes_fetched: Distribution,
+    directory_pages_selected: Distribution,
     read_amplification: Distribution,
     index_lookup_us: Distribution,
     decompression_us: Distribution,
@@ -211,10 +215,10 @@ pub fn run_fixed_window_experiment(options: &ExperimentOptions) -> ExperimentRes
             "deduplication": "measured follow-up selected from the baseline Pareto frontier",
         }),
         ExperimentMode::SingleConfigSmoke => json!({
-            "window_sizes": [262_144_u64],
-            "compressions": [ChunkCodec::Zstd6],
-            "deduplication": "enabled",
-            "purpose": "correctness and scale smoke test of the previously selected configuration; not a layout comparison",
+            "window_sizes": [16_384_u64],
+            "compressions": [ChunkCodec::Zstd3],
+            "deduplication": "disabled because the MHC sweep found no exact duplicate payloads",
+            "purpose": "focused correctness and small-query performance smoke test of the two-level directory candidate; not a layout comparison",
         }),
     };
     write_json(
@@ -227,7 +231,11 @@ pub fn run_fixed_window_experiment(options: &ExperimentOptions) -> ExperimentRes
             "input": options.input,
             "source_gbz_bytes": source_bytes,
             "source_sha256": source_sha256,
-            "benchmark_command": format!("pangenome-range benchmark-fixed-windows {} {} {}", options.input.display(), options.run_id, options.random_queries_per_size),
+            "benchmark_command": format!("pangenome-range {} {} {} {}", match options.mode {
+                ExperimentMode::FullSweep => "benchmark-fixed-windows",
+                ExperimentMode::SingleConfigSmoke => "benchmark-fixed-window-smoke",
+            }, options.input.display(), options.run_id, options.random_queries_per_size),
+            "archive_format": "fixed-window-v2-two-level-directory",
             "execution_environment": {
                 "os": std::env::consts::OS,
                 "architecture": std::env::consts::ARCH,
@@ -245,11 +253,11 @@ pub fn run_fixed_window_experiment(options: &ExperimentOptions) -> ExperimentRes
             "context": CONTEXT,
             "window_sizes": match options.mode {
                 ExperimentMode::FullSweep => WINDOW_SIZES.to_vec(),
-                ExperimentMode::SingleConfigSmoke => vec![262_144_u64],
+                ExperimentMode::SingleConfigSmoke => vec![16_384_u64],
             },
             "compressions": match options.mode {
                 ExperimentMode::FullSweep => CODECS.to_vec(),
-                ExperimentMode::SingleConfigSmoke => vec![ChunkCodec::Zstd6],
+                ExperimentMode::SingleConfigSmoke => vec![ChunkCodec::Zstd3],
             },
             "candidate_plan": candidate_plan,
             "coalescing_gaps": COALESCING_GAPS,
@@ -259,7 +267,7 @@ pub fn run_fixed_window_experiment(options: &ExperimentOptions) -> ExperimentRes
             "local_timing_scope": "storage lookup, decompression/decode, and subgraph reconstruction; correctness serialization/hash/comparison instrumentation excluded",
             "improvement_policy": match options.mode {
                 ExperimentMode::FullSweep => "after the baseline sweep, apply exact content-addressed chunk deduplication to the latency-first Pareto point that contains measured repeated payloads",
-                ExperimentMode::SingleConfigSmoke => "no improvement search; measure the previously selected deduplicated configuration only",
+                ExperimentMode::SingleConfigSmoke => "no improvement search; measure the 16 KiB zstd-3 two-level-directory candidate only",
             },
         }),
     )?;
@@ -509,10 +517,10 @@ fn planned_configs(mode: ExperimentMode) -> Vec<FixedArchiveConfig> {
             })
             .collect(),
         ExperimentMode::SingleConfigSmoke => vec![FixedArchiveConfig {
-            experiment_id: "fixed-w256k-zstd-6-dedup".into(),
-            window_size: 262_144,
-            codec: ChunkCodec::Zstd6,
-            deduplicate_chunks: true,
+            experiment_id: "fixed-w16k-zstd-3".into(),
+            window_size: 16_384,
+            codec: ChunkCodec::Zstd3,
+            deduplicate_chunks: false,
         }],
     }
 }
@@ -707,6 +715,8 @@ fn append_candidate_rows(
             duplicate_bytes_fetched: Some(measurement.duplicate_bytes_fetched),
             bootstrap_bytes_fetched: Some(measurement.bootstrap_bytes_fetched),
             logical_index_bytes: Some(measurement.logical_index_bytes),
+            directory_page_bytes_fetched: Some(measurement.directory_page_bytes_fetched),
+            directory_pages_selected: Some(measurement.directory_pages_selected),
             data_bytes_fetched: Some(measurement.data_bytes_fetched),
             required_compressed_payload_bytes: Some(measurement.required_compressed_payload_bytes),
             canonical_payload_bytes: Some(measurement.canonical_payload_bytes),
@@ -762,6 +772,8 @@ fn baseline_row(
         duplicate_bytes_fetched: total_bytes.is_some().then_some(0),
         bootstrap_bytes_fetched: None,
         logical_index_bytes: None,
+        directory_page_bytes_fetched: None,
+        directory_pages_selected: None,
         data_bytes_fetched: total_bytes,
         required_compressed_payload_bytes: None,
         canonical_payload_bytes: None,
@@ -809,7 +821,7 @@ fn baseline_query_aggregates(rows: &[QueryRow]) -> Vec<BaselineQueryAggregate> {
         .collect()
 }
 
-#[allow(clippy::cast_precision_loss)]
+#[allow(clippy::cast_precision_loss, clippy::too_many_lines)]
 fn aggregates(runs: &[CandidateRun]) -> Vec<QueryAggregate> {
     let mut result = Vec::new();
     for run in runs {
@@ -846,6 +858,18 @@ fn aggregates(runs: &[CandidateRun]) -> Vec<QueryAggregate> {
                         selected
                             .iter()
                             .map(|measurement| measurement.total_bytes_fetched as f64)
+                            .collect(),
+                    ),
+                    directory_page_bytes_fetched: distribution(
+                        selected
+                            .iter()
+                            .map(|measurement| measurement.directory_page_bytes_fetched as f64)
+                            .collect(),
+                    ),
+                    directory_pages_selected: distribution(
+                        selected
+                            .iter()
+                            .map(|measurement| measurement.directory_pages_selected as f64)
                             .collect(),
                     ),
                     read_amplification: distribution(
@@ -1171,7 +1195,7 @@ fn write_report(
     )?;
     writeln!(
         output,
-        "This is a measured Candidate 0 result for `{}` in `{}` mode, not a format recommendation. All candidate rows passed node, sequence, edge, path-multiplicity/orientation, and reference-coordinate canonical comparison.\n",
+        "This is a measured fixed-window archive v2 result for `{}` in `{}` mode, not a format recommendation. All candidate rows passed node, sequence, edge, path-multiplicity/orientation, and reference-coordinate canonical comparison.\n",
         options.input.display(),
         match options.mode {
             ExperimentMode::FullSweep => "full-sweep",
@@ -1238,12 +1262,14 @@ fn write_report(
             .ok_or_else(|| invalid_data("missing report aggregate"))?;
         writeln!(
             output,
-            "| {} | {} B | {:.3}x | {} B ({:.2}%) | {} | {:.0} / {:.0} | {:.0} | {:.1} us | {:.2} ms | {} |",
+            "| {} | {} B | {:.3}x | {} B ({:.2}%); root {} B / {} pages | {} | {:.0} / {:.0} | {:.0} | {:.1} us | {:.2} ms | {} |",
             run.config.experiment_id,
             run.build.archive_bytes,
             run.build.expansion_ratio,
             run.build.index_bytes,
             run.build.index_ratio * 100.0,
+            run.build.root_index_bytes,
+            run.build.directory_pages,
             run.build.physical_chunks,
             aggregate.bytes_fetched.p50,
             aggregate.bytes_fetched.p95,
@@ -1289,6 +1315,44 @@ fn write_report(
             aggregate.local_query_us.p95,
             aggregate.local_query_us.p99,
             aggregate.simulated_20ms_ms.p95
+        )?;
+    }
+
+    let selected_run = runs
+        .iter()
+        .find(|run| run.config.experiment_id == latency_first.experiment_id)
+        .ok_or_else(|| invalid_data("missing selected candidate run"))?;
+    writeln!(output, "\n## Two-level directory lookup\n")?;
+    writeln!(
+        output,
+        "The selected archive has a {}-byte header/root bootstrap index and {} leaf pages. Leaf bytes below count only bytes fetched beyond the 16 KiB bootstrap; a zero means the selected page was already resident in that prefix.\n",
+        selected_run.build.root_index_bytes, selected_run.build.directory_pages
+    )?;
+    writeln!(
+        output,
+        "| Query group | p50 / p95 selected pages | p50 / p95 extra leaf bytes | p50 / p95 lookup |"
+    )?;
+    writeln!(output, "|---|---:|---:|---:|")?;
+    let mut directory_groups = aggregates
+        .iter()
+        .filter(|aggregate| {
+            aggregate.experiment_id == latency_first.experiment_id
+                && aggregate.coalescing_gap == PARETO_GAP
+                && aggregate.query_group != "all"
+        })
+        .collect::<Vec<_>>();
+    directory_groups.sort_by(|left, right| left.query_group.cmp(&right.query_group));
+    for aggregate in directory_groups {
+        writeln!(
+            output,
+            "| {} | {:.0} / {:.0} | {:.0} / {:.0} | {:.1} / {:.1} us |",
+            aggregate.query_group,
+            aggregate.directory_pages_selected.p50,
+            aggregate.directory_pages_selected.p95,
+            aggregate.directory_page_bytes_fetched.p50,
+            aggregate.directory_page_bytes_fetched.p95,
+            aggregate.index_lookup_us.p50,
+            aggregate.index_lookup_us.p95,
         )?;
     }
 
@@ -1469,7 +1533,7 @@ fn write_report(
     writeln!(output, "\n## What we learned\n")?;
     writeln!(
         output,
-        "- Fixed windows can answer every exercised locus from a small bootstrap plus one parallel data round while preserving exact local graph semantics."
+        "- Fixed windows can answer every exercised locus from a small root bootstrap, an optional selected-leaf round, and one parallel data round while preserving exact local graph semantics."
     )?;
     writeln!(
         output,
@@ -1547,7 +1611,7 @@ fn write_report(
     } else if options.mode == ExperimentMode::SingleConfigSmoke {
         writeln!(
             output,
-            "Smoke mode intentionally did not search for a new structural improvement; it isolates correctness and scale behavior of the previously selected layout.\n"
+            "Smoke mode isolates correctness and scale behavior of the 16 KiB/zstd-3 two-level-directory candidate; it does not establish a cross-layout winner.\n"
         )?;
     } else {
         writeln!(
@@ -1564,7 +1628,7 @@ fn write_report(
             ExperimentMode::FullSweep =>
                 "Run the same retained matrix on one HPRC chromosome, adding a GBZ-record-preserving representation beside this locally materialized encoding. That scale will reveal whether path metadata/halo duplication or decompressed regional materialization is the dominant expansion source, and it enables the required 100 kb, 1 Mb, and 10,000-query workloads.",
             ExperimentMode::SingleConfigSmoke =>
-                "If this smoke run passes, use its size and construction evidence to choose a deliberately scoped comparative sweep before moving to a multi-gigabyte chromosome or whole-genome input.",
+                "Repeat the 1 kb and 10 kb classes with at least 100 queries per size under controlled cache conditions, comparing 16 KiB and 64 KiB payloads. That separates the extra leaf-directory request cost from decode/reconstruction CPU before another full matrix.",
         }
     )?;
     output.flush()?;
@@ -1593,6 +1657,8 @@ fn write_queries_csv(path: &Path, rows: &[QueryRow]) -> ExperimentResult<()> {
         "duplicate_bytes_fetched",
         "bootstrap_bytes_fetched",
         "logical_index_bytes",
+        "directory_page_bytes_fetched",
+        "directory_pages_selected",
         "data_bytes_fetched",
         "required_compressed_payload_bytes",
         "canonical_payload_bytes",
@@ -1633,6 +1699,8 @@ fn write_queries_csv(path: &Path, rows: &[QueryRow]) -> ExperimentResult<()> {
             option_string(row.duplicate_bytes_fetched),
             option_string(row.bootstrap_bytes_fetched),
             option_string(row.logical_index_bytes),
+            option_string(row.directory_page_bytes_fetched),
+            option_string(row.directory_pages_selected),
             option_string(row.data_bytes_fetched),
             option_string(row.required_compressed_payload_bytes),
             option_string(row.canonical_payload_bytes),
@@ -1842,13 +1910,13 @@ mod tests {
     use super::*;
 
     #[test]
-    fn smoke_mode_runs_only_the_selected_deduplicated_layout() {
+    fn smoke_mode_runs_only_the_small_query_candidate() {
         let configs = planned_configs(ExperimentMode::SingleConfigSmoke);
         assert_eq!(configs.len(), 1);
-        assert_eq!(configs[0].experiment_id, "fixed-w256k-zstd-6-dedup");
-        assert_eq!(configs[0].window_size, 262_144);
-        assert_eq!(configs[0].codec, ChunkCodec::Zstd6);
-        assert!(configs[0].deduplicate_chunks);
+        assert_eq!(configs[0].experiment_id, "fixed-w16k-zstd-3");
+        assert_eq!(configs[0].window_size, 16_384);
+        assert_eq!(configs[0].codec, ChunkCodec::Zstd3);
+        assert!(!configs[0].deduplicate_chunks);
     }
 
     #[test]
