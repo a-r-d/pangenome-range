@@ -1,0 +1,31 @@
+{
+  "schema_version": 1,
+  "status": "intentionally-aborted-unacceptable-preprocessing",
+  "source_gbz_bytes": 5492627216,
+  "source_sha256": "11d6047f79575ffb83757462484bad134ed20928bd2c8171ec52e35a54976e2b",
+  "source_graph": {
+    "nodes": 139520381,
+    "paths": 53150,
+    "haplotypes": 464,
+    "reference_path_fragments": 292
+  },
+  "source_only_inspect": {
+    "wall_seconds": 15.71,
+    "peak_rss_kib": 8775216
+  },
+  "encoder_at_stop": {
+    "elapsed_seconds": 2847,
+    "rss_kib": 8417564,
+    "temporary_occurrence_index_bytes": 157105246208,
+    "temporary_to_source_ratio": 28.602933,
+    "payload_spool_bytes": 0,
+    "archive_bytes": 0,
+    "occurrence_scan_complete": false,
+    "sqlite_node_index_built": false
+  },
+  "cleanup": {
+    "temporary_occurrence_index_deleted": true,
+    "empty_payload_spool_deleted": true,
+    "source_retained": true
+  }
+}

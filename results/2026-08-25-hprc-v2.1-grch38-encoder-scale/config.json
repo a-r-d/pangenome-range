@@ -1,0 +1,27 @@
+{
+  "archive": "/media/ard/eba76579-d702-4ff0-b5dd-eb503a726a4d/pangenome-range-data/runs/2026-08-25-hprc-v2.1-grch38-encoder-scale/fixed-v3-16k-zstd3.pngr",
+  "archive_config": {
+    "codec": "zstd3",
+    "deduplicate_chunks": false,
+    "experiment_id": "fixed-v3-16k-zstd3",
+    "max_uncompressed_chunk_bytes": 8388608,
+    "min_window_size": 1024,
+    "window_size": 16384
+  },
+  "correctness_query_coalescing_gap": 65536,
+  "correctness_query_sizes": [
+    1000,
+    10000,
+    100000,
+    1000000
+  ],
+  "experiment_mode": "encoder-scale",
+  "input": "/media/ard/eba76579-d702-4ff0-b5dd-eb503a726a4d/pangenome-range-data/sources/hprc-v2.1-mc-grch38.gbz",
+  "note": "Encoder-only scale run: no GBZ-base database and no layout sweep are built.",
+  "path_index_interval": 1000,
+  "project": "pangenome-range",
+  "run_id": "2026-08-25-hprc-v2.1-grch38-encoder-scale",
+  "schema_version": 1,
+  "source_gbz_bytes": 5492627216,
+  "source_sha256": "11d6047f79575ffb83757462484bad134ed20928bd2c8171ec52e35a54976e2b"
+}

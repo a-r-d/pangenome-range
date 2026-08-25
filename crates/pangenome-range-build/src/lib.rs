@@ -9,12 +9,14 @@ use std::path::Path;
 
 mod experiment;
 mod fixed;
+mod scale;
 
 pub use experiment::{ExperimentMode, ExperimentOptions, run_fixed_window_experiment};
 pub use fixed::{
     ChunkCodec, FixedArchiveConfig, FixedArchiveReader, OracleResult, QueryMeasurement, QuerySpec,
     internal_gbz_base_query, query_fixed_archive,
 };
+pub use scale::{EncoderScaleOptions, run_encoder_scale_experiment};
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct BuildReport {

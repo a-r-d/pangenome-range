@@ -1,6 +1,7 @@
 use gbz::GBZ;
 use pangenome_range_build::{
-    ExperimentMode, ExperimentOptions, internal_gbz_base_query, run_fixed_window_experiment,
+    EncoderScaleOptions, ExperimentMode, ExperimentOptions, internal_gbz_base_query,
+    run_encoder_scale_experiment, run_fixed_window_experiment,
 };
 use pangenome_range_format::{FileRangeSource, NetworkProfile, RangeSource, TracingRangeSource};
 use simple_sds::serialize;
@@ -36,6 +37,7 @@ fn run(mut args: impl Iterator<Item = String>) -> AppResult<()> {
         "benchmark-fixed-window-smoke" => {
             benchmark_fixed_windows(&mut args, ExperimentMode::SingleConfigSmoke)
         }
+        "benchmark-encoder-scale" => benchmark_encoder_scale(&mut args),
         "internal-gbz-base-query" => run_internal_gbz_base_query(&mut args),
         "help" | "--help" | "-h" => {
             print_help();
@@ -212,8 +214,39 @@ fn print_help() {
     println!(
         "  pangenome-range benchmark-fixed-window-smoke <graph.gbz> <run-id> [random-queries-per-size]"
     );
+    println!(
+        "  pangenome-range benchmark-encoder-scale <graph.gbz> <run-id> <external-work-root> [--allow-known-pathological-occurrence-index]"
+    );
     println!();
     println!("Reserved experiment commands: build, query, benchmark, verify");
+}
+
+fn benchmark_encoder_scale(args: &mut impl Iterator<Item = String>) -> AppResult<()> {
+    let usage = "usage: pangenome-range benchmark-encoder-scale <graph.gbz> <run-id> <external-work-root> [--allow-known-pathological-occurrence-index]";
+    let input = PathBuf::from(args.next().ok_or(usage)?);
+    let run_id = args.next().ok_or(usage)?;
+    validate_run_id(&run_id)?;
+    let work_root = PathBuf::from(args.next().ok_or(usage)?);
+    let allow_known_pathological_occurrence_index = match args.next() {
+        None => false,
+        Some(flag) if flag == "--allow-known-pathological-occurrence-index" => true,
+        Some(extra) => return Err(format!("unexpected argument '{extra}'").into()),
+    };
+    if let Some(extra) = args.next() {
+        return Err(format!("unexpected argument '{extra}'").into());
+    }
+    let archive = work_root.join(&run_id).join("fixed-v3-16k-zstd3.pngr");
+    let options = EncoderScaleOptions {
+        input,
+        archive,
+        results_dir: PathBuf::from("results").join(&run_id),
+        run_id,
+        allow_known_pathological_occurrence_index,
+    };
+    run_encoder_scale_experiment(&options)?;
+    println!("archive: {}", options.archive.display());
+    println!("results: {}", options.results_dir.display());
+    Ok(())
 }
 
 fn benchmark_fixed_windows(
@@ -228,12 +261,7 @@ fn benchmark_fixed_windows(
         format!("usage: pangenome-range {command} <graph.gbz> <run-id> [random-queries-per-size]");
     let input = PathBuf::from(args.next().ok_or_else(|| usage.clone())?);
     let run_id = args.next().ok_or_else(|| usage.clone())?;
-    if !run_id
-        .chars()
-        .all(|character| character.is_ascii_alphanumeric() || matches!(character, '-' | '_' | '.'))
-    {
-        return Err("run ID may contain only ASCII letters, digits, '-', '_', and '.'".into());
-    }
+    validate_run_id(&run_id)?;
     let random_queries_per_size = args
         .next()
         .map(|value| value.parse::<usize>())
@@ -255,6 +283,17 @@ fn benchmark_fixed_windows(
     };
     run_fixed_window_experiment(&options)?;
     println!("results: {}", options.results_dir.display());
+    Ok(())
+}
+
+fn validate_run_id(run_id: &str) -> AppResult<()> {
+    if run_id.is_empty()
+        || !run_id.chars().all(|character| {
+            character.is_ascii_alphanumeric() || matches!(character, '-' | '_' | '.')
+        })
+    {
+        return Err("run ID may contain only ASCII letters, digits, '-', '_', and '.'".into());
+    }
     Ok(())
 }
 

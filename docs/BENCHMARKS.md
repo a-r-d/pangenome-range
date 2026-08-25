@@ -70,6 +70,30 @@ cache, and origin responses.
 
 ## Experiment modes
 
+For the first run on a multi-gigabyte source, use the encoder-only scale mode:
+
+```bash
+cargo run --release -p pangenome-range-cli -- \
+  benchmark-encoder-scale <graph.gbz> <run-id> <external-work-root>
+```
+
+It builds exactly one archive with the v3 16 KiB/zstd-3 configuration. The
+archive, payload spool, and on-disk occurrence index are placed below the
+supplied work root, while only `config.json`, `summary.json`, and `REPORT.md` are
+retained under `results/<run-id>`. This mode deliberately skips GBZ-base and the
+20-layout sweep. After encoding, it checks deterministic 1 kb, 10 kb, 100 kb,
+and 1 Mb queries against the loaded source graph.
+The upstream `gbz` crate still deserializes the source in full; encoder-only
+mode bounds archive-construction scratch, not the source graph itself.
+
+The first HPRC whole-genome attempt exposed an unacceptable global
+path-occurrence preprocessing step. See the
+[optimization log](OPTIMIZATION_LOG.md) before repeating a multi-gigabyte run.
+Until that design is replaced, encoder-scale mode refuses sources larger than
+64 MiB. The deliberately ugly
+`--allow-known-pathological-occurrence-index` flag exists only to reproduce the
+recorded failure mode; it is not a recommendation to continue a scale run.
+
 The full comparative matrix remains:
 
 ```bash
