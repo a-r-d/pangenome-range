@@ -5,9 +5,6 @@ range-addressable layouts for pangenome graphs. The target is static objects on
 HTTP/object storage/CDNs that can answer interactive genomic-region queries with
 few byte-range reads while preserving as much of GBZ's compression as practical.
 
-This is not a viewer, a production library, or a file-format specification. The
-first milestone is measurement infrastructure that makes competing layouts easy
-to build, trace, model, and verify.
 
 ## Quick start
 
