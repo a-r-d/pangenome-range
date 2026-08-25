@@ -1,0 +1,54 @@
+results/2026-08-25-hprc-v2.1-grch38-encoder-scale/summary.json
+  s_54fde64f62d445::t_10a0e668f3f85c 1-31
+docs/BENCHMARKS.md
+  s_54fde64f62d445::t_044d41dd7be7a0 73-85,88
+  s_54fde64f62d445::t_da34910d5e150a 86-87
+  s_54fde64f62d445::t_4c1d4bc281d3bf 92-95
+  s_54fde64f62d445::t_10a0e668f3f85c 89-91,96
+results/2026-08-25-hprc-v2.1-grch38-encoder-scale/REPORT.md
+  s_54fde64f62d445::t_c4a6ab2e5d447b 31
+  s_54fde64f62d445::t_10a0e668f3f85c 1-30,32
+crates/pangenome-range-build/src/lib.rs
+  s_54fde64f62d445::t_b86274aac7090a 12,19
+crates/pangenome-range-cli/src/main.rs
+  s_54fde64f62d445::t_988722350bc5eb 3-4,40,224,226-229,235-237,239-243,245-251,264,289-297
+  s_54fde64f62d445::t_2e9ad50826b04d 238
+  s_54fde64f62d445::t_4c1d4bc281d3bf 217-219,225,230-234,244
+  s_817f77158752b7::t_2fa47869ae9b08 298-299
+docs/OPTIMIZATION_LOG.md
+  s_54fde64f62d445::t_10a0e668f3f85c 1-83,88-107
+  s_54fde64f62d445::t_5ee331bea6b401 84-87,108-111
+crates/pangenome-range-build/src/scale.rs
+  s_54fde64f62d445::t_2e9ad50826b04d 2-4,100-104
+  s_54fde64f62d445::t_59b5961db48ccb 393
+  s_54fde64f62d445::t_da34910d5e150a 359-392,394-402
+  s_54fde64f62d445::t_426cc2d8154537 54-58
+  s_54fde64f62d445::t_4c1d4bc281d3bf 22,30,43-53,83
+  s_54fde64f62d445::t_b86274aac7090a 1,5-21,23-29,31-42,59-82,84-99,105-358
+results/2026-08-25-hprc-v2.1-grch38-encoder-scale/config.json
+  s_54fde64f62d445::t_00a6e02506bce4 1-27
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.24",
+  "base_commit_sha": "8390b4b8e87e339021a1a3ea33f183f739a47b79",
+  "prompts": {},
+  "sessions": {
+    "s_54fde64f62d445": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a03960-ddaf-7240-9dd8-9234e3e1a812",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "aaron decker <aaron@ard.ninja>"
+    },
+    "s_817f77158752b7": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a03a49-32a9-7c01-a90e-639f8e78a147",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "aaron decker <aaron@ard.ninja>"
+    }
+  }
+}
