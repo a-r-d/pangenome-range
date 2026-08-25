@@ -1,0 +1,45 @@
+crates/pangenome-range-build/src/lib.rs
+  s_54fde64f62d445::t_af2c897c56a977 6
+crates/pangenome-range-format/Cargo.toml
+  s_54fde64f62d445::t_af2c897c56a977 2
+crates/pangenome-range-format/src/lib.rs
+  s_54fde64f62d445::t_7a99d2bb244a94 1
+crates/pangenome-range-query/src/lib.rs
+  s_54fde64f62d445::t_af2c897c56a977 3,9
+crates/pangenome-range-cli/Cargo.toml
+  s_54fde64f62d445::t_af2c897c56a977 2,12-13,20
+crates/pangenome-range-cli/src/main.rs
+  s_54fde64f62d445::t_af2c897c56a977 2,38,48,200-201
+Cargo.toml
+  s_54fde64f62d445::t_af2c897c56a977 3-6,8
+crates/pangenome-range-format/src/cost.rs
+  s_54fde64f62d445::t_7a99d2bb244a94 3
+crates/pangenome-range-format/src/source.rs
+  s_54fde64f62d445::t_a1d105712539ad 306-309
+README.md
+  s_54fde64f62d445::t_d50839468533bf 33,35-36,38
+crates/pangenome-range-build/Cargo.toml
+  s_54fde64f62d445::t_af2c897c56a977 2,11
+crates/pangenome-range-query/Cargo.toml
+  s_54fde64f62d445::t_af2c897c56a977 2,12
+docs/ARCHITECTURE.md
+  s_54fde64f62d445::t_d50839468533bf 6,10,13-14
+Cargo.lock
+  s_54fde64f62d445::t_b3a8f69c45dc1e 101,104,108,112-113,118,122,126
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.24",
+  "base_commit_sha": "81b6601514173d82911a9c47c298d36842e54edd",
+  "prompts": {},
+  "sessions": {
+    "s_54fde64f62d445": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a03960-ddaf-7240-9dd8-9234e3e1a812",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "aaron decker <aaron@ard.ninja>"
+    }
+  }
+}
