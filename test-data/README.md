@@ -25,4 +25,3 @@ case, covering:
 Source and provenance links are recorded in `docs/UPSTREAM.md`. This fetch model
 keeps provenance explicit and lets us revisit redistribution/data-use terms
 before publishing any derived fixture.
-

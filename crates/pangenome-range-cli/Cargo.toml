@@ -1,5 +1,5 @@
 [package]
-name = "panrange-cli"
+name = "pangenome-range-cli"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -9,14 +9,13 @@ description = "Research CLI for pangenome-range"
 
 [dependencies]
 gbz.workspace = true
-panrange-format = { path = "../panrange-format" }
-panrange-query = { path = "../panrange-query" }
+pangenome-range-format = { path = "../pangenome-range-format" }
+pangenome-range-query = { path = "../pangenome-range-query" }
 simple-sds.workspace = true
 
 [lints]
 workspace = true
 
 [[bin]]
-name = "panrange"
+name = "pangenome-range"
 path = "src/main.rs"
-

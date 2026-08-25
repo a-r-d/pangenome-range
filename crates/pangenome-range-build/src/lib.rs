@@ -3,7 +3,7 @@
 //! No candidate layout is blessed here. Experiments can implement
 //! [`LayoutExperiment`] and report size/construction measurements consistently.
 
-use panrange_format::RangeSource;
+use pangenome_range_format::RangeSource;
 use std::io;
 use std::path::Path;
 

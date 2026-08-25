@@ -303,8 +303,10 @@ mod tests {
     #[test]
     fn file_source_reads_positioned_ranges() {
         let id = TEMP_FILE_ID.fetch_add(1, Ordering::Relaxed);
-        let path =
-            std::env::temp_dir().join(format!("panrange-source-{}-{id}", std::process::id()));
+        let path = std::env::temp_dir().join(format!(
+            "pangenome-range-source-{}-{id}",
+            std::process::id()
+        ));
         std::fs::write(&path, b"abcdefghij").unwrap();
 
         let source = FileRangeSource::open(&path).unwrap();

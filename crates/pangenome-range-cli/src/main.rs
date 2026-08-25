@@ -1,5 +1,5 @@
 use gbz::GBZ;
-use panrange_format::{FileRangeSource, NetworkProfile, RangeSource, TracingRangeSource};
+use pangenome_range_format::{FileRangeSource, NetworkProfile, RangeSource, TracingRangeSource};
 use simple_sds::serialize;
 use std::collections::BTreeSet;
 use std::error::Error;
@@ -35,7 +35,7 @@ fn run(mut args: impl Iterator<Item = String>) -> Result<(), Box<dyn Error>> {
             "'{command}' is reserved for a future experiment; use 'inspect' or 'benchmark-source'"
         )
         .into()),
-        _ => Err(format!("unknown command '{command}' (run 'panrange help')").into()),
+        _ => Err(format!("unknown command '{command}' (run 'pangenome-range help')").into()),
     }
 }
 
@@ -45,7 +45,7 @@ fn one_path_argument(
 ) -> Result<String, Box<dyn Error>> {
     let path = args
         .next()
-        .ok_or_else(|| format!("usage: panrange {command} <file>"))?;
+        .ok_or_else(|| format!("usage: pangenome-range {command} <file>"))?;
     if let Some(extra) = args.next() {
         return Err(format!("unexpected argument '{extra}'").into());
     }
@@ -197,8 +197,8 @@ fn print_help() {
     println!("pangenome-range research CLI");
     println!();
     println!("Usage:");
-    println!("  panrange inspect <graph.gbz>");
-    println!("  panrange benchmark-source <file>");
+    println!("  pangenome-range inspect <graph.gbz>");
+    println!("  pangenome-range benchmark-source <file>");
     println!();
     println!("Reserved experiment commands: build, query, benchmark, verify");
 }

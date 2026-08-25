@@ -1,12 +1,12 @@
 //! Storage-independent query and correctness utilities.
 //!
-//! Candidate readers should consume [`panrange_format::RangeSource`] and emit a
+//! Candidate readers should consume [`pangenome_range_format::RangeSource`] and emit a
 //! [`CanonicalSubgraph`]. The same canonical representation can be produced by
 //! a GBZ or GBZ-base oracle, keeping graph semantics separate from storage.
 
 use std::collections::{BTreeMap, BTreeSet};
 
-pub use panrange_format::RangeSource;
+pub use pangenome_range_format::RangeSource;
 
 /// A node visit with orientation preserved.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]

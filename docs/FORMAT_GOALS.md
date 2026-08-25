@@ -26,4 +26,3 @@ whether payloads are reference-windowed or graph-structural, how shared
 haplotype information crosses region boundaries, which compression units are
 independent, and whether a small sidecar is worth comparing with a single-object
 layout. Each answer belongs in a named experiment with measurements.
-

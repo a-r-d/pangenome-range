@@ -98,32 +98,32 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3eaf3ede3fee6db1a4c2ee091bf8a8b4dccdc6d17f656fb07896ee72867612f2"
 
 [[package]]
-name = "panrange-build"
+name = "pangenome-range-build"
 version = "0.1.0"
 dependencies = [
- "panrange-format",
+ "pangenome-range-format",
 ]
 
 [[package]]
-name = "panrange-cli"
+name = "pangenome-range-cli"
 version = "0.1.0"
 dependencies = [
  "gbz",
- "panrange-format",
- "panrange-query",
+ "pangenome-range-format",
+ "pangenome-range-query",
  "simple-sds",
 ]
 
 [[package]]
-name = "panrange-format"
+name = "pangenome-range-format"
 version = "0.1.0"
 
 [[package]]
-name = "panrange-query"
+name = "pangenome-range-query"
 version = "0.1.0"
 dependencies = [
  "blake3",
- "panrange-format",
+ "pangenome-range-format",
 ]
 
 [[package]]

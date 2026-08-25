@@ -80,4 +80,3 @@ opening/deserializing the full GBZ. The hypothesis fails if candidate layouts
 require unacceptable size expansion, cannot bound lookup round trips, or lose
 path/reference semantics. Results should show the tradeoff rather than hiding a
 failure behind one headline metric.
-

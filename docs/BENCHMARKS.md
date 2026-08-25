@@ -66,4 +66,3 @@ At minimum compare source GBZ full load/query, GBZ-base on local SSD, and every
 candidate over local positioned reads. When HTTP support exists, serve immutable
 objects from a range-capable origin and distinguish cold CDN, warm CDN, browser
 cache, and origin responses.
-

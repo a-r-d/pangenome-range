@@ -3,15 +3,15 @@
 ## Dependency direction
 
 ```text
-panrange-cli ──> panrange-query ──> panrange-format
+pangenome-range-cli ──> pangenome-range-query ──> pangenome-range-format
      │                                  ▲
      └────> upstream gbz                │
                                         │
-panrange-build ─────────────────────────┘
+pangenome-range-build ─────────────────────────────────────┘
 ```
 
-`panrange-format` contains the storage seam, but no graph semantics and no
-archive specification. `panrange-query` contains semantic result types and only
+`pangenome-range-format` contains the storage seam, but no graph semantics and no
+archive specification. `pangenome-range-query` contains semantic result types and only
 depends on the `RangeSource` interface. Candidate builders and the CLI can use
 those lower layers without forcing query code to open a local file.
 
@@ -80,4 +80,3 @@ tags after full deserialization. The inspection CLI uses those APIs. It does not
 claim the upstream load is range-efficient: `simple_sds::serialize::load_from`
 opens and deserializes the whole GBZ. That makes it a source/oracle path, not the
 candidate remote reader.
-

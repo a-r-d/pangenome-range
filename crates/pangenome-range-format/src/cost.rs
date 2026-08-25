@@ -1,6 +1,6 @@
 use crate::TraceSummary;
 
-/// Parameters for a deliberately simple remote-read cost model.
+/// Parameters for the deliberately simple remote-read cost model.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct NetworkProfile {
     pub name: &'static str,

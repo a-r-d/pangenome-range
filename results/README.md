@@ -12,4 +12,3 @@ numbers. Each result set should include a README or manifest with:
 
 Do not commit large outputs or third-party data without an explicit size and
 licensing decision.
-

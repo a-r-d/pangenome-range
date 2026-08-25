@@ -30,12 +30,12 @@ opt-in; the default test suite uses synthetic bytes and stays fast.
 
 ## Workspace
 
-- `panrange-format`: `RangeSource`, local positioned reads, exact trace metrics,
+- `pangenome-range-format`: `RangeSource`, local positioned reads, exact trace metrics,
   and an idealized network-cost model. It deliberately defines no archive.
-- `panrange-build`: an interface for replaceable candidate-layout experiments.
-- `panrange-query`: storage-independent query/correctness types and a canonical
+- `pangenome-range-build`: an interface for replaceable candidate-layout experiments.
+- `pangenome-range-query`: storage-independent query/correctness types and a canonical
   BLAKE3 comparison hash for local graph semantics.
-- `panrange-cli`: GBZ inspection via upstream `gbz` plus a source-tracing probe.
+- `pangenome-range-cli`: GBZ inspection via upstream `gbz` plus a source-tracing probe.
 
 The planned CLI names `build`, `query`, `benchmark`, and `verify` are reserved but
 not implemented until there is a real experiment behind each one.
@@ -53,4 +53,3 @@ not implemented until there is a real experiment behind each one.
 See [`docs/RESEARCH.md`](docs/RESEARCH.md),
 [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md), and
 [`docs/BENCHMARKS.md`](docs/BENCHMARKS.md) before adding a layout experiment.
-

@@ -1,5 +1,5 @@
 [package]
-name = "panrange-format"
+name = "pangenome-range-format"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -9,4 +9,3 @@ description = "Low-level range I/O and experimental format primitives for pangen
 
 [lints]
 workspace = true
-

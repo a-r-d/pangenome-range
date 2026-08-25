@@ -47,4 +47,3 @@ fi
 mv "$temporary" "$destination"
 trap - EXIT HUP INT TERM
 echo "Fetched and verified: $destination"
-

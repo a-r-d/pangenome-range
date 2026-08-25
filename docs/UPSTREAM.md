@@ -48,4 +48,3 @@ potentially containing known issues.
 - Jouni Sirén et al., “Pangenomics enables genotyping of known structural
   variants in 5,202 diverse genomes,” *Science* 374, 2021.
   <https://doi.org/10.1126/science.abg8871>
-
