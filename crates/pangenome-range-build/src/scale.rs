@@ -19,7 +19,6 @@ const WINDOW_SIZE: u64 = 16_384;
 const QUERY_CONTEXT: u64 = 100;
 const QUERY_SIZES: [u64; 4] = [1_000, 10_000, 100_000, 1_000_000];
 const QUERY_COALESCING_GAP: u64 = 65_536;
-const MAX_LEGACY_SCALE_SOURCE_BYTES: u64 = 64 * 1024 * 1024;
 
 #[derive(Clone, Debug, Serialize)]
 pub struct EncoderScaleOptions {
@@ -27,7 +26,6 @@ pub struct EncoderScaleOptions {
     pub archive: PathBuf,
     pub results_dir: PathBuf,
     pub run_id: String,
-    pub allow_known_pathological_occurrence_index: bool,
 }
 
 /// Builds one production-shaped archive without constructing the GBZ-base
@@ -40,17 +38,6 @@ pub struct EncoderScaleOptions {
 pub fn run_encoder_scale_experiment(options: &EncoderScaleOptions) -> ExperimentResult<()> {
     validate_options(options)?;
     let source_bytes = fs::metadata(&options.input)?.len();
-    if source_bytes > MAX_LEGACY_SCALE_SOURCE_BYTES
-        && !options.allow_known_pathological_occurrence_index
-    {
-        return Err(io::Error::new(
-            io::ErrorKind::InvalidInput,
-            format!(
-                "refusing the legacy global occurrence index for a {source_bytes}-byte source; the HPRC scale run exceeded 28.6x temporary expansion before it was stopped (see docs/OPTIMIZATION_LOG.md); pass --allow-known-pathological-occurrence-index only to reproduce that failure mode"
-            ),
-        )
-        .into());
-    }
     fs::create_dir_all(&options.results_dir)?;
     if let Some(parent) = options.archive.parent() {
         fs::create_dir_all(parent)?;
@@ -58,7 +45,7 @@ pub fn run_encoder_scale_experiment(options: &EncoderScaleOptions) -> Experiment
 
     let source_sha256 = file_sha256(&options.input)?;
     let config = FixedArchiveConfig {
-        experiment_id: "fixed-v3-16k-zstd3".into(),
+        experiment_id: "fixed-v4-16k-zstd3".into(),
         window_size: WINDOW_SIZE,
         codec: ChunkCodec::Zstd3,
         deduplicate_chunks: false,
@@ -80,7 +67,6 @@ pub fn run_encoder_scale_experiment(options: &EncoderScaleOptions) -> Experiment
             "path_index_interval": PATH_INDEX_INTERVAL,
             "correctness_query_sizes": QUERY_SIZES,
             "correctness_query_coalescing_gap": QUERY_COALESCING_GAP,
-            "known_pathological_occurrence_index_override": options.allow_known_pathological_occurrence_index,
             "note": "Encoder-only scale run: no GBZ-base database and no layout sweep are built.",
         }),
     )?;
@@ -115,6 +101,8 @@ pub fn run_encoder_scale_experiment(options: &EncoderScaleOptions) -> Experiment
             query,
             QUERY_COALESCING_GAP,
             &oracle,
+            &graph,
+            &path_index,
         )?;
         if !measurement.correctness {
             return Err(io::Error::new(
@@ -300,7 +288,7 @@ fn write_report(
     writeln!(output)?;
     writeln!(
         output,
-        "The source and archive live outside the repository at `{}` and `{}`. Temporary payload-spool and SQLite occurrence-index files were created beside the archive and removed by the encoder after completion.",
+        "The source and archive live outside the repository at `{}` and `{}`. The bounded temporary payload spool was created beside the archive and removed after completion; no occurrence-index file was created.",
         options.input.display(),
         options.archive.display()
     )?;

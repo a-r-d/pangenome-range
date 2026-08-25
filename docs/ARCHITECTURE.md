@@ -14,7 +14,7 @@ graph semantics. `pangenome-range-query` contains the canonical semantic result
 types. `pangenome-range-build` contains the GBZ/GBZ-base source adapters and the
 first concrete candidate layout and its external-memory encoder. The current
 Candidate 1 object is specified in
-[Fixed-window archive v3](FIXED_WINDOW_ARCHIVE.md).
+[Fixed-window archive v4](FIXED_WINDOW_ARCHIVE.md).
 
 ## TypeScript product boundary
 
@@ -70,8 +70,10 @@ useful for ranking early layouts but cannot replace real HTTP/browser benchmarks
 
 ## Correctness boundary
 
-`CanonicalSubgraph` represents node IDs/sequences, oriented edge topology,
-named path/haplotype traversals, reference-path markers, and reference intervals.
+`CanonicalSubgraph` represents node IDs/sequences, oriented edge topology, the
+real reference traversal, and reference intervals. `CanonicalHaplotypeTile`
+separately represents anonymous local traversals, exact weights, and tile
+provenance.
 Maps and sets remove irrelevant node/edge ordering; path collections are sorted
 while retaining duplicate multiplicity; traversal order and orientation remain
 significant. A stable, domain-separated BLAKE3 digest makes oracle/candidate
@@ -82,10 +84,13 @@ The experiment now emits `CanonicalSubgraph` from:
 1. an upstream GBZ/GBZ-base reference query, and
 2. the fixed-window candidate reader over `RangeSource`.
 
-Every retained candidate query is compared against that source oracle for node
-sequences, oriented edges, path traversal multiplicity/orientation, and reference
-coordinates. The candidate path is range-shaped; the oracle remains a full local
-source load and is not presented as a remotely efficient reader.
+Every retained v4 query has two gates. The assembled graph is compared with an
+independent local source extraction for node sequences, oriented edges, the
+reference traversal, and coordinates. Every selected tile is then freshly
+extracted from the source with the exact core interval and construction halo and
+compared for oriented traversal, weight, total weight, semantics, and
+provenance. Anonymous paths are never stitched across tiles. The oracle remains
+a full local source load and is not presented as a remotely efficient reader.
 
 ## Upstream API boundary discovered
 

@@ -54,12 +54,17 @@ Report median, p95, maximum, sample count, and failures for a corpus; keep raw
 per-query results under `results/` in a documented machine-readable form once a
 candidate exists.
 
-## Correctness gate
+## Correctness gates
 
-A performance result is invalid unless the candidate's `CanonicalSubgraph`
-matches the oracle for node IDs/sequences, oriented edges, path traversals,
-reference-path identity, and reference coordinates. Record both hashes and a
-useful semantic diff on mismatch.
+A performance result is invalid unless both gates pass:
+
+1. the candidate `CanonicalSubgraph` matches the oracle for node IDs/sequences,
+   oriented edges, the real reference traversal, and reference coordinates;
+2. every selected `CanonicalHaplotypeTile` matches a fresh extraction for its
+   exact core/halo, oriented traversals, integer weights, total weight, and
+   provenance.
+
+Record domain-separated v4 hashes and a useful semantic diff on mismatch.
 
 ## Baselines
 
@@ -77,8 +82,8 @@ cargo run --release -p pangenome-range-cli -- \
   benchmark-encoder-scale <graph.gbz> <run-id> <external-work-root>
 ```
 
-It builds exactly one archive with the v3 16 KiB/zstd-3 configuration. The
-archive, payload spool, and on-disk occurrence index are placed below the
+It builds exactly one archive with the v4 16 KiB/zstd-3 configuration. The
+archive and bounded payload spool are placed below the
 supplied work root, while only `config.json`, `summary.json`, and `REPORT.md` are
 retained under `results/<run-id>`. This mode deliberately skips GBZ-base and the
 20-layout sweep. After encoding, it checks deterministic 1 kb, 10 kb, 100 kb,
@@ -86,13 +91,10 @@ and 1 Mb queries against the loaded source graph.
 The upstream `gbz` crate still deserializes the source in full; encoder-only
 mode bounds archive-construction scratch, not the source graph itself.
 
-The first HPRC whole-genome attempt exposed an unacceptable global
-path-occurrence preprocessing step. See the
-[optimization log](OPTIMIZATION_LOG.md) before repeating a multi-gigabyte run.
-Until that design is replaced, encoder-scale mode refuses sources larger than
-64 MiB. The deliberately ugly
-`--allow-known-pathological-occurrence-index` flag exists only to reproduce the
-recorded failure mode; it is not a recommendation to continue a scale run.
+The first HPRC whole-genome attempt exposed an unacceptable global occurrence
+index. Archive v4 removed it; encoder-scale metrics must report zero occurrence
+bytes/time and a nonzero time to first payload before another whole-genome run.
+See the [optimization log](OPTIMIZATION_LOG.md) before repeating that run.
 
 The full comparative matrix remains:
 
@@ -102,7 +104,7 @@ cargo run --release -p pangenome-range-cli -- \
 ```
 
 Before paying for all 20 window/compression builds on a new input, run the
-current small-query candidate alone: 16 KiB base windows, zstd-3, the v3
+current small-query candidate alone: 16 KiB base windows, zstd-3, the v4
 arithmetic manifest, an 8 MiB raw-payload cap, and no deduplication:
 
 ```bash

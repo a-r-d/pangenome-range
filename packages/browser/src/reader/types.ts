@@ -75,7 +75,7 @@ export interface RegionTile {
   readonly edges: BigUint64Array;
   readonly traversalOffsets: Uint32Array;
   readonly traversalNodes: BigUint64Array;
-  readonly traversalWeights: Uint32Array;
+  readonly traversalWeights: BigUint64Array;
 }
 
 export interface RegionResult {

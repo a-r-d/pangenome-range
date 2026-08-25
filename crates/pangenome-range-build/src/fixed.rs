@@ -3,7 +3,8 @@ use gbz::{FullPathName, GBZ, Orientation};
 use gbz_base::{HaplotypeOutput, PathIndex, Subgraph, SubgraphQuery};
 use pangenome_range_format::{FileRangeSource, NetworkProfile, RangeSource, TracingRangeSource};
 use pangenome_range_query::{
-    CanonicalPath, CanonicalSubgraph, Edge, OrientedNode, ReferenceInterval,
+    CanonicalHaplotypeTile, CanonicalPath, CanonicalSubgraph, Edge, HaplotypeSemantics,
+    OrientedNode, ReferenceInterval, WeightedTraversal,
 };
 use serde::{Deserialize, Serialize};
 use std::cmp::Reverse;
@@ -17,10 +18,12 @@ use std::time::Instant;
 
 pub type ExperimentResult<T> = Result<T, Box<dyn Error + Send + Sync>>;
 
-const ARCHIVE_MAGIC: &[u8; 8] = b"PNGRNG03";
-const REGION_MAGIC: &[u8; 8] = b"PNGRGN02";
-const ARCHIVE_VERSION: u32 = 3;
-const REGION_VERSION: u32 = 2;
+const ARCHIVE_MAGIC_V3: &[u8; 8] = b"PNGRNG03";
+const ARCHIVE_MAGIC: &[u8; 8] = b"PNGRNG04";
+const REGION_MAGIC_V3: &[u8; 8] = b"PNGRGN02";
+const REGION_MAGIC: &[u8; 8] = b"PNGRGN03";
+const ARCHIVE_VERSION: u32 = 4;
+const REGION_VERSION: u32 = 3;
 const HEADER_LEN: usize = 64;
 const DIRECTORY_PAGE_BYTES: usize = 4 * 1024;
 const DIRECTORY_PAGE_HEADER_BYTES: usize = 16;
@@ -157,7 +160,33 @@ pub struct ArchiveBuildMetrics {
     pub regional_encoding_wall_ms: f64,
     pub compression_wall_ms: f64,
     pub adaptive_splits: u64,
+    pub first_payload_wall_ms: f64,
+    pub reference_bases_processed: u64,
+    pub scratch_bytes: u64,
+    pub haplotype_extraction_evidence: Option<HaplotypeExtractionEvidence>,
     pub construction_wall_ms: f64,
+}
+
+#[derive(Clone, Debug, Serialize)]
+pub struct HaplotypeModeEvidence {
+    pub mode: String,
+    pub emitted_traversals: u64,
+    pub total_weight: u64,
+    pub emitted_traversal_nodes: u64,
+    pub weighted_traversal_nodes: u64,
+    pub extraction_wall_ms: f64,
+    pub raw_json_bytes: u64,
+}
+
+#[derive(Clone, Debug, Serialize)]
+pub struct HaplotypeExtractionEvidence {
+    pub reference_sample: String,
+    pub reference_contig: String,
+    pub core_start: u64,
+    pub core_end: u64,
+    pub all: HaplotypeModeEvidence,
+    pub distinct: HaplotypeModeEvidence,
+    pub exact_multiset_equivalent: bool,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -192,6 +221,8 @@ pub struct QueryMeasurement {
     pub selected_nodes: u64,
     pub canonical_hash: String,
     pub correctness: bool,
+    pub haplotype_tiles_checked: u64,
+    pub haplotype_tiles_correct: bool,
     pub simulated_20ms_ms: f64,
     pub simulated_50ms_ms: f64,
     pub simulated_100ms_ms: f64,
@@ -260,6 +291,16 @@ struct RegionalPath {
     visits: BTreeMap<u64, OrientedNode>,
 }
 
+#[derive(Clone, Debug, PartialEq, Eq)]
+struct RegionalReferencePath {
+    sample: String,
+    contig: String,
+    haplotype: u64,
+    start: u64,
+    end: u64,
+    traversal: Vec<OrientedNode>,
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 struct ReferenceVisit {
     path_id: u64,
@@ -269,12 +310,30 @@ struct ReferenceVisit {
     node: OrientedNode,
 }
 
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Debug)]
 struct RegionalGraph {
     nodes: BTreeMap<u64, Vec<u8>>,
     edges: BTreeSet<Edge>,
+    semantics: HaplotypeSemantics,
+    reference_paths: Vec<RegionalReferencePath>,
+    haplotype_tiles: Vec<CanonicalHaplotypeTile>,
+    // Populated only when decoding retained v3 payloads.
     paths: BTreeMap<u64, RegionalPath>,
     reference_visits: BTreeSet<ReferenceVisit>,
+}
+
+impl Default for RegionalGraph {
+    fn default() -> Self {
+        Self {
+            nodes: BTreeMap::new(),
+            edges: BTreeSet::new(),
+            semantics: HaplotypeSemantics::AnonymousDistinctWeightedTilePaths,
+            reference_paths: Vec::new(),
+            haplotype_tiles: Vec::new(),
+            paths: BTreeMap::new(),
+            reference_visits: BTreeSet::new(),
+        }
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -344,20 +403,6 @@ struct TemporaryFile {
 impl Drop for TemporaryFile {
     fn drop(&mut self) {
         let _ = std::fs::remove_file(&self.path);
-    }
-}
-
-#[derive(Debug)]
-struct PathOccurrenceIndex {
-    connection: rusqlite::Connection,
-    temporary_path: PathBuf,
-    bytes: u64,
-    build_wall_ms: f64,
-}
-
-impl Drop for PathOccurrenceIndex {
-    fn drop(&mut self) {
-        let _ = std::fs::remove_file(&self.temporary_path);
     }
 }
 
@@ -441,209 +486,240 @@ impl TemporaryFile {
             "could not create a unique temporary file",
         ))
     }
-}
 
-impl PathOccurrenceIndex {
-    #[allow(clippy::too_many_lines)]
-    fn build(graph: &GBZ, output: &Path) -> ExperimentResult<Self> {
-        let started = Instant::now();
-        let temporary_path = temporary_path_near(output, "path-occurrences.sqlite")?;
-        let mut connection = rusqlite::Connection::open(&temporary_path)?;
-        connection.execute_batch(
-            "PRAGMA journal_mode = OFF;
-             PRAGMA synchronous = OFF;
-             PRAGMA temp_store = MEMORY;
-             PRAGMA cache_size = -16384;
-             CREATE TABLE paths (
-                 path_id INTEGER PRIMARY KEY,
-                 sample TEXT NOT NULL,
-                 contig TEXT NOT NULL,
-                 haplotype INTEGER NOT NULL,
-                 fragment INTEGER NOT NULL,
-                 is_reference INTEGER NOT NULL
-             );
-             CREATE TABLE visits (
-                 node_id INTEGER NOT NULL,
-                 path_id INTEGER NOT NULL,
-                 visit_index INTEGER NOT NULL,
-                 orientation INTEGER NOT NULL,
-                 start INTEGER NOT NULL,
-                 end INTEGER NOT NULL
-             );",
-        )?;
-        let metadata = graph
-            .metadata()
-            .ok_or_else(|| invalid_data("GBZ metadata is required"))?;
-        let reference_ids: BTreeSet<_> = graph.reference_sample_ids(true).into_iter().collect();
-        {
-            let transaction = connection.transaction()?;
-            {
-                let mut insert_path = transaction.prepare_cached(
-                    "INSERT INTO paths
-                     (path_id, sample, contig, haplotype, fragment, is_reference)
-                     VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
-                )?;
-                let mut insert_visit = transaction.prepare_cached(
-                    "INSERT INTO visits
-                     (node_id, path_id, visit_index, orientation, start, end)
-                     VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
-                )?;
-                for path_id in 0..graph.paths() {
-                    let path_name =
-                        FullPathName::from_metadata(metadata, path_id).ok_or_else(|| {
-                            invalid_data(format!("missing metadata for path {path_id}"))
-                        })?;
-                    let metadata_name = metadata.path(path_id).ok_or_else(|| {
-                        invalid_data(format!("missing path name for path {path_id}"))
-                    })?;
-                    let is_reference = reference_ids.contains(&metadata_name.sample());
-                    insert_path.execute(rusqlite::params![
-                        usize_to_i64(path_id)?,
-                        path_name.sample,
-                        path_name.contig,
-                        usize_to_i64(path_name.haplotype)?,
-                        usize_to_i64(path_name.fragment)?,
-                        i64::from(is_reference),
-                    ])?;
-                    let mut coordinate = usize_to_u64(path_name.fragment)?;
-                    let path = graph
-                        .path(path_id, Orientation::Forward)
-                        .ok_or_else(|| invalid_data(format!("missing path {path_id}")))?;
-                    for (visit_index, (node_id, orientation)) in path.enumerate() {
-                        let node_len = graph.sequence_len(node_id).ok_or_else(|| {
-                            invalid_data(format!("missing sequence for node {node_id}"))
-                        })?;
-                        let end = coordinate
-                            .checked_add(usize_to_u64(node_len)?)
-                            .ok_or_else(|| invalid_data("path coordinate overflow"))?;
-                        insert_visit.execute(rusqlite::params![
-                            usize_to_i64(node_id)?,
-                            usize_to_i64(path_id)?,
-                            usize_to_i64(visit_index)?,
-                            i64::from(orientation == Orientation::Reverse),
-                            u64_to_i64(coordinate)?,
-                            u64_to_i64(end)?,
-                        ])?;
-                        coordinate = end;
-                    }
-                }
-            }
-            transaction.commit()?;
-        }
-        connection.execute_batch(
-            "CREATE INDEX visits_by_node ON visits(node_id, path_id, visit_index);
-             ANALYZE;
-             CREATE TEMP TABLE selected_nodes (node_id INTEGER PRIMARY KEY) WITHOUT ROWID;",
-        )?;
-        let bytes = std::fs::metadata(&temporary_path)?.len();
-        Ok(Self {
-            connection,
-            temporary_path,
-            bytes,
-            build_wall_ms: started.elapsed().as_secs_f64() * 1_000.0,
-        })
-    }
-
-    fn populate_regional_paths(
-        &mut self,
-        selected: &BTreeSet<usize>,
-        result: &mut RegionalGraph,
-    ) -> ExperimentResult<()> {
-        let transaction = self.connection.transaction()?;
-        transaction.execute("DELETE FROM selected_nodes", [])?;
-        {
-            let mut insert =
-                transaction.prepare_cached("INSERT INTO selected_nodes (node_id) VALUES (?1)")?;
-            for &node_id in selected {
-                insert.execute([usize_to_i64(node_id)?])?;
-            }
-        }
-        transaction.commit()?;
-
-        {
-            let mut statement = self.connection.prepare_cached(
-                "SELECT DISTINCT p.path_id, p.sample, p.contig, p.haplotype,
-                                 p.fragment, p.is_reference
-                 FROM selected_nodes s
-                 CROSS JOIN visits v INDEXED BY visits_by_node
-                 JOIN paths p ON p.path_id = v.path_id
-                 WHERE v.node_id = s.node_id
-                 ORDER BY p.path_id",
-            )?;
-            let rows = statement.query_map([], |row| {
-                Ok((
-                    row.get::<_, i64>(0)?,
-                    row.get::<_, String>(1)?,
-                    row.get::<_, String>(2)?,
-                    row.get::<_, i64>(3)?,
-                    row.get::<_, i64>(4)?,
-                    row.get::<_, i64>(5)?,
-                ))
-            })?;
-            for row in rows {
-                let (path_id, sample, contig, haplotype, fragment, is_reference) = row?;
-                let path_id = i64_to_u64(path_id)?;
-                result.paths.insert(
-                    path_id,
-                    RegionalPath {
-                        path_id,
-                        sample,
-                        contig,
-                        haplotype: i64_to_u64(haplotype)?,
-                        fragment: i64_to_u64(fragment)?,
-                        is_reference: is_reference != 0,
-                        visits: BTreeMap::new(),
-                    },
-                );
-            }
-        }
-
-        let mut statement = self.connection.prepare_cached(
-            "SELECT v.node_id, v.path_id, v.visit_index, v.orientation,
-                    v.start, v.end, p.is_reference
-             FROM selected_nodes s
-             CROSS JOIN visits v INDEXED BY visits_by_node
-             JOIN paths p ON p.path_id = v.path_id
-             WHERE v.node_id = s.node_id
-             ORDER BY v.path_id, v.visit_index",
-        )?;
-        let rows = statement.query_map([], |row| {
-            Ok((
-                row.get::<_, i64>(0)?,
-                row.get::<_, i64>(1)?,
-                row.get::<_, i64>(2)?,
-                row.get::<_, i64>(3)?,
-                row.get::<_, i64>(4)?,
-                row.get::<_, i64>(5)?,
-                row.get::<_, i64>(6)?,
-            ))
-        })?;
-        for row in rows {
-            let (node_id, path_id, visit_index, orientation, start, end, is_reference) = row?;
-            let path_id = i64_to_u64(path_id)?;
-            let visit_index = i64_to_u64(visit_index)?;
-            let node = OrientedNode {
-                id: i64_to_u64(node_id)?,
-                reverse: orientation != 0,
-            };
-            result
-                .paths
-                .get_mut(&path_id)
-                .ok_or_else(|| invalid_data("visit refers to an absent indexed path"))?
-                .visits
-                .insert(visit_index, node);
-            if is_reference != 0 {
-                result.reference_visits.insert(ReferenceVisit {
-                    path_id,
-                    visit_index,
-                    start: i64_to_u64(start)?,
-                    end: i64_to_u64(end)?,
-                    node,
-                });
-            }
-        }
+    fn persist(mut self, output: &Path) -> io::Result<()> {
+        self.file.sync_all()?;
+        std::fs::rename(&self.path, output)?;
+        self.path.clear();
         Ok(())
     }
+}
+
+fn parse_oriented_traversal(value: &serde_json::Value) -> ExperimentResult<Vec<OrientedNode>> {
+    value
+        .as_array()
+        .ok_or_else(|| invalid_data("upstream path field is not an array"))?
+        .iter()
+        .map(|visit| {
+            let id = visit
+                .get("id")
+                .and_then(serde_json::Value::as_str)
+                .ok_or_else(|| invalid_data("upstream path visit has no string id"))?
+                .parse::<u64>()?;
+            let reverse = visit
+                .get("is_reverse")
+                .and_then(serde_json::Value::as_bool)
+                .ok_or_else(|| invalid_data("upstream path visit has no orientation"))?;
+            Ok(OrientedNode { id, reverse })
+        })
+        .collect()
+}
+
+fn path_interval_from_name(name: &str) -> io::Result<(u64, u64)> {
+    let open = name
+        .rfind('[')
+        .ok_or_else(|| invalid_data("upstream reference name has no interval"))?;
+    let close = name.strip_suffix(']').map_or(name.len(), str::len);
+    let interval = name
+        .get(open + 1..close)
+        .ok_or_else(|| invalid_data("upstream reference interval is malformed"))?;
+    let (start, end) = interval
+        .split_once('-')
+        .ok_or_else(|| invalid_data("upstream reference interval has no separator"))?;
+    let start = start
+        .parse::<u64>()
+        .map_err(|_| invalid_data("upstream reference start is invalid"))?;
+    let end = end
+        .parse::<u64>()
+        .map_err(|_| invalid_data("upstream reference end is invalid"))?;
+    if start >= end {
+        return Err(invalid_data("upstream reference interval is empty"));
+    }
+    Ok((start, end))
+}
+
+fn aggregate_traversals(
+    traversals: &[WeightedTraversal],
+) -> io::Result<BTreeMap<Vec<OrientedNode>, u64>> {
+    let mut result = BTreeMap::new();
+    for item in traversals {
+        if item.weight == 0 || item.traversal.is_empty() {
+            return Err(invalid_data("local traversal has zero weight or no visits"));
+        }
+        let weight = result.entry(item.traversal.clone()).or_insert(0_u64);
+        *weight = weight
+            .checked_add(item.weight)
+            .ok_or_else(|| invalid_data("local traversal weight overflow"))?;
+    }
+    Ok(result)
+}
+
+fn mode_evidence(
+    mode: HaplotypeOutput,
+    traversals: &[WeightedTraversal],
+    extraction_wall_ms: f64,
+    raw_json_bytes: usize,
+) -> ExperimentResult<HaplotypeModeEvidence> {
+    let emitted_traversal_nodes = traversals.iter().try_fold(0_u64, |total, item| {
+        total
+            .checked_add(usize_to_u64(item.traversal.len())?)
+            .ok_or_else(|| invalid_data("emitted traversal node count overflow"))
+    })?;
+    let weighted_traversal_nodes = traversals.iter().try_fold(0_u64, |total, item| {
+        let nodes = usize_to_u64(item.traversal.len())?
+            .checked_mul(item.weight)
+            .ok_or_else(|| invalid_data("weighted traversal node count overflow"))?;
+        total
+            .checked_add(nodes)
+            .ok_or_else(|| invalid_data("weighted traversal node count overflow"))
+    })?;
+    Ok(HaplotypeModeEvidence {
+        mode: mode.to_string(),
+        emitted_traversals: usize_to_u64(traversals.len())?,
+        total_weight: traversals.iter().try_fold(0_u64, |total, item| {
+            total
+                .checked_add(item.weight)
+                .ok_or_else(|| invalid_data("local traversal total weight overflow"))
+        })?,
+        emitted_traversal_nodes,
+        weighted_traversal_nodes,
+        extraction_wall_ms,
+        raw_json_bytes: usize_to_u64(raw_json_bytes)?,
+    })
+}
+
+fn extract_local_region(
+    graph: &GBZ,
+    path_index: &PathIndex,
+    reference: &FullPathName,
+    core_start: u64,
+    core_end: u64,
+    context: u64,
+    output: HaplotypeOutput,
+) -> ExperimentResult<(RegionalGraph, HaplotypeModeEvidence)> {
+    let query = SubgraphQuery::path_interval(
+        reference,
+        u64_to_usize(core_start)?..u64_to_usize(core_end)?,
+    )
+    .with_context(u64_to_usize(context)?)
+    .with_haplotypes(output);
+    let mut subgraph = Subgraph::new();
+    let extraction_started = Instant::now();
+    subgraph.from_gbz(graph, Some(path_index), None, &query)?;
+    let extraction_wall_ms = extraction_started.elapsed().as_secs_f64() * 1_000.0;
+    let mut json = Vec::new();
+    subgraph.write_json(&mut json, false)?;
+    let document: serde_json::Value = serde_json::from_slice(&json)?;
+    let paths = document
+        .get("paths")
+        .and_then(serde_json::Value::as_array)
+        .ok_or_else(|| invalid_data("upstream subgraph JSON has no paths"))?;
+    let reference_path = paths
+        .first()
+        .ok_or_else(|| invalid_data("local extraction did not emit its reference path"))?;
+    let reference_name = reference_path
+        .get("name")
+        .and_then(serde_json::Value::as_str)
+        .ok_or_else(|| invalid_data("upstream reference path has no name"))?;
+    let (reference_start, reference_end) = path_interval_from_name(reference_name)?;
+    let reference_traversal = parse_oriented_traversal(
+        reference_path
+            .get("path")
+            .ok_or_else(|| invalid_data("upstream reference path has no traversal"))?,
+    )?;
+    let reference_weight = reference_path.get("weight").map_or(Ok(1_u64), |weight| {
+        weight
+            .as_u64()
+            .ok_or_else(|| invalid_data("upstream reference weight is invalid"))
+    })?;
+    if reference_weight == 0 {
+        return Err(invalid_data("upstream reference weight is zero").into());
+    }
+
+    let mut traversals = Vec::new();
+    if reference_weight > 1 {
+        traversals.push(WeightedTraversal {
+            weight: reference_weight - 1,
+            traversal: reference_traversal.clone(),
+        });
+    }
+    for path in paths.iter().skip(1) {
+        let traversal = parse_oriented_traversal(
+            path.get("path")
+                .ok_or_else(|| invalid_data("upstream anonymous path has no traversal"))?,
+        )?;
+        let weight = path.get("weight").map_or(Ok(1_u64), |weight| {
+            weight
+                .as_u64()
+                .ok_or_else(|| invalid_data("upstream anonymous path weight is invalid"))
+        })?;
+        traversals.push(WeightedTraversal { weight, traversal });
+    }
+    traversals.sort();
+    let evidence = mode_evidence(output, &traversals, extraction_wall_ms, json.len())?;
+
+    let mut regional = RegionalGraph::topology_from_subgraph(&subgraph)?;
+    regional.semantics = match output {
+        HaplotypeOutput::All => HaplotypeSemantics::AnonymousAllTilePaths,
+        HaplotypeOutput::Distinct => HaplotypeSemantics::AnonymousDistinctWeightedTilePaths,
+        _ => return Err(invalid_input("local extraction requires All or Distinct").into()),
+    };
+    regional.reference_paths.push(RegionalReferencePath {
+        sample: reference.sample.clone(),
+        contig: reference.contig.clone(),
+        haplotype: usize_to_u64(reference.haplotype)?,
+        start: reference_start,
+        end: reference_end,
+        traversal: reference_traversal,
+    });
+    regional.haplotype_tiles.push(CanonicalHaplotypeTile {
+        reference_sample: reference.sample.clone(),
+        reference_contig: reference.contig.clone(),
+        core_start,
+        core_end,
+        traversals,
+    });
+    Ok((regional, evidence))
+}
+
+pub fn compare_haplotype_outputs(
+    graph: &GBZ,
+    path_index: &PathIndex,
+    reference: &ReferencePathSpec,
+    core_start: u64,
+    core_end: u64,
+) -> ExperimentResult<HaplotypeExtractionEvidence> {
+    let (all, all_evidence) = extract_local_region(
+        graph,
+        path_index,
+        &reference.name,
+        core_start,
+        core_end,
+        CONSTRUCTION_CONTEXT,
+        HaplotypeOutput::All,
+    )?;
+    let (distinct, distinct_evidence) = extract_local_region(
+        graph,
+        path_index,
+        &reference.name,
+        core_start,
+        core_end,
+        CONSTRUCTION_CONTEXT,
+        HaplotypeOutput::Distinct,
+    )?;
+    let all_traversals = &all.haplotype_tiles[0].traversals;
+    let distinct_traversals = &distinct.haplotype_tiles[0].traversals;
+    let exact_multiset_equivalent =
+        aggregate_traversals(all_traversals)? == aggregate_traversals(distinct_traversals)?;
+    Ok(HaplotypeExtractionEvidence {
+        reference_sample: reference.name.sample.clone(),
+        reference_contig: reference.name.contig.clone(),
+        core_start,
+        core_end,
+        all: all_evidence,
+        distinct: distinct_evidence,
+        exact_multiset_equivalent,
+    })
 }
 
 #[allow(clippy::too_many_lines)]
@@ -697,7 +773,6 @@ pub fn build_fixed_archive(
         })
         .collect::<ExperimentResult<Vec<_>>>()?;
     let mut spool = TemporaryFile::create_near(output, "payload-spool")?;
-    let mut occurrence_index = PathOccurrenceIndex::build(graph, output)?;
     let mut chunks: Vec<SpooledChunk> = Vec::new();
     let mut pending_entries: Vec<PendingEntry> = Vec::new();
     let mut chunk_by_hash: HashMap<blake3::Hash, Vec<usize>> = HashMap::new();
@@ -710,8 +785,15 @@ pub fn build_fixed_archive(
     let mut regional_materialization_wall_ms = 0.0;
     let mut regional_encoding_wall_ms = 0.0;
     let mut compression_wall_ms = 0.0;
+    let mut first_payload_wall_ms = None;
+    let mut reference_bases_processed = 0_u64;
+    let mut haplotype_extraction_evidence = None;
 
     for (reference_id, reference) in references.iter().enumerate() {
+        eprintln!(
+            "encoding reference {}#{} {}-{}",
+            reference.name.sample, reference.name.contig, reference.start, reference.end
+        );
         let first_boundary = (reference.start / config.window_size) * config.window_size;
         let mut boundary = first_boundary;
         while boundary < reference.end {
@@ -723,28 +805,44 @@ pub fn build_fixed_archive(
             if start < end {
                 let mut intervals = vec![(start, end)];
                 while let Some((part_start, part_end)) = intervals.pop() {
+                    if chunks.is_empty() && pending_entries.is_empty() {
+                        eprintln!(
+                            "first chunk selection started at {}#{}:{}-{}",
+                            reference.name.sample, reference.name.contig, part_start, part_end
+                        );
+                    }
                     let query_name = FullPathName {
                         sample: reference.name.sample.clone(),
                         contig: reference.name.contig.clone(),
                         haplotype: reference.name.haplotype,
                         fragment: 0,
                     };
-                    let query = SubgraphQuery::path_interval(
+                    let phase_started = Instant::now();
+                    if haplotype_extraction_evidence.is_none() {
+                        let evidence = compare_haplotype_outputs(
+                            graph, path_index, reference, part_start, part_end,
+                        )?;
+                        if !evidence.exact_multiset_equivalent {
+                            return Err(invalid_data(
+                                "gbz-base All and Distinct local haplotype multisets differ",
+                            )
+                            .into());
+                        }
+                        haplotype_extraction_evidence = Some(evidence);
+                    }
+                    let (regional, local_evidence) = extract_local_region(
+                        graph,
+                        path_index,
                         &query_name,
-                        u64_to_usize(part_start)?..u64_to_usize(part_end)?,
-                    )
-                    .with_context(u64_to_usize(CONSTRUCTION_CONTEXT)?)
-                    .with_haplotypes(HaplotypeOutput::None);
-                    let mut subgraph = Subgraph::new();
-                    let phase_started = Instant::now();
-                    subgraph.from_gbz(graph, Some(path_index), None, &query)?;
-                    let selected: BTreeSet<_> = subgraph.node_iter().collect();
-                    subgraph_selection_wall_ms += phase_started.elapsed().as_secs_f64() * 1_000.0;
-                    let phase_started = Instant::now();
-                    let regional =
-                        RegionalGraph::from_index(graph, &selected, &mut occurrence_index)?;
+                        part_start,
+                        part_end,
+                        CONSTRUCTION_CONTEXT,
+                        HaplotypeOutput::Distinct,
+                    )?;
+                    let local_total_ms = phase_started.elapsed().as_secs_f64() * 1_000.0;
+                    subgraph_selection_wall_ms += local_evidence.extraction_wall_ms;
                     regional_materialization_wall_ms +=
-                        phase_started.elapsed().as_secs_f64() * 1_000.0;
+                        (local_total_ms - local_evidence.extraction_wall_ms).max(0.0);
                     let phase_started = Instant::now();
                     let raw = regional.encode()?;
                     regional_encoding_wall_ms += phase_started.elapsed().as_secs_f64() * 1_000.0;
@@ -794,6 +892,15 @@ pub fn build_fixed_archive(
                                 peak_compressed_chunk_bytes.max(compressed_len);
                             let spool_offset = spool.file.stream_position()?;
                             spool.file.write_all(&compressed)?;
+                            if first_payload_wall_ms.is_none() {
+                                let elapsed = started.elapsed().as_secs_f64() * 1_000.0;
+                                first_payload_wall_ms = Some(elapsed);
+                                eprintln!(
+                                    "first payload written after {elapsed:.3} ms ({} raw bytes, {} compressed bytes)",
+                                    raw.len(),
+                                    compressed.len()
+                                );
+                            }
                             let chunk_id = chunks.len();
                             chunks.push(SpooledChunk {
                                 spool_offset,
@@ -822,6 +929,9 @@ pub fn build_fixed_archive(
                         end: part_end,
                         chunk_id,
                     });
+                    reference_bases_processed = reference_bases_processed
+                        .checked_add(part_end - part_start)
+                        .ok_or_else(|| invalid_data("processed reference bases overflow"))?;
                 }
             }
             boundary = boundary_end;
@@ -865,7 +975,8 @@ pub fn build_fixed_archive(
         usize_to_u64(entries.len())?,
         data_offset,
     );
-    let mut writer = BufWriter::new(File::create(output)?);
+    let mut archive_temp = TemporaryFile::create_near(output, "archive")?;
+    let mut writer = BufWriter::new(&mut archive_temp.file);
     writer.write_all(&header)?;
     writer.write_all(&root)?;
     let mut cursor = 0_usize;
@@ -896,6 +1007,8 @@ pub fn build_fixed_archive(
     spool.file.seek(SeekFrom::Start(0))?;
     io::copy(&mut spool.file, &mut writer)?;
     writer.flush()?;
+    drop(writer);
+    archive_temp.persist(output)?;
 
     let archive_bytes = std::fs::metadata(output)?.len();
     let mut chunk_sizes = chunks
@@ -938,13 +1051,17 @@ pub fn build_fixed_archive(
         peak_raw_chunk_bytes,
         peak_compressed_chunk_bytes,
         payload_spool_bytes,
-        path_occurrence_index_bytes: occurrence_index.bytes,
-        path_occurrence_index_wall_ms: occurrence_index.build_wall_ms,
+        path_occurrence_index_bytes: 0,
+        path_occurrence_index_wall_ms: 0.0,
         subgraph_selection_wall_ms,
         regional_materialization_wall_ms,
         regional_encoding_wall_ms,
         compression_wall_ms,
         adaptive_splits,
+        first_payload_wall_ms: first_payload_wall_ms.unwrap_or(0.0),
+        reference_bases_processed,
+        scratch_bytes: payload_spool_bytes,
+        haplotype_extraction_evidence,
         construction_wall_ms: started.elapsed().as_secs_f64() * 1_000.0,
     })
 }
@@ -979,21 +1096,16 @@ pub fn source_oracle(
 ) -> ExperimentResult<OracleResult> {
     query.validate()?;
     let query_name = FullPathName::reference(&query.sample, &query.contig);
-    let upstream_query = SubgraphQuery::path_interval(
+    let (regional, _) = extract_local_region(
+        graph,
+        path_index,
         &query_name,
-        u64_to_usize(query.start)?..u64_to_usize(query.end)?,
-    )
-    .with_context(u64_to_usize(query.context)?)
-    .with_haplotypes(HaplotypeOutput::None);
-    let mut subgraph = Subgraph::new();
-    subgraph.from_gbz(graph, Some(path_index), None, &upstream_query)?;
-    let selected: BTreeSet<_> = subgraph.node_iter().collect();
-    let regional = RegionalGraph::from_gbz(graph, &selected)?;
-    let canonical_ids = selected
-        .iter()
-        .copied()
-        .map(usize_to_u64)
-        .collect::<Result<BTreeSet<_>, _>>()?;
+        query.start,
+        query.end,
+        query.context,
+        HaplotypeOutput::Distinct,
+    )?;
+    let canonical_ids = regional.nodes.keys().copied().collect::<BTreeSet<_>>();
     let canonical = regional.canonical(&canonical_ids, query)?;
     let encoded = encode_canonical(&canonical)?;
     Ok(OracleResult { canonical, encoded })
@@ -1012,9 +1124,17 @@ pub fn query_fixed_archive(
     query: &QuerySpec,
     coalescing_gap: u64,
     oracle: &OracleResult,
+    graph: &GBZ,
+    path_index: &PathIndex,
 ) -> ExperimentResult<QueryMeasurement> {
     let mut reader = FixedArchiveReader::open(archive)?;
-    reader.query(config, query, coalescing_gap, oracle)
+    reader.query(
+        config,
+        query,
+        coalescing_gap,
+        oracle,
+        Some((graph, path_index)),
+    )
 }
 
 impl FixedArchiveReader {
@@ -1065,6 +1185,7 @@ impl FixedArchiveReader {
         query: &QuerySpec,
         coalescing_gap: u64,
         oracle: &OracleResult,
+        oracle_source: Option<(&GBZ, &PathIndex)>,
     ) -> ExperimentResult<QueryMeasurement> {
         query.validate()?;
         let includes_bootstrap = self.first_query;
@@ -1110,6 +1231,8 @@ impl FixedArchiveReader {
         let mut decoded_chunks = BTreeSet::new();
         let mut decompression_us = 0.0;
         let mut decode_us = 0.0;
+        let mut haplotype_tiles_checked = 0_u64;
+        let mut haplotype_tiles_correct = true;
         for entry in &entries {
             if !decoded_chunks.insert((entry.offset, entry.compressed_len)) {
                 continue;
@@ -1121,6 +1244,54 @@ impl FixedArchiveReader {
             let decode_started = Instant::now();
             let chunk = RegionalGraph::decode(&raw)?;
             decode_us += decode_started.elapsed().as_secs_f64() * 1_000_000.0;
+            if let Some((graph, path_index)) = oracle_source {
+                let tile = chunk
+                    .haplotype_tiles
+                    .first()
+                    .ok_or_else(|| invalid_data("v4 query chunk has no haplotype tile"))?;
+                if tile.core_start != entry.start || tile.core_end != entry.end {
+                    return Err(invalid_data(
+                        "v4 tile provenance does not match its directory entry",
+                    )
+                    .into());
+                }
+                let reference = chunk
+                    .reference_paths
+                    .first()
+                    .ok_or_else(|| invalid_data("v4 query chunk has no reference path"))?;
+                let name = FullPathName {
+                    sample: reference.sample.clone(),
+                    contig: reference.contig.clone(),
+                    haplotype: u64_to_usize(reference.haplotype)?,
+                    fragment: 0,
+                };
+                let (expected, _) = extract_local_region(
+                    graph,
+                    path_index,
+                    &name,
+                    tile.core_start,
+                    tile.core_end,
+                    CONSTRUCTION_CONTEXT,
+                    HaplotypeOutput::Distinct,
+                )?;
+                let expected_tile = &expected.haplotype_tiles[0];
+                let tile_correct = tile.normalized() == expected_tile.normalized()
+                    && chunk.semantics == HaplotypeSemantics::AnonymousDistinctWeightedTilePaths;
+                haplotype_tiles_checked = haplotype_tiles_checked
+                    .checked_add(1)
+                    .ok_or_else(|| invalid_data("tile correctness count overflow"))?;
+                haplotype_tiles_correct &= tile_correct;
+                if !tile_correct {
+                    return Err(invalid_data(format!(
+                        "weighted tile semantics differ for {}#{}:{}-{}",
+                        tile.reference_sample,
+                        tile.reference_contig,
+                        tile.core_start,
+                        tile.core_end
+                    ))
+                    .into());
+                }
+            }
             if let Some(existing) = &mut regional {
                 existing.merge(chunk)?;
             } else {
@@ -1212,6 +1383,8 @@ impl FixedArchiveReader {
             selected_nodes: usize_to_u64(selected.len())?,
             canonical_hash,
             correctness,
+            haplotype_tiles_checked,
+            haplotype_tiles_correct,
             simulated_20ms_ms,
             simulated_50ms_ms,
             simulated_100ms_ms,
@@ -1397,29 +1570,19 @@ impl FixedArchiveReader {
 }
 
 impl RegionalGraph {
-    fn from_index(
-        graph: &GBZ,
-        selected: &BTreeSet<usize>,
-        occurrence_index: &mut PathOccurrenceIndex,
-    ) -> ExperimentResult<Self> {
-        let mut result = Self::topology_from_gbz(graph, selected)?;
-        occurrence_index.populate_regional_paths(selected, &mut result)?;
-        Ok(result)
-    }
-
-    fn topology_from_gbz(graph: &GBZ, selected: &BTreeSet<usize>) -> ExperimentResult<Self> {
+    fn topology_from_subgraph(subgraph: &Subgraph) -> ExperimentResult<Self> {
         let mut result = Self::default();
-        for &node_id in selected {
-            let sequence = graph
-                .sequence(node_id)
-                .ok_or_else(|| invalid_data(format!("missing sequence for node {node_id}")))?;
+        for node_id in subgraph.node_iter() {
+            let sequence = subgraph.sequence(node_id).ok_or_else(|| {
+                invalid_data(format!("missing local sequence for node {node_id}"))
+            })?;
             result
                 .nodes
                 .insert(usize_to_u64(node_id)?, sequence.to_vec());
             for orientation in [Orientation::Forward, Orientation::Reverse] {
-                let successors = graph
-                    .successors(node_id, orientation)
-                    .ok_or_else(|| invalid_data(format!("missing node {node_id}")))?;
+                let successors = subgraph
+                    .supergraph_successors(node_id, orientation)
+                    .ok_or_else(|| invalid_data(format!("missing local node {node_id}")))?;
                 for (next_id, next_orientation) in successors {
                     if support::edge_is_canonical(
                         (node_id, orientation),
@@ -1436,64 +1599,12 @@ impl RegionalGraph {
         Ok(result)
     }
 
-    fn from_gbz(graph: &GBZ, selected: &BTreeSet<usize>) -> ExperimentResult<Self> {
-        let metadata = graph
-            .metadata()
-            .ok_or_else(|| invalid_data("GBZ metadata is required"))?;
-        let reference_ids: BTreeSet<_> = graph.reference_sample_ids(true).into_iter().collect();
-        let mut result = Self::topology_from_gbz(graph, selected)?;
-
-        for path_id in 0..graph.paths() {
-            let path_name = FullPathName::from_metadata(metadata, path_id)
-                .ok_or_else(|| invalid_data(format!("missing metadata for path {path_id}")))?;
-            let metadata_name = metadata
-                .path(path_id)
-                .ok_or_else(|| invalid_data(format!("missing path name {path_id}")))?;
-            let is_reference = reference_ids.contains(&metadata_name.sample());
-            let mut coordinate = usize_to_u64(path_name.fragment)?;
-            let mut regional_path = RegionalPath {
-                path_id: usize_to_u64(path_id)?,
-                sample: path_name.sample,
-                contig: path_name.contig,
-                haplotype: usize_to_u64(path_name.haplotype)?,
-                fragment: usize_to_u64(path_name.fragment)?,
-                is_reference,
-                visits: BTreeMap::new(),
-            };
-            let path = graph
-                .path(path_id, Orientation::Forward)
-                .ok_or_else(|| invalid_data(format!("missing path {path_id}")))?;
-            for (visit_index, (node_id, orientation)) in path.enumerate() {
-                let sequence_len = graph
-                    .sequence_len(node_id)
-                    .ok_or_else(|| invalid_data(format!("missing sequence for node {node_id}")))?;
-                let visit_end = coordinate
-                    .checked_add(usize_to_u64(sequence_len)?)
-                    .ok_or_else(|| invalid_data("path coordinate overflow"))?;
-                if selected.contains(&node_id) {
-                    let visit_index = usize_to_u64(visit_index)?;
-                    let node = oriented(node_id, orientation)?;
-                    regional_path.visits.insert(visit_index, node);
-                    if is_reference {
-                        result.reference_visits.insert(ReferenceVisit {
-                            path_id: regional_path.path_id,
-                            visit_index,
-                            start: coordinate,
-                            end: visit_end,
-                            node,
-                        });
-                    }
-                }
-                coordinate = visit_end;
-            }
-            if !regional_path.visits.is_empty() {
-                result.paths.insert(regional_path.path_id, regional_path);
-            }
-        }
-        Ok(result)
-    }
-
     fn merge(&mut self, other: Self) -> io::Result<()> {
+        if self.semantics != other.semantics {
+            return Err(invalid_data(
+                "cannot merge regional payloads with different semantics",
+            ));
+        }
         for (id, sequence) in other.nodes {
             if let Some(existing) = self.nodes.get(&id) {
                 if existing != &sequence {
@@ -1504,6 +1615,8 @@ impl RegionalGraph {
             }
         }
         self.edges.extend(other.edges);
+        self.reference_paths.extend(other.reference_paths);
+        self.haplotype_tiles.extend(other.haplotype_tiles);
         self.reference_visits.extend(other.reference_visits);
         for (path_id, path) in other.paths {
             if let Some(existing) = self.paths.get_mut(&path_id) {
@@ -1533,6 +1646,9 @@ impl RegionalGraph {
     }
 
     fn select_nodes(&self, query: &QuerySpec) -> ExperimentResult<BTreeSet<u64>> {
+        if !self.reference_paths.is_empty() {
+            return self.select_nodes_v4(query);
+        }
         let path_ids = self
             .paths
             .values()
@@ -1612,6 +1728,101 @@ impl RegionalGraph {
         Ok(selected)
     }
 
+    fn select_nodes_v4(&self, query: &QuerySpec) -> ExperimentResult<BTreeSet<u64>> {
+        let mut active: BinaryHeap<Reverse<(u64, (u64, bool))>> = BinaryHeap::new();
+        for path in self.reference_paths.iter().filter(|path| {
+            path.sample == query.sample
+                && path.contig == query.contig
+                && path.start < query.end
+                && path.end > query.start
+        }) {
+            let mut coordinate = path.start;
+            for &node in &path.traversal {
+                let node_len = usize_to_u64(
+                    self.nodes
+                        .get(&node.id)
+                        .ok_or_else(|| invalid_data(format!("missing node {}", node.id)))?
+                        .len(),
+                )?;
+                let visit_end = coordinate
+                    .checked_add(node_len)
+                    .ok_or_else(|| invalid_data("reference visit coordinate overflow"))?;
+                if coordinate < query.end && visit_end > query.start {
+                    let overlap_start = coordinate.max(query.start);
+                    let overlap_end = visit_end.min(query.end);
+                    let offset = overlap_start.saturating_sub(coordinate);
+                    active.push(Reverse((offset, (node.id, node.reverse))));
+                    let end_distance = if overlap_end == visit_end {
+                        0
+                    } else {
+                        visit_end.saturating_sub(overlap_end).saturating_sub(1)
+                    };
+                    active.push(Reverse((end_distance, (node.id, !node.reverse))));
+                }
+                coordinate = visit_end;
+            }
+            if coordinate != path.end {
+                return Err(
+                    invalid_data("reference traversal length does not match its interval").into(),
+                );
+            }
+        }
+        if active.is_empty() {
+            return Err(invalid_data(format!(
+                "no v4 reference traversal overlaps query {}",
+                query.id
+            ))
+            .into());
+        }
+        self.expand_context(active, query.context)
+    }
+
+    fn expand_context(
+        &self,
+        mut active: BinaryHeap<Reverse<(u64, (u64, bool))>>,
+        context: u64,
+    ) -> ExperimentResult<BTreeSet<u64>> {
+        let adjacency = self.adjacency();
+        let mut visited_sides = BTreeSet::new();
+        let mut selected = BTreeSet::new();
+        while let Some(Reverse((distance, side))) = active.pop() {
+            if !visited_sides.insert(side) {
+                continue;
+            }
+            selected.insert(side.0);
+            let other = (side.0, !side.1);
+            if !visited_sides.contains(&other) {
+                let node_len = self
+                    .nodes
+                    .get(&side.0)
+                    .ok_or_else(|| invalid_data(format!("missing node {}", side.0)))?
+                    .len();
+                let next_distance = distance
+                    .checked_add(usize_to_u64(node_len)?.saturating_sub(1))
+                    .ok_or_else(|| invalid_data("context distance overflow"))?;
+                if next_distance <= context {
+                    active.push(Reverse((next_distance, other)));
+                }
+            }
+            let edge_distance = distance.saturating_add(1);
+            if edge_distance <= context {
+                let handle = OrientedNode {
+                    id: side.0,
+                    reverse: !side.1,
+                };
+                if let Some(successors) = adjacency.get(&handle) {
+                    for successor in successors {
+                        let next_side = (successor.id, successor.reverse);
+                        if !visited_sides.contains(&next_side) {
+                            active.push(Reverse((edge_distance, next_side)));
+                        }
+                    }
+                }
+            }
+        }
+        Ok(selected)
+    }
+
     fn adjacency(&self) -> BTreeMap<OrientedNode, BTreeSet<OrientedNode>> {
         let mut result: BTreeMap<OrientedNode, BTreeSet<OrientedNode>> = BTreeMap::new();
         for edge in &self.edges {
@@ -1635,6 +1846,9 @@ impl RegionalGraph {
         selected: &BTreeSet<u64>,
         query: &QuerySpec,
     ) -> ExperimentResult<CanonicalSubgraph> {
+        if !self.reference_paths.is_empty() {
+            return self.canonical_v4(selected, query);
+        }
         let mut result = CanonicalSubgraph::default();
         for &node_id in selected {
             let sequence = self
@@ -1683,7 +1897,161 @@ impl RegionalGraph {
         Ok(result)
     }
 
+    fn canonical_v4(
+        &self,
+        selected: &BTreeSet<u64>,
+        query: &QuerySpec,
+    ) -> ExperimentResult<CanonicalSubgraph> {
+        let mut result = CanonicalSubgraph::default();
+        for &node_id in selected {
+            result.nodes.insert(
+                node_id,
+                self.nodes
+                    .get(&node_id)
+                    .ok_or_else(|| invalid_data(format!("selected node {node_id} is absent")))?
+                    .clone(),
+            );
+        }
+        result.edges.extend(
+            self.edges
+                .iter()
+                .filter(|edge| selected.contains(&edge.from.id) && selected.contains(&edge.to.id))
+                .copied(),
+        );
+        let mut visits = BTreeMap::new();
+        for path in self
+            .reference_paths
+            .iter()
+            .filter(|path| path.sample == query.sample && path.contig == query.contig)
+        {
+            let mut coordinate = path.start;
+            for &node in &path.traversal {
+                let end = coordinate
+                    .checked_add(usize_to_u64(
+                        self.nodes
+                            .get(&node.id)
+                            .ok_or_else(|| invalid_data(format!("missing node {}", node.id)))?
+                            .len(),
+                    )?)
+                    .ok_or_else(|| invalid_data("reference coordinate overflow"))?;
+                let previous = visits.insert(coordinate, (end, node));
+                if previous.is_some_and(|previous| previous != (end, node)) {
+                    return Err(
+                        invalid_data("conflicting reference visits at one coordinate").into(),
+                    );
+                }
+                coordinate = end;
+            }
+        }
+        let visits = visits.into_iter().collect::<Vec<_>>();
+        let first_core = visits
+            .iter()
+            .position(|(start, (end, _))| *start < query.end && *end > query.start)
+            .ok_or_else(|| invalid_data("reference walk does not overlap query"))?;
+        let last_core = visits
+            .iter()
+            .rposition(|(start, (end, _))| *start < query.end && *end > query.start)
+            .ok_or_else(|| invalid_data("reference walk does not overlap query"))?;
+        let mut first = first_core;
+        while first > 0 && selected.contains(&visits[first - 1].1.1.id) {
+            first -= 1;
+        }
+        let mut last = last_core;
+        while last + 1 < visits.len() && selected.contains(&visits[last + 1].1.1.id) {
+            last += 1;
+        }
+        let traversal = visits[first..=last]
+            .iter()
+            .map(|(_, (_, node))| *node)
+            .collect::<Vec<_>>();
+        if traversal.is_empty() {
+            return Err(invalid_data("selected graph has no reference traversal").into());
+        }
+        result.paths.push(CanonicalPath {
+            sample: query.sample.clone(),
+            contig: query.contig.clone(),
+            haplotype: 0,
+            fragment: query.start,
+            is_reference: true,
+            traversal,
+        });
+        result.reference_intervals.insert(ReferenceInterval {
+            sample: query.sample.clone(),
+            contig: query.contig.clone(),
+            start: query.start,
+            end: query.end,
+        });
+        Ok(result)
+    }
+
     fn encode(&self) -> ExperimentResult<Vec<u8>> {
+        if self.reference_paths.is_empty() {
+            return self.encode_v3();
+        }
+        if self.reference_paths.len() != 1 || self.haplotype_tiles.len() != 1 {
+            return Err(
+                invalid_data("v4 payload must contain exactly one reference and tile").into(),
+            );
+        }
+        let reference = &self.reference_paths[0];
+        let tile = &self.haplotype_tiles[0];
+        if reference.sample != tile.reference_sample || reference.contig != tile.reference_contig {
+            return Err(invalid_data("v4 reference and tile provenance differ").into());
+        }
+        if traversal_end(&self.nodes, reference.start, &reference.traversal)? != reference.end {
+            return Err(
+                invalid_data("v4 reference traversal length does not match its interval").into(),
+            );
+        }
+        let mut output = Vec::new();
+        output.extend_from_slice(REGION_MAGIC);
+        put_u32(&mut output, REGION_VERSION);
+        put_u32(&mut output, 1);
+        output.push(semantics_code(self.semantics));
+        output.extend_from_slice(&[0_u8; 7]);
+        put_u64(&mut output, usize_to_u64(self.nodes.len())?);
+        put_u64(&mut output, usize_to_u64(self.edges.len())?);
+        put_u64(&mut output, tile.core_start);
+        put_u64(&mut output, tile.core_end);
+        put_u64(&mut output, CONSTRUCTION_CONTEXT);
+        put_u64(&mut output, reference.start);
+        put_u64(&mut output, reference.end);
+        put_u64(&mut output, reference.haplotype);
+        put_u64(&mut output, usize_to_u64(reference.traversal.len())?);
+        put_u64(&mut output, usize_to_u64(tile.traversals.len())?);
+        put_string(&mut output, &reference.sample)?;
+        put_string(&mut output, &reference.contig)?;
+        let mut previous_node_id = 0_u64;
+        for (id, sequence) in &self.nodes {
+            put_u64(
+                &mut output,
+                id.checked_sub(previous_node_id)
+                    .ok_or_else(|| invalid_data("node identifiers are not sorted"))?,
+            );
+            put_bytes(&mut output, sequence)?;
+            previous_node_id = *id;
+        }
+        for edge in &self.edges {
+            put_u64(&mut output, pack_oriented(edge.from)?);
+            put_u64(&mut output, pack_oriented(edge.to)?);
+        }
+        for &node in &reference.traversal {
+            put_u64(&mut output, pack_oriented(node)?);
+        }
+        for item in &tile.traversals {
+            if item.weight == 0 || item.traversal.is_empty() {
+                return Err(invalid_data("v4 traversal has zero weight or no visits").into());
+            }
+            put_u64(&mut output, item.weight);
+            put_u64(&mut output, usize_to_u64(item.traversal.len())?);
+            for &node in &item.traversal {
+                put_u64(&mut output, pack_oriented(node)?);
+            }
+        }
+        Ok(output)
+    }
+
+    fn encode_v3(&self) -> ExperimentResult<Vec<u8>> {
         let samples = self
             .paths
             .values()
@@ -1709,8 +2077,8 @@ impl RegionalGraph {
             .map(|(id, contig)| (contig.as_str(), id))
             .collect::<HashMap<_, _>>();
         let mut output = Vec::new();
-        output.extend_from_slice(REGION_MAGIC);
-        put_u32(&mut output, REGION_VERSION);
+        output.extend_from_slice(REGION_MAGIC_V3);
+        put_u32(&mut output, 2);
         put_u32(&mut output, 1); // packed oriented handles and delta-coded identifiers
         put_u64(&mut output, usize_to_u64(self.nodes.len())?);
         put_u64(&mut output, usize_to_u64(self.edges.len())?);
@@ -1780,12 +2148,136 @@ impl RegionalGraph {
     }
 
     fn decode(bytes: &[u8]) -> ExperimentResult<Self> {
+        if bytes.get(..8) == Some(REGION_MAGIC.as_slice()) {
+            return Self::decode_v4(bytes);
+        }
+        Self::decode_v3(bytes)
+    }
+
+    #[allow(clippy::too_many_lines)]
+    fn decode_v4(bytes: &[u8]) -> ExperimentResult<Self> {
         let mut reader = BinaryReader::new(bytes);
         if reader.take(8)? != REGION_MAGIC {
-            return Err(invalid_data("invalid regional chunk magic").into());
+            return Err(invalid_data("invalid v4 regional chunk magic").into());
         }
         let version = reader.u32()?;
         if version != REGION_VERSION {
+            return Err(invalid_data(format!("unsupported regional version {version}")).into());
+        }
+        if reader.u32()? != 1 {
+            return Err(invalid_data("unsupported v4 regional flags").into());
+        }
+        let semantics = semantics_from_code(reader.u8()?)?;
+        let _reserved = reader.take(7)?;
+        let node_count = reader.u64()?;
+        let edge_count = reader.u64()?;
+        let core_start = reader.u64()?;
+        let core_end = reader.u64()?;
+        let context = reader.u64()?;
+        let reference_start = reader.u64()?;
+        let reference_end = reader.u64()?;
+        let haplotype = reader.u64()?;
+        let reference_count = reader.u64()?;
+        let traversal_count = reader.u64()?;
+        if core_start >= core_end || reference_start >= reference_end {
+            return Err(invalid_data("v4 payload has an invalid interval").into());
+        }
+        if context != CONSTRUCTION_CONTEXT {
+            return Err(
+                invalid_data(format!("unsupported v4 construction context {context}")).into(),
+            );
+        }
+        let sample = reader.string()?;
+        let contig = reader.string()?;
+        let mut result = Self {
+            semantics,
+            ..Self::default()
+        };
+        let mut previous_node_id = 0_u64;
+        for _ in 0..node_count {
+            let node_id = previous_node_id
+                .checked_add(reader.u64()?)
+                .ok_or_else(|| invalid_data("node identifier delta overflow"))?;
+            if result.nodes.insert(node_id, reader.bytes()?).is_some() {
+                return Err(invalid_data("duplicate node identifier in v4 payload").into());
+            }
+            previous_node_id = node_id;
+        }
+        for _ in 0..edge_count {
+            result.edges.insert(Edge {
+                from: unpack_oriented(reader.u64()?),
+                to: unpack_oriented(reader.u64()?),
+            });
+        }
+        let mut reference_traversal = Vec::with_capacity(count_bounded_by_bytes(
+            reference_count,
+            reader.remaining(),
+            8,
+            "reference traversal",
+        )?);
+        for _ in 0..reference_count {
+            reference_traversal.push(unpack_oriented(reader.u64()?));
+        }
+        if traversal_end(&result.nodes, reference_start, &reference_traversal)? != reference_end {
+            return Err(
+                invalid_data("v4 reference traversal length does not match its interval").into(),
+            );
+        }
+        let mut traversals = Vec::with_capacity(count_bounded_by_bytes(
+            traversal_count,
+            reader.remaining(),
+            16,
+            "anonymous traversal",
+        )?);
+        for _ in 0..traversal_count {
+            let weight = reader.u64()?;
+            let visit_count = reader.u64()?;
+            if weight == 0 || visit_count == 0 {
+                return Err(invalid_data("v4 traversal has zero weight or no visits").into());
+            }
+            let mut traversal = Vec::with_capacity(count_bounded_by_bytes(
+                visit_count,
+                reader.remaining(),
+                8,
+                "anonymous traversal visits",
+            )?);
+            for _ in 0..visit_count {
+                traversal.push(unpack_oriented(reader.u64()?));
+            }
+            if traversal
+                .iter()
+                .any(|node| !result.nodes.contains_key(&node.id))
+            {
+                return Err(invalid_data("v4 anonymous traversal refers to an absent node").into());
+            }
+            traversals.push(WeightedTraversal { weight, traversal });
+        }
+        reader.finish()?;
+        result.reference_paths.push(RegionalReferencePath {
+            sample: sample.clone(),
+            contig: contig.clone(),
+            haplotype,
+            start: reference_start,
+            end: reference_end,
+            traversal: reference_traversal,
+        });
+        result.haplotype_tiles.push(CanonicalHaplotypeTile {
+            reference_sample: sample,
+            reference_contig: contig,
+            core_start,
+            core_end,
+            traversals,
+        });
+        Ok(result)
+    }
+
+    fn decode_v3(bytes: &[u8]) -> ExperimentResult<Self> {
+        let mut reader = BinaryReader::new(bytes);
+        if reader.take(8)? != REGION_MAGIC_V3 {
+            return Err(invalid_data("invalid regional chunk magic").into());
+        }
+        let version = reader.u32()?;
+        if version != 2 {
             return Err(invalid_data(format!("unsupported regional version {version}")).into());
         }
         let flags = reader.u32()?;
@@ -1798,7 +2290,10 @@ impl RegionalGraph {
         let reference_count = reader.u64()?;
         let sample_count = reader.u32()?;
         let contig_count = reader.u32()?;
-        let mut result = Self::default();
+        let mut result = Self {
+            semantics: HaplotypeSemantics::NamedPathsV3,
+            ..Self::default()
+        };
         let mut previous_node_id = 0_u64;
         for _ in 0..node_count {
             let node_id = previous_node_id
@@ -2046,13 +2541,16 @@ fn encode_header(root_len: u64, entry_count: u64, data_offset: u64) -> [u8; HEAD
 }
 
 fn decode_header(bytes: &[u8]) -> io::Result<Header> {
-    if bytes.len() != HEADER_LEN || &bytes[..8] != ARCHIVE_MAGIC {
+    if bytes.len() != HEADER_LEN {
         return Err(invalid_data("invalid archive header"));
     }
+    let magic = &bytes[..8];
     let version = u32::from_le_bytes(bytes[8..12].try_into().expect("fixed header slice"));
     let header_len = u32::from_le_bytes(bytes[12..16].try_into().expect("fixed header slice"));
     let root_offset = u64::from_le_bytes(bytes[16..24].try_into().expect("fixed header slice"));
-    if version != ARCHIVE_VERSION
+    let supported_version = (magic == ARCHIVE_MAGIC && version == ARCHIVE_VERSION)
+        || (magic == ARCHIVE_MAGIC_V3 && version == 3);
+    if !supported_version
         || usize::try_from(header_len).ok() != Some(HEADER_LEN)
         || root_offset != 64
     {
@@ -2390,7 +2888,7 @@ fn decompress(codec: ChunkCodec, bytes: &[u8], expected_len: u64) -> io::Result<
 fn encode_canonical(graph: &CanonicalSubgraph) -> ExperimentResult<Vec<u8>> {
     let normalized = graph.normalized();
     let mut output = Vec::new();
-    output.extend_from_slice(b"PNGCAN01");
+    output.extend_from_slice(b"PNGCAN04");
     put_u64(&mut output, usize_to_u64(normalized.nodes.len())?);
     for (id, sequence) in &normalized.nodes {
         put_u64(&mut output, *id);
@@ -2431,6 +2929,55 @@ fn flip(node: OrientedNode) -> OrientedNode {
         id: node.id,
         reverse: !node.reverse,
     }
+}
+
+const fn semantics_code(semantics: HaplotypeSemantics) -> u8 {
+    match semantics {
+        HaplotypeSemantics::NamedPathsV3 => 0,
+        HaplotypeSemantics::AnonymousAllTilePaths => 1,
+        HaplotypeSemantics::AnonymousDistinctWeightedTilePaths => 2,
+    }
+}
+
+fn semantics_from_code(code: u8) -> io::Result<HaplotypeSemantics> {
+    match code {
+        1 => Ok(HaplotypeSemantics::AnonymousAllTilePaths),
+        2 => Ok(HaplotypeSemantics::AnonymousDistinctWeightedTilePaths),
+        _ => Err(invalid_data(format!(
+            "unsupported v4 haplotype semantics code {code}"
+        ))),
+    }
+}
+
+fn traversal_end(
+    nodes: &BTreeMap<u64, Vec<u8>>,
+    start: u64,
+    traversal: &[OrientedNode],
+) -> io::Result<u64> {
+    traversal.iter().try_fold(start, |coordinate, node| {
+        let length = nodes
+            .get(&node.id)
+            .ok_or_else(|| invalid_data("v4 traversal refers to an absent node"))?
+            .len();
+        coordinate
+            .checked_add(usize_to_u64(length)?)
+            .ok_or_else(|| invalid_data("v4 traversal coordinate overflow"))
+    })
+}
+
+fn count_bounded_by_bytes(
+    count: u64,
+    remaining: usize,
+    minimum_bytes: usize,
+    section: &str,
+) -> io::Result<usize> {
+    let count = u64_to_usize(count)?;
+    if count > remaining / minimum_bytes {
+        return Err(invalid_data(format!(
+            "{section} count exceeds the remaining payload"
+        )));
+    }
+    Ok(count)
 }
 
 fn pack_oriented(node: OrientedNode) -> io::Result<u64> {
@@ -2510,6 +3057,10 @@ impl<'a> BinaryReader<'a> {
             )))
         }
     }
+
+    fn remaining(&self) -> usize {
+        self.bytes.len().saturating_sub(self.position)
+    }
 }
 
 fn put_u32(output: &mut Vec<u8>, value: u32) {
@@ -2545,18 +3096,6 @@ fn usize_to_u32(value: usize) -> io::Result<u32> {
 
 fn u32_to_usize(value: u32) -> io::Result<usize> {
     usize::try_from(value).map_err(|_| invalid_data("u32 does not fit in usize"))
-}
-
-fn usize_to_i64(value: usize) -> io::Result<i64> {
-    i64::try_from(value).map_err(|_| invalid_data("usize does not fit in i64"))
-}
-
-fn u64_to_i64(value: u64) -> io::Result<i64> {
-    i64::try_from(value).map_err(|_| invalid_data("u64 does not fit in i64"))
-}
-
-fn i64_to_u64(value: i64) -> io::Result<u64> {
-    u64::try_from(value).map_err(|_| invalid_data("negative SQLite integer cannot become u64"))
 }
 
 fn u64_to_usize(value: u64) -> io::Result<usize> {
@@ -2630,6 +3169,36 @@ pub fn internal_gbz_base_query(
 mod tests {
     use super::*;
 
+    fn v4_regional_graph() -> RegionalGraph {
+        let forward = OrientedNode {
+            id: 1,
+            reverse: false,
+        };
+        RegionalGraph {
+            nodes: BTreeMap::from([(1, b"AC".to_vec())]),
+            semantics: HaplotypeSemantics::AnonymousDistinctWeightedTilePaths,
+            reference_paths: vec![RegionalReferencePath {
+                sample: "GRCh38".into(),
+                contig: "chr6".into(),
+                haplotype: 0,
+                start: 100,
+                end: 102,
+                traversal: vec![forward],
+            }],
+            haplotype_tiles: vec![CanonicalHaplotypeTile {
+                reference_sample: "GRCh38".into(),
+                reference_contig: "chr6".into(),
+                core_start: 100,
+                core_end: 102,
+                traversals: vec![WeightedTraversal {
+                    weight: 7,
+                    traversal: vec![forward],
+                }],
+            }],
+            ..RegionalGraph::default()
+        }
+    }
+
     #[test]
     fn coalescing_respects_gap_threshold() {
         let ranges = vec![
@@ -2693,6 +3262,64 @@ mod tests {
         let decoded = RegionalGraph::decode(&encoded).unwrap();
         assert_eq!(decoded.nodes, graph.nodes);
         assert_eq!(decoded.paths[&7].visits, graph.paths[&7].visits);
+    }
+
+    #[test]
+    fn regional_v4_round_trip_preserves_weighted_tile_semantics() {
+        let graph = v4_regional_graph();
+        let encoded = graph.encode().unwrap();
+        assert_eq!(
+            blake3::hash(&encoded).to_hex().as_str(),
+            "47952df5707d5eca5cc33807215e54dab095226169e56fe2f802779d619e9663",
+            "the embedded deterministic v4 golden payload changed",
+        );
+        assert_eq!(&encoded[..8], REGION_MAGIC);
+        let decoded = RegionalGraph::decode(&encoded).unwrap();
+        assert_eq!(decoded.nodes, graph.nodes);
+        assert_eq!(decoded.reference_paths, graph.reference_paths);
+        assert_eq!(decoded.haplotype_tiles, graph.haplotype_tiles);
+        assert_eq!(decoded.semantics, graph.semantics);
+    }
+
+    #[test]
+    fn regional_v4_rejects_unknown_semantics_truncation_and_count_overflow() {
+        let encoded = v4_regional_graph().encode().unwrap();
+
+        let mut unknown_semantics = encoded.clone();
+        unknown_semantics[16] = 99;
+        assert!(RegionalGraph::decode(&unknown_semantics).is_err());
+
+        assert!(RegionalGraph::decode(&encoded[..encoded.len() - 1]).is_err());
+
+        let mut impossible_node_count = encoded;
+        impossible_node_count[24..32].copy_from_slice(&u64::MAX.to_le_bytes());
+        assert!(RegionalGraph::decode(&impossible_node_count).is_err());
+    }
+
+    #[test]
+    fn mhc_all_and_distinct_local_traversals_are_exactly_equivalent() {
+        let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../test-data/mhc-10.gbz");
+        if !path.is_file() {
+            eprintln!(
+                "skipping MHC adapter test because {} is absent",
+                path.display()
+            );
+            return;
+        }
+        let graph: GBZ = simple_sds::serialize::load_from(&path).unwrap();
+        let path_index = PathIndex::new(&graph, 1_000, false).unwrap();
+        let reference = reference_paths(&graph).unwrap().remove(0);
+        let core_end = reference.end.min(reference.start + 1_000);
+        let evidence =
+            compare_haplotype_outputs(&graph, &path_index, &reference, reference.start, core_end)
+                .unwrap();
+        eprintln!("MHC All-vs-Distinct evidence: {evidence:?}");
+        assert!(evidence.exact_multiset_equivalent);
+        assert_eq!(evidence.all.total_weight, evidence.distinct.total_weight);
+        assert_eq!(
+            evidence.all.weighted_traversal_nodes,
+            evidence.distinct.weighted_traversal_nodes
+        );
     }
 
     #[test]

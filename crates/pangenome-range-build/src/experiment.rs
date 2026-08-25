@@ -93,6 +93,8 @@ struct QueryRow {
     selected_nodes: Option<u64>,
     canonical_hash: Option<String>,
     correctness: bool,
+    haplotype_tiles_checked: Option<u64>,
+    haplotype_tiles_correct: Option<bool>,
     simulated_20ms_ms: Option<f64>,
     simulated_50ms_ms: Option<f64>,
     simulated_100ms_ms: Option<f64>,
@@ -222,7 +224,7 @@ pub fn run_fixed_window_experiment(options: &ExperimentOptions) -> ExperimentRes
             "deduplication": "disabled because the MHC sweep found no exact duplicate payloads",
             "max_uncompressed_chunk_bytes": DEFAULT_MAX_UNCOMPRESSED_CHUNK_BYTES,
             "minimum_adaptive_window_size": DEFAULT_MIN_WINDOW_SIZE,
-            "purpose": "focused correctness, encoder-scaling, and small-query smoke test of archive v3; not a layout comparison",
+            "purpose": "focused correctness, encoder-scaling, and small-query smoke test of archive v4 tile-local haplotype semantics; not a layout comparison",
         }),
     };
     write_json(
@@ -239,7 +241,7 @@ pub fn run_fixed_window_experiment(options: &ExperimentOptions) -> ExperimentRes
                 ExperimentMode::FullSweep => "benchmark-fixed-windows",
                 ExperimentMode::SingleConfigSmoke => "benchmark-fixed-window-smoke",
             }, options.input.display(), options.run_id, options.random_queries_per_size),
-            "archive_format": "fixed-window-v3-arithmetic-manifest",
+            "archive_format": "fixed-window-v4-weighted-tile-haplotypes",
             "execution_environment": {
                 "os": std::env::consts::OS,
                 "architecture": std::env::consts::ARCH,
@@ -272,7 +274,7 @@ pub fn run_fixed_window_experiment(options: &ExperimentOptions) -> ExperimentRes
             "local_timing_scope": "storage lookup, decompression/decode, and subgraph reconstruction; correctness serialization/hash/comparison instrumentation excluded",
             "improvement_policy": match options.mode {
                 ExperimentMode::FullSweep => "after the baseline sweep, apply exact content-addressed chunk deduplication to the latency-first Pareto point that contains measured repeated payloads",
-                ExperimentMode::SingleConfigSmoke => "no improvement search; measure the 16 KiB zstd-3 archive-v3 candidate only",
+                ExperimentMode::SingleConfigSmoke => "no improvement search; measure the 16 KiB zstd-3 archive-v4 candidate only",
             },
         }),
     )?;
@@ -677,7 +679,8 @@ fn run_candidate(
             let oracle = oracles
                 .get(&query.id)
                 .ok_or_else(|| invalid_data(format!("missing oracle for {}", query.id)))?;
-            let measurement = reader.query(&config, query, gap, oracle)?;
+            let measurement =
+                reader.query(&config, query, gap, oracle, Some((graph, path_index)))?;
             if !measurement.correctness {
                 return Err(invalid_data(format!(
                     "candidate {} failed correctness for query {} at coalescing gap {}",
@@ -746,6 +749,8 @@ fn append_candidate_rows(
             selected_nodes: Some(measurement.selected_nodes),
             canonical_hash: Some(measurement.canonical_hash.clone()),
             correctness: measurement.correctness,
+            haplotype_tiles_checked: Some(measurement.haplotype_tiles_checked),
+            haplotype_tiles_correct: Some(measurement.haplotype_tiles_correct),
             simulated_20ms_ms: Some(measurement.simulated_20ms_ms),
             simulated_50ms_ms: Some(measurement.simulated_50ms_ms),
             simulated_100ms_ms: Some(measurement.simulated_100ms_ms),
@@ -804,6 +809,8 @@ fn baseline_row(
         selected_nodes: None,
         canonical_hash: None,
         correctness,
+        haplotype_tiles_checked: None,
+        haplotype_tiles_correct: None,
         simulated_20ms_ms: simulated.map(|values| values.0),
         simulated_50ms_ms: simulated.map(|values| values.1),
         simulated_100ms_ms: simulated.map(|values| values.2),
@@ -1217,7 +1224,7 @@ fn write_report(
     )?;
     writeln!(
         output,
-        "This is a measured fixed-window archive v3 result for `{}` in `{}` mode, not a stable-format recommendation. All candidate rows passed node, sequence, edge, path-multiplicity/orientation, and reference-coordinate canonical comparison.\n",
+        "This is a measured fixed-window archive v4 result for `{}` in `{}` mode, not a stable-format recommendation. Candidate rows independently passed query-graph comparison and exact weighted tile-local haplotype comparison.\n",
         options.input.display(),
         match options.mode {
             ExperimentMode::FullSweep => "full-sweep",
@@ -1380,8 +1387,9 @@ fn write_report(
     writeln!(output, "\n## Encoder construction\n")?;
     writeln!(
         output,
-        "The v3 encoder completed in {:.3} ms while retaining only chunk metadata plus one regional raw/compressed payload at a time. It wrote a {}-byte payload spool and a temporary {}-byte disk-backed path-occurrence index. Peak raw/compressed payload buffers were {} / {} bytes; {} adaptive splits were required.\n",
+        "The v4 encoder completed in {:.3} ms while retaining only chunk metadata plus one regional raw/compressed payload at a time. The first payload was written after {:.3} ms. It wrote a {}-byte payload spool and exactly {} occurrence-index bytes. Peak raw/compressed payload buffers were {} / {} bytes; {} adaptive splits were required.\n",
         selected_run.build.construction_wall_ms,
+        selected_run.build.first_payload_wall_ms,
         selected_run.build.payload_spool_bytes,
         selected_run.build.path_occurrence_index_bytes,
         selected_run.build.peak_raw_chunk_bytes,
@@ -1390,12 +1398,50 @@ fn write_report(
     )?;
     writeln!(
         output,
-        "| Phase | Wall time |\n|---|---:|\n| temporary occurrence index | {:.3} ms |\n| upstream regional selection | {:.3} ms |\n| regional materialization | {:.3} ms |\n| packed binary encoding | {:.3} ms |\n| compression | {:.3} ms |\n",
+        "| Phase | Wall time |\n|---|---:|\n| occurrence index (removed) | {:.3} ms |\n| upstream regional selection | {:.3} ms |\n| regional materialization | {:.3} ms |\n| packed binary encoding | {:.3} ms |\n| compression | {:.3} ms |\n",
         selected_run.build.path_occurrence_index_wall_ms,
         selected_run.build.subgraph_selection_wall_ms,
         selected_run.build.regional_materialization_wall_ms,
         selected_run.build.regional_encoding_wall_ms,
         selected_run.build.compression_wall_ms,
+    )?;
+    if let Some(evidence) = &selected_run.build.haplotype_extraction_evidence {
+        writeln!(
+            output,
+            "\nAll-vs-Distinct on the first tile `{}#{}` {}-{}: All emitted {} traversals / {} node visits / {} raw JSON bytes in {:.3} ms; Distinct emitted {} traversals with total weight {} / {} weighted node visits / {} raw JSON bytes in {:.3} ms. Exact oriented-traversal aggregation matched: **{}**.\n",
+            evidence.reference_sample,
+            evidence.reference_contig,
+            evidence.core_start,
+            evidence.core_end,
+            evidence.all.emitted_traversals,
+            evidence.all.emitted_traversal_nodes,
+            evidence.all.raw_json_bytes,
+            evidence.all.extraction_wall_ms,
+            evidence.distinct.emitted_traversals,
+            evidence.distinct.total_weight,
+            evidence.distinct.weighted_traversal_nodes,
+            evidence.distinct.raw_json_bytes,
+            evidence.distinct.extraction_wall_ms,
+            evidence.exact_multiset_equivalent,
+        )?;
+    }
+    let max_selected_chunks = selected_run
+        .measurements
+        .iter()
+        .map(|measurement| measurement.selected_chunks)
+        .max()
+        .unwrap_or(0);
+    let checked_tiles = selected_run
+        .measurements
+        .iter()
+        .map(|measurement| measurement.haplotype_tiles_checked)
+        .sum::<u64>();
+    writeln!(
+        output,
+        "Across all coalescing runs, {} candidate query measurements passed both correctness gates and freshly checked {} tile payloads. The widest query selected {} chunks.\n",
+        selected_run.measurements.len(),
+        checked_tiles,
+        max_selected_chunks,
     )?;
 
     writeln!(output, "\n## Local latency comparison by query size\n")?;
@@ -1653,7 +1699,7 @@ fn write_report(
     } else if options.mode == ExperimentMode::SingleConfigSmoke {
         writeln!(
             output,
-            "Smoke mode isolates correctness and scale behavior of the 16 KiB/zstd-3 archive-v3 candidate; it does not establish a cross-layout winner.\n"
+            "Smoke mode isolates correctness and scale behavior of the 16 KiB/zstd-3 archive-v4 candidate; it does not establish a cross-layout winner.\n"
         )?;
     } else {
         writeln!(
@@ -1677,6 +1723,7 @@ fn write_report(
     Ok(())
 }
 
+#[allow(clippy::too_many_lines)]
 fn write_queries_csv(path: &Path, rows: &[QueryRow]) -> ExperimentResult<()> {
     let mut output = BufWriter::new(File::create(path)?);
     let headers = [
@@ -1716,6 +1763,8 @@ fn write_queries_csv(path: &Path, rows: &[QueryRow]) -> ExperimentResult<()> {
         "selected_nodes",
         "canonical_hash",
         "correctness",
+        "haplotype_tiles_checked",
+        "haplotype_tiles_correct",
         "simulated_20ms_ms",
         "simulated_50ms_ms",
         "simulated_100ms_ms",
@@ -1759,6 +1808,10 @@ fn write_queries_csv(path: &Path, rows: &[QueryRow]) -> ExperimentResult<()> {
             option_string(row.selected_nodes),
             row.canonical_hash.clone().unwrap_or_default(),
             row.correctness.to_string(),
+            option_string(row.haplotype_tiles_checked),
+            row.haplotype_tiles_correct
+                .map(|value| value.to_string())
+                .unwrap_or_default(),
             option_float(row.simulated_20ms_ms),
             option_float(row.simulated_50ms_ms),
             option_float(row.simulated_100ms_ms),

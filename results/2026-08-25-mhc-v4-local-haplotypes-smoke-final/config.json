@@ -1,0 +1,81 @@
+{
+  "archive_format": "fixed-window-v4-weighted-tile-haplotypes",
+  "benchmark_command": "pangenome-range benchmark-fixed-window-smoke test-data/mhc-10.gbz 2026-08-25-mhc-v4-local-haplotypes-smoke-final 10",
+  "bootstrap_prefix_bytes": 16384,
+  "candidate_plan": {
+    "compressions": [
+      "zstd3"
+    ],
+    "deduplication": "disabled because the MHC sweep found no exact duplicate payloads",
+    "max_uncompressed_chunk_bytes": 8388608,
+    "minimum_adaptive_window_size": 1024,
+    "purpose": "focused correctness, encoder-scaling, and small-query smoke test of archive v4 tile-local haplotype semantics; not a layout comparison",
+    "window_sizes": [
+      16384
+    ]
+  },
+  "coalescing_gaps": [
+    0,
+    4096,
+    16384,
+    65536,
+    262144,
+    1048576
+  ],
+  "compressions": [
+    "zstd3"
+  ],
+  "construction_boundary_strategy": "duplicate with 100 bp graph context halo",
+  "context": 100,
+  "execution_environment": {
+    "architecture": "x86_64",
+    "os": "linux",
+    "os_cache_state": "uncontrolled; interpret local timings as warm/mixed, not cold-cache claims",
+    "reader_cache_state": "new reusable reader per coalescing gap; bootstrap and leaf cache cold for the first query and retained within that gap",
+    "storage_api": "local positioned FileRangeSource reads"
+  },
+  "experiment_mode": "single-config-smoke",
+  "fixed_rng_seed": 5782989464532832077,
+  "improvement_policy": "no improvement search; measure the 16 KiB zstd-3 archive-v4 candidate only",
+  "input": "test-data/mhc-10.gbz",
+  "local_timing_scope": "storage lookup, decompression/decode, and subgraph reconstruction; correctness serialization/hash/comparison instrumentation excluded",
+  "network_profiles": [
+    {
+      "bandwidth_mbps": 300,
+      "label": "A",
+      "max_parallel_requests": 6,
+      "per_request_overhead_ms": 0.5,
+      "rtt_ms": 20
+    },
+    {
+      "bandwidth_mbps": 100,
+      "label": "B",
+      "max_parallel_requests": 6,
+      "per_request_overhead_ms": 1.0,
+      "rtt_ms": 50
+    },
+    {
+      "bandwidth_mbps": 30,
+      "label": "C",
+      "max_parallel_requests": 4,
+      "per_request_overhead_ms": 2.0,
+      "rtt_ms": 100
+    }
+  ],
+  "physical_order": "source reference-path order, then coordinate within each path",
+  "project": "pangenome-range",
+  "random_queries_per_available_size": 10,
+  "requested_query_sizes": [
+    1000,
+    10000,
+    100000,
+    1000000
+  ],
+  "run_id": "2026-08-25-mhc-v4-local-haplotypes-smoke-final",
+  "schema_version": 1,
+  "source_gbz_bytes": 4511832,
+  "source_sha256": "a0b44236852d5659202a6855308020df05efd7c2be90645d341d94fb775df685",
+  "window_sizes": [
+    16384
+  ]
+}

@@ -109,3 +109,29 @@ Reducing the 8.4 GiB source-load RSS is a separate track. Candidate approaches
 are a range/memory-mapped GBZ reader, consuming an already-built GBZ-base
 database, or upstream locate/cached-GBWT support. None of those should block
 removing our 157 GB temporary occurrence table first.
+
+## 2026-08-25: v4 tile-local replacement accepted on MHC
+
+Archive v4 removes `PathOccurrenceIndex` and the normal `rusqlite` dependency.
+Each active interval is extracted with `HaplotypeOutput::Distinct`, converted
+to one real reference walk plus anonymous weighted local traversals, encoded,
+and released. Occurrence-index bytes and wall time are exactly zero.
+
+The focused 1 kb adapter comparison found that `All` emitted 9 anonymous
+traversals / 27 node visits / 3,343 JSON bytes, while `Distinct` emitted 2
+traversals with total weight 9 / 27 weighted visits / 2,193 bytes. Aggregating
+`All` by exact oriented traversal equaled `Distinct`. The production-shaped
+first 16 KiB tile showed the same equivalence with 9 versus 6 emitted
+traversals and 504 weighted visits.
+
+The retained MHC v4 smoke wrote its first payload in 11.282 ms, completed a
+3,194,336-byte archive in 1,660.006 ms, used 3,153,203 bytes of payload-spool
+scratch, and passed 40 graph-oracle queries plus fresh per-tile weighted checks.
+The archive selected multiple chunks for the 1 Mb workload. The whole-process
+peak was 916,932 KiB, but includes source load, GBZ-base construction, and query
+oracles; it is not an encoder-only RSS attribution.
+
+The next highest-information optimization is removing the payload spool by
+reserving/backfilling the directory and appending compressed payloads directly
+to the temporary final archive. Source-wide GBZ deserialization remains a
+separate upstream limitation.

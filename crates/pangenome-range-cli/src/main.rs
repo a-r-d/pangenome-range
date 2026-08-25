@@ -214,34 +214,27 @@ fn print_help() {
     println!(
         "  pangenome-range benchmark-fixed-window-smoke <graph.gbz> <run-id> [random-queries-per-size]"
     );
-    println!(
-        "  pangenome-range benchmark-encoder-scale <graph.gbz> <run-id> <external-work-root> [--allow-known-pathological-occurrence-index]"
-    );
+    println!("  pangenome-range benchmark-encoder-scale <graph.gbz> <run-id> <external-work-root>");
     println!();
     println!("Reserved experiment commands: build, query, benchmark, verify");
 }
 
 fn benchmark_encoder_scale(args: &mut impl Iterator<Item = String>) -> AppResult<()> {
-    let usage = "usage: pangenome-range benchmark-encoder-scale <graph.gbz> <run-id> <external-work-root> [--allow-known-pathological-occurrence-index]";
+    let usage =
+        "usage: pangenome-range benchmark-encoder-scale <graph.gbz> <run-id> <external-work-root>";
     let input = PathBuf::from(args.next().ok_or(usage)?);
     let run_id = args.next().ok_or(usage)?;
     validate_run_id(&run_id)?;
     let work_root = PathBuf::from(args.next().ok_or(usage)?);
-    let allow_known_pathological_occurrence_index = match args.next() {
-        None => false,
-        Some(flag) if flag == "--allow-known-pathological-occurrence-index" => true,
-        Some(extra) => return Err(format!("unexpected argument '{extra}'").into()),
-    };
     if let Some(extra) = args.next() {
         return Err(format!("unexpected argument '{extra}'").into());
     }
-    let archive = work_root.join(&run_id).join("fixed-v3-16k-zstd3.pngr");
+    let archive = work_root.join(&run_id).join("fixed-v4-16k-zstd3.pngr");
     let options = EncoderScaleOptions {
         input,
         archive,
         results_dir: PathBuf::from("results").join(&run_id),
         run_id,
-        allow_known_pathological_occurrence_index,
     };
     run_encoder_scale_experiment(&options)?;
     println!("archive: {}", options.archive.display());

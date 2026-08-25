@@ -28,8 +28,10 @@ import PackageVersion from './components/PackageVersion.vue'
 
 <PackageVersion />
 
-The current archive v3 is a research prototype, not a stable interchange format.
-Its known large-input occurrence-index design is rejected and documented in the
+The current archive v4 is a research prototype, not a stable interchange format.
+It removes the rejected global occurrence index and exposes anonymous weighted
+tile-local haplotypes explicitly; see the
+[semantics decision](./HAPLOTYPE_SEMANTICS.md) and
 [optimization log](./OPTIMIZATION_LOG.md). The browser decoder and interactive
 viewer are not implemented yet; this site currently proves the product and
 package boundaries only.

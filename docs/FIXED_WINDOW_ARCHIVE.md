@@ -1,4 +1,4 @@
-# Fixed-window archive v3 (Candidate 1)
+# Fixed-window archive v4 (Candidate 1)
 
 Status: research prototype. This is the format currently emitted by
 `pangenome-range-build`; it is deliberately documented before the TypeScript
@@ -6,7 +6,7 @@ browser reader is implemented, but it is not yet a stable interchange format.
 
 ## Design goals
 
-Archive v3 is a static-object layout for HTTP range access to regional
+Archive v4 is a static-object layout for HTTP range access to regional
 pangenome subgraphs. It has five properties needed before a multi-gigabyte
 experiment:
 
@@ -40,8 +40,8 @@ The header is exactly 64 bytes.
 
 | Byte range | Type | Meaning |
 |---|---|---|
-| `0..8` | `[u8; 8]` | Magic `PNGRNG03` |
-| `8..12` | `u32` | Archive version `3` |
+| `0..8` | `[u8; 8]` | Magic `PNGRNG04` |
+| `8..12` | `u32` | Archive version `4` |
 | `12..16` | `u32` | Header length `64` |
 | `16..24` | `u64` | Root offset `64` |
 | `24..32` | `u64` | Root length |
@@ -112,7 +112,7 @@ creating a non-arithmetic overflow chain.
 Multiple entries may point to the same physical payload when exact
 deduplication is enabled.
 
-## Packed regional payload
+## Packed regional payload v3
 
 After independent decompression, a v3 regional chunk begins:
 
@@ -147,19 +147,59 @@ Boundary edges are stored even if the neighboring node belongs to another
 chunk. A reader activates an edge for context traversal only after both
 endpoint nodes have been assembled.
 
+Rust retains read compatibility for this v3 payload. New archives never emit
+it. The TypeScript scaffold recognizes archive v3 and returns an explicit
+unsupported-version error rather than reinterpreting its named-path semantics.
+
+## Packed regional payload v4
+
+After independent decompression, a v4 regional chunk begins:
+
+```text
+magic                    [u8; 8] = PNGRGN03
+version                  u32 = 3
+flags                    u32 = 1
+haplotype_semantics      u8 (1 = all anonymous, 2 = distinct weighted)
+reserved                 [u8; 7] = zero
+node_count               u64
+edge_count               u64
+core_start, core_end     u64, u64
+construction_context     u64 (currently 100)
+reference_start, end     u64, u64
+reference_haplotype      u64
+reference_visit_count    u64
+anonymous_path_count     u64
+reference_sample         string
+reference_contig         string
+```
+
+Sections follow in this order:
+
+1. delta-coded sorted node IDs and length-prefixed sequences;
+2. oriented edges as pairs of packed `u64` handles;
+3. the real reference traversal as packed handles;
+4. anonymous traversals, each as `weight: u64`, `visit_count: u64`, and packed
+   handles.
+
+The reference sample and contig occur once. Anonymous traversals have no name
+or global identifier. Their identity is only their exact oriented-node sequence
+within the payload's core interval and fixed construction halo. Integer weights
+retain exact local multiplicity. See [Haplotype semantics](HAPLOTYPE_SEMANTICS.md).
+
 ## Streaming, bounded construction
 
 The builder still uses the upstream `gbz` crate to deserialize the source GBZ;
 v3 bounds the *additional encoder working set* rather than claiming that the
 upstream source graph itself is streamed.
 
-1. Scan each original path once into a temporary SQLite occurrence index keyed
-   by node ID. Its page cache is fixed at 16 MiB. This replaces the v2 behavior
-   that rescanned every complete path for every regional window.
-2. For each reference window, ask the upstream selector for nodes in the window
-   plus the 100-base construction halo.
-3. Look up only occurrences of those nodes, materialize one regional graph,
-   encode it, and discard its collections after handling the payload.
+1. For each reference window, ask the upstream selector for topology, the real
+   reference walk, and distinct weighted local haplotype traversals in the
+   window plus the 100-base construction halo.
+2. Convert the bounded public upstream JSON representation immediately into
+   typed oriented-node vectors; no source-global traversal scan or occurrence
+   index precedes this step.
+3. Encode one regional graph and discard its collections after handling the
+   payload.
 4. If the raw payload exceeds `max_uncompressed_chunk_bytes` (8 MiB in current
    presets), split its coordinate interval in half and retry. Splitting stops at
    `min_window_size` (1 KiB); a still-oversized payload fails explicitly.
@@ -167,13 +207,15 @@ upstream source graph itself is streamed.
    spool. Retain only its hash, spool offset, and lengths.
 6. For a BLAKE3 collision, read and decompress only the candidate spool payload
    to confirm exact equality. Raw payloads are never retained as a corpus.
-7. Write the header, root, fixed pages, and stream-copy the payload spool into
-   the final archive with `io::copy`.
+7. Write the header, root, fixed pages, and stream-copy the payload spool into a
+   temporary sibling archive. Atomically rename it only after a successful
+   flush.
 
-Encoder memory is proportional to the already-loaded source graph, the bounded
-SQLite cache, descriptor/hash metadata, and the largest single regional
+Encoder memory is proportional to the already-loaded source graph,
+descriptor/hash metadata, and the largest single regional
 raw/compressed payload. It is not proportional to total archive payload bytes.
-Temporary disk is proportional to path occurrences plus final payload bytes.
+Temporary disk is proportional to final compressed payload bytes. Occurrence
+index bytes and time are exactly zero.
 
 ## Reader and browser mapping
 
@@ -228,14 +270,30 @@ encoding, and 63.4 ms for compression.
 See the [retained v3 smoke report](https://github.com/a-r-d/pangenome-range/blob/main/results/2026-08-25-mhc-v3-streaming-smoke-final/REPORT.md)
 and its `summary.json` for query distributions and qualifications.
 
+## MHC v4 local-haplotype smoke result
+
+The retained v4 smoke built a 3,194,336-byte archive (0.708x the 4,511,832-byte
+GBZ) in 1,660.006 ms. It wrote its first payload after 11.282 ms, produced 304
+chunks, used 3,153,203 bytes of bounded payload-spool scratch, and used zero
+occurrence-index bytes. Whole-process peak RSS was 916,932 KiB; that includes
+source loading, GBZ-base baseline construction, encoding, and all correctness
+queries and is not an encoder-only peak.
+
+On the first 16 KiB tile, `All` emitted 9 anonymous traversals and 504 node
+visits in 47,969 raw JSON bytes. `Distinct` emitted 6 traversals with total
+weight 9 and the same 504 weighted visits in 40,047 bytes. Exact oriented-walk
+aggregation matched. All 40 deterministic 1 kb, 10 kb, 100 kb, and 1 Mb
+queries passed graph correctness and fresh exact per-tile weighted comparison;
+1 Mb queries selected multiple chunks.
+
+See the [retained v4 smoke report](https://github.com/a-r-d/pangenome-range/blob/main/results/2026-08-25-mhc-v4-local-haplotypes-smoke-final/REPORT.md).
+
 ## Remaining limits before a multi-GB claim
 
 - The source GBZ is still deserialized in memory by the upstream library.
-- The external occurrence index was about 9.3x the compressed GBZ on MHC;
-  temporary disk and index-build throughput need GB-scale measurement.
 - Descriptor and hash metadata still grow with chunk count, though payload
   bytes do not remain in memory.
-- The 102-entry fixed-page limit needs a dense-locus exercise; v3 fails closed
+- The 102-entry fixed-page limit needs a dense-locus exercise; v4 fails closed
   if adaptive splitting overflows a bucket.
 - The raw-byte cap bounds accepted payloads, but an oversized parent interval
   is materialized once before splitting. A future estimator or streaming

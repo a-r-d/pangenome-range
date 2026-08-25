@@ -427,7 +427,6 @@ dependencies = [
  "gbz-base",
  "pangenome-range-format",
  "pangenome-range-query",
- "rusqlite",
  "serde",
  "serde_json",
  "sha2",

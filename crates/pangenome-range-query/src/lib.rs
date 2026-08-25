@@ -42,6 +42,86 @@ pub struct CanonicalPath {
     pub traversal: Vec<OrientedNode>,
 }
 
+/// Declared identity and multiplicity semantics for haplotypes in an archive.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+pub enum HaplotypeSemantics {
+    /// Legacy v3 research payloads with globally named paths.
+    NamedPathsV3,
+    /// Every anonymous local traversal is stored separately with weight one.
+    AnonymousAllTilePaths,
+    /// Exact anonymous local traversals are collapsed with integer weights.
+    AnonymousDistinctWeightedTilePaths,
+}
+
+impl HaplotypeSemantics {
+    /// Stable public label embedded in reports and exposed to readers.
+    #[must_use]
+    pub const fn label(self) -> &'static str {
+        match self {
+            Self::NamedPathsV3 => "named-paths-v3",
+            Self::AnonymousAllTilePaths => "anonymous-all-tile-paths",
+            Self::AnonymousDistinctWeightedTilePaths => "anonymous-distinct-weighted-tile-paths",
+        }
+    }
+}
+
+/// One tile-local traversal and its exact multiplicity.
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
+pub struct WeightedTraversal {
+    pub weight: u64,
+    pub traversal: Vec<OrientedNode>,
+}
+
+/// Anonymous haplotype evidence owned by one archive tile.
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
+pub struct CanonicalHaplotypeTile {
+    pub reference_sample: String,
+    pub reference_contig: String,
+    pub core_start: u64,
+    pub core_end: u64,
+    pub traversals: Vec<WeightedTraversal>,
+}
+
+impl CanonicalHaplotypeTile {
+    /// Returns a copy with traversal ordering normalized but multiplicity intact.
+    #[must_use]
+    pub fn normalized(&self) -> Self {
+        let mut normalized = self.clone();
+        normalized.traversals.sort();
+        normalized
+    }
+
+    /// Returns the exact number of represented anonymous traversals, or
+    /// [`None`] if malformed weights overflow `u64`.
+    #[must_use]
+    pub fn total_weight(&self) -> Option<u64> {
+        self.traversals
+            .iter()
+            .try_fold(0_u64, |total, item| total.checked_add(item.weight))
+    }
+
+    /// Stable v4 digest of tile provenance and weighted traversals.
+    #[must_use]
+    pub fn canonical_hash(&self) -> blake3::Hash {
+        let normalized = self.normalized();
+        let mut hasher = blake3::Hasher::new();
+        hasher.update(b"pangenome-range canonical haplotype tile v4\0");
+        put_bytes(&mut hasher, normalized.reference_sample.as_bytes());
+        put_bytes(&mut hasher, normalized.reference_contig.as_bytes());
+        put_u64(&mut hasher, normalized.core_start);
+        put_u64(&mut hasher, normalized.core_end);
+        put_u64(&mut hasher, normalized.traversals.len() as u64);
+        for item in &normalized.traversals {
+            put_u64(&mut hasher, item.weight);
+            put_u64(&mut hasher, item.traversal.len() as u64);
+            for node in &item.traversal {
+                put_oriented_node(&mut hasher, *node);
+            }
+        }
+        hasher.finalize()
+    }
+}
+
 /// Canonical graph semantics for an extracted region.
 ///
 /// Maps and sets make node and edge ordering irrelevant. Path order is
@@ -75,7 +155,7 @@ impl CanonicalSubgraph {
     pub fn canonical_hash(&self) -> blake3::Hash {
         let normalized = self.normalized();
         let mut hasher = blake3::Hasher::new();
-        hasher.update(b"pangenome-range canonical subgraph v1\0");
+        hasher.update(b"pangenome-range canonical query graph v4\0");
 
         put_u64(&mut hasher, normalized.nodes.len() as u64);
         for (id, sequence) in &normalized.nodes {

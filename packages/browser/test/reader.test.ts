@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
+  detectArchiveVersion,
   NotImplementedError,
   openPangenome,
+  UnsupportedArchiveVersionError,
   validateArchiveRange,
   validateRegionQuery,
 } from "../src/reader/index.js";
@@ -39,5 +41,19 @@ describe("reader contract validation", () => {
         },
       }),
     ).rejects.toBeInstanceOf(NotImplementedError);
+  });
+
+  it("dispatches v4 and clearly rejects legacy v3 semantics", () => {
+    const v4 = new Uint8Array(12);
+    v4.set(new TextEncoder().encode("PNGRNG04"));
+    new DataView(v4.buffer).setUint32(8, 4, true);
+    expect(detectArchiveVersion(v4)).toBe(4);
+
+    const v3 = v4.slice();
+    v3.set(new TextEncoder().encode("PNGRNG03"));
+    new DataView(v3.buffer).setUint32(8, 3, true);
+    expect(() => detectArchiveVersion(v3)).toThrow(
+      UnsupportedArchiveVersionError,
+    );
   });
 });
