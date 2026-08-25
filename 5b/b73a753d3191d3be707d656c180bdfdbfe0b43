@@ -1,0 +1,19 @@
+.gitignore
+  s_54fde64f62d445::t_159648d2ee6830 145,147-152
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.24",
+  "base_commit_sha": "5bb73a753d3191d3be707d656c180bdfdbfe0b43",
+  "prompts": {},
+  "sessions": {
+    "s_54fde64f62d445": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a03960-ddaf-7240-9dd8-9234e3e1a812",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "aaron decker <aaron@ard.ninja>"
+    }
+  }
+}
