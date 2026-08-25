@@ -16,6 +16,19 @@ first concrete candidate layout and its external-memory encoder. The current
 Candidate 1 object is specified in
 [Fixed-window archive v3](FIXED_WINDOW_ARCHIVE.md).
 
+## TypeScript product boundary
+
+The TypeScript workspace is a separate consumer of the static archive, not a
+Rust crate or native-binary wrapper. `packages/browser` publishes isolated
+reader, viewer, and Node entry points. The root and `/reader` entries contain no
+DOM or Node built-ins; `/viewer` owns the framework-neutral rendering contract,
+and `/node` owns Node-only range sources. `packages/benchmark` is private and
+will own Node and real-browser measurements.
+
+Only the public contracts and a Node file-range source exist in the current
+scaffold. Archive decoding, HTTP range transport, rendering, and browser
+benchmarks remain explicitly unimplemented.
+
 ## Range sources and traces
 
 `RangeSource` exposes a 64-bit source length and exact reads by `(u64 offset,

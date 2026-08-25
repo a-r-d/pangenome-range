@@ -225,7 +225,7 @@ Phase timings were 843.1 ms for the temporary occurrence index, 366.9 ms for
 regional selection, 1,390.6 ms for regional materialization, 34.8 ms for packed
 encoding, and 63.4 ms for compression.
 
-See the [retained v3 smoke report](../results/2026-08-25-mhc-v3-streaming-smoke-final/REPORT.md)
+See the [retained v3 smoke report](https://github.com/a-r-d/pangenome-range/blob/main/results/2026-08-25-mhc-v3-streaming-smoke-final/REPORT.md)
 and its `summary.json` for query distributions and qualifications.
 
 ## Remaining limits before a multi-GB claim

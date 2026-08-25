@@ -454,13 +454,14 @@ returns the wrong bytes. Do not add a GitHub Pages proxy.
 
 ## Development commands
 
-Rust checks:
+Run the complete Rust gate with:
 
 ```bash
-cargo fmt --all --check
-cargo test --workspace
-cargo clippy --workspace --all-targets --all-features -- -D warnings
+pnpm check:rust
 ```
+
+This runs rustfmt verification, all workspace tests, and clippy for all targets
+and features with warnings denied.
 
 Rust measurements use release builds:
 
@@ -468,16 +469,18 @@ Rust measurements use release builds:
 cargo run --release -p pangenome-range-cli -- ...
 ```
 
-Target JavaScript checks after workspace setup:
+Run the JavaScript/TypeScript pre-commit gate after workspace setup:
 
 ```bash
 pnpm install --frozen-lockfile
-pnpm lint
-pnpm typecheck
-pnpm test
+pnpm check
 pnpm build
 pnpm test:browser
 ```
+
+`pnpm check` (equivalently `npm run check`) runs Biome lint and format
+verification, strict TypeScript checking, and the test suites. Use
+`pnpm format` to apply Biome formatting.
 
 Default CI must stay fast and hermetic. Large downloads and whole-genome
 benchmarks are opt-in.
@@ -495,6 +498,7 @@ updates its support policy.
 4. Make the smallest coherent tranche that can validate that hypothesis.
 5. Add or update correctness tests before claiming performance.
 6. Run focused tests, then full Rust/TypeScript checks applicable to the change.
+   Before committing, both `pnpm check` and `pnpm check:rust` must pass.
 7. Record measurements with exact commands and environment.
 8. Update format, architecture, benchmark, optimization, and hosting docs when
    their truth changes.

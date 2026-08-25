@@ -1,0 +1,21 @@
+{
+  "name": "@pangenome-range/benchmark",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "tsup",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "node scripts/test-placeholder.mjs",
+    "test:browser": "node scripts/browser-placeholder.mjs"
+  },
+  "dependencies": {
+    "pangenome-range": "workspace:*"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.62.1",
+    "@types/node": "^24.13.3",
+    "tsup": "^8.5.1",
+    "typescript": "^6.0.3"
+  }
+}

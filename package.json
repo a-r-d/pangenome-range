@@ -1,0 +1,28 @@
+{
+  "name": "pangenome-range-workspace",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@11.24.0",
+  "engines": {
+    "node": ">=24 <25"
+  },
+  "scripts": {
+    "format": "biome format --write .",
+    "format:check": "biome format .",
+    "lint": "biome lint .",
+    "typecheck": "pnpm -r typecheck",
+    "test": "pnpm -r test",
+    "check": "biome check . && pnpm typecheck && pnpm test",
+    "check:rust": "bash scripts/check-rust.sh",
+    "build": "pnpm --filter pangenome-range build && pnpm --filter @pangenome-range/benchmark build && pnpm --filter @pangenome-range/docs build && pnpm smoke:exports",
+    "smoke:exports": "node packages/browser/test/export-smoke.mjs",
+    "docs:dev": "pnpm --filter @pangenome-range/docs dev",
+    "docs:build": "pnpm --filter pangenome-range build && pnpm --filter @pangenome-range/docs build",
+    "test:browser": "pnpm --filter @pangenome-range/benchmark test:browser"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^2.5.10",
+    "typescript": "^6.0.3"
+  }
+}

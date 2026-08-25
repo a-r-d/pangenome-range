@@ -1,0 +1,19 @@
+{
+  "name": "@pangenome-range/docs",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vitepress dev .",
+    "build": "vitepress build .",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "node -e \"console.log('Documentation has no standalone test suite; VitePress build is the validation gate.')\""
+  },
+  "dependencies": {
+    "pangenome-range": "workspace:*"
+  },
+  "devDependencies": {
+    "typescript": "^6.0.3",
+    "vitepress": "^1.6.4"
+  }
+}

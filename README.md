@@ -1,9 +1,20 @@
 # pangenome-range
 
-`pangenome-range` is a Rust systems-research workspace for testing cloud-native,
-range-addressable layouts for pangenome graphs. The target is static objects on
-HTTP/object storage/CDNs that can answer interactive genomic-region queries with
-few byte-range reads while preserving as much of GBZ's compression as practical.
+`pangenome-range` is a systems-research project for testing cloud-native,
+range-addressable layouts for pangenome graphs. The target is a static immutable
+`.pngr` object on an HTTP origin, object store, or CDN that can answer
+interactive genomic-region queries with few byte-range reads and no custom
+query server.
+
+The repository contains two separately distributed products under one name:
+
+- the native Rust `pangenome-range` CLI for encoding, verification, and
+  research measurements;
+- the private TypeScript `pangenome-range` workspace package for browser/Node
+  range reading and framework-neutral viewing.
+
+The Rust binary is not shipped through npm. See
+[`docs/DISTRIBUTION.md`](docs/DISTRIBUTION.md) for the intended release boundary.
 
 
 ## Quick start
@@ -22,6 +33,22 @@ cargo test --workspace
 cargo clippy --workspace --all-targets --all-features -- -D warnings
 ```
 
+The TypeScript workspace uses Node.js 24 LTS and pnpm:
+
+```bash
+pnpm install --frozen-lockfile
+pnpm check
+pnpm check:rust
+pnpm build
+pnpm docs:dev
+```
+
+`pnpm check` uses Biome for lint and format verification, then runs strict
+TypeScript checking and tests. `pnpm format` applies Biome formatting.
+
+`pnpm test:browser` currently exits with an explicit placeholder message. It
+does not claim that browser benchmarks exist yet.
+
 Run measurements with `--release`. Large data and benchmarks will remain
 opt-in; the default test suite uses synthetic bytes and stays fast.
 
@@ -33,6 +60,12 @@ opt-in; the default test suite uses synthetic bytes and stays fast.
 - `pangenome-range-query`: storage-independent query/correctness types and a canonical
   BLAKE3 comparison hash for local graph semantics.
 - `pangenome-range-cli`: GBZ inspection via upstream `gbz` plus a source-tracing probe.
+- `packages/browser`: private ESM package skeleton with isolated reader,
+  viewer, and Node exports. Archive decoding and rendering are not implemented.
+- `packages/benchmark`: private browser/Node benchmark scaffold; no benchmark
+  suite is implemented yet.
+- `docs`: the existing research Markdown plus a VitePress shell and demo
+  placeholder deployed under `/pangenome-range/`.
 
 The planned CLI names `build`, `query`, `benchmark`, and `verify` are reserved but
 not implemented until there is a real experiment behind each one.

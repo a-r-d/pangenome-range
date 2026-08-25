@@ -42,7 +42,7 @@ finished, and SQLite had not yet built `visits_by_node`, the second B-tree over
 the already enormous `visits` table.
 
 The retained evidence is in
-[`results/2026-08-25-hprc-v2.1-grch38-encoder-scale`](../results/2026-08-25-hprc-v2.1-grch38-encoder-scale/REPORT.md).
+[`results/2026-08-25-hprc-v2.1-grch38-encoder-scale`](https://github.com/a-r-d/pangenome-range/blob/main/results/2026-08-25-hprc-v2.1-grch38-encoder-scale/REPORT.md).
 The 157 GB temporary table and empty spool were deleted after the measurements
 were recorded. The downloaded source GBZ was retained outside the repository.
 
