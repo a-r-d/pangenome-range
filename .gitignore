@@ -142,8 +142,14 @@ vite.config.js.timestamp-*
 vite.config.ts.timestamp-*
 .vite/
 
-# Rust build output and fetched test fixtures
+# Rust / Cargo
 /target/
+**/*.rs.bk
+*.pdb
+rustc-ice-*.txt
+# Cargo.lock is intentionally tracked for reproducible research builds.
+
+# Fetched test fixtures
 /test-data/*.gbz
 /test-data/*.part
 !/test-data/README.md
