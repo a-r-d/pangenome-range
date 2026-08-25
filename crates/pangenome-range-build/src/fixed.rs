@@ -565,6 +565,14 @@ pub fn query_fixed_archive(
     let graph_reconstruction_us = reconstruction_started.elapsed().as_secs_f64() * 1_000_000.0;
     let total_local_query_us = total_started.elapsed().as_secs_f64() * 1_000_000.0;
     let correctness = canonical.equivalent_to(&oracle.canonical);
+    if !correctness {
+        return Err(invalid_data(format!(
+            "candidate semantics differ from the source oracle for query {}: {}",
+            query.id,
+            canonical_mismatch_summary(&canonical, &oracle.canonical)
+        ))
+        .into());
+    }
     let canonical_hash = canonical.canonical_hash().to_hex().to_string();
     let required_compressed = compress(config.codec, &oracle.encoded)?;
     let trace = source.summary();
@@ -642,12 +650,10 @@ impl RegionalGraph {
                     .successors(node_id, orientation)
                     .ok_or_else(|| invalid_data(format!("missing node {node_id}")))?;
                 for (next_id, next_orientation) in successors {
-                    if selected.contains(&next_id)
-                        && support::edge_is_canonical(
-                            (node_id, orientation),
-                            (next_id, next_orientation),
-                        )
-                    {
+                    if support::edge_is_canonical(
+                        (node_id, orientation),
+                        (next_id, next_orientation),
+                    ) {
                         result.edges.insert(Edge {
                             from: oriented(node_id, orientation)?,
                             to: oriented(next_id, next_orientation)?,
@@ -829,6 +835,12 @@ impl RegionalGraph {
     fn adjacency(&self) -> BTreeMap<OrientedNode, BTreeSet<OrientedNode>> {
         let mut result: BTreeMap<OrientedNode, BTreeSet<OrientedNode>> = BTreeMap::new();
         for edge in &self.edges {
+            // A regional chunk retains boundary edges even when the neighboring
+            // endpoint belongs to another chunk. Activate the edge for context
+            // traversal only after both endpoint payloads have been assembled.
+            if !self.nodes.contains_key(&edge.from.id) || !self.nodes.contains_key(&edge.to.id) {
+                continue;
+            }
             result.entry(edge.from).or_default().insert(edge.to);
             result
                 .entry(flip(edge.to))
@@ -1007,6 +1019,103 @@ fn push_path_segment(
         is_reference: path.is_reference,
         traversal,
     });
+}
+
+fn canonical_mismatch_summary(candidate: &CanonicalSubgraph, oracle: &CanonicalSubgraph) -> String {
+    let missing_nodes = oracle
+        .nodes
+        .keys()
+        .filter(|id| !candidate.nodes.contains_key(id))
+        .copied()
+        .collect::<Vec<_>>();
+    let extra_nodes = candidate
+        .nodes
+        .keys()
+        .filter(|id| !oracle.nodes.contains_key(id))
+        .copied()
+        .collect::<Vec<_>>();
+    let conflicting_sequences = candidate
+        .nodes
+        .iter()
+        .filter_map(|(id, sequence)| {
+            oracle
+                .nodes
+                .get(id)
+                .is_some_and(|expected| expected != sequence)
+                .then_some(*id)
+        })
+        .collect::<Vec<_>>();
+    let missing_edges = oracle
+        .edges
+        .difference(&candidate.edges)
+        .copied()
+        .collect::<Vec<_>>();
+    let extra_edges = candidate
+        .edges
+        .difference(&oracle.edges)
+        .copied()
+        .collect::<Vec<_>>();
+    let candidate = candidate.normalized();
+    let oracle = oracle.normalized();
+    let first_path_mismatch = candidate
+        .paths
+        .iter()
+        .zip(&oracle.paths)
+        .position(|(left, right)| left != right)
+        .or_else(|| {
+            (candidate.paths.len() != oracle.paths.len())
+                .then_some(candidate.paths.len().min(oracle.paths.len()))
+        });
+    let path_detail = first_path_mismatch.map_or_else(
+        || "none".into(),
+        |index| {
+            format!(
+                "index {index}: candidate {}, oracle {}",
+                path_summary(candidate.paths.get(index)),
+                path_summary(oracle.paths.get(index))
+            )
+        },
+    );
+    format!(
+        "nodes {}/{} (missing {} {:?}, extra {} {:?}, conflicting sequences {} {:?}); edges {}/{} (missing {} {:?}, extra {} {:?}); paths {}/{} (first mismatch {}); reference intervals match={}",
+        candidate.nodes.len(),
+        oracle.nodes.len(),
+        missing_nodes.len(),
+        missing_nodes.iter().take(8).collect::<Vec<_>>(),
+        extra_nodes.len(),
+        extra_nodes.iter().take(8).collect::<Vec<_>>(),
+        conflicting_sequences.len(),
+        conflicting_sequences.iter().take(8).collect::<Vec<_>>(),
+        candidate.edges.len(),
+        oracle.edges.len(),
+        missing_edges.len(),
+        missing_edges.iter().take(4).collect::<Vec<_>>(),
+        extra_edges.len(),
+        extra_edges.iter().take(4).collect::<Vec<_>>(),
+        candidate.paths.len(),
+        oracle.paths.len(),
+        path_detail,
+        candidate.reference_intervals == oracle.reference_intervals,
+    )
+}
+
+fn path_summary(path: Option<&CanonicalPath>) -> String {
+    path.map_or_else(
+        || "<absent>".into(),
+        |path| {
+            format!(
+                "{}#{} haplotype={} fragment={} reference={} visits={} first={:?} last={:?}",
+                path.sample,
+                path.contig,
+                path.haplotype,
+                path.fragment,
+                path.is_reference,
+                path.traversal.len(),
+                path.traversal.first(),
+                path.traversal.last(),
+            )
+        },
+    )
 }
 
 fn load_bootstrap(source: &impl RangeSource) -> ExperimentResult<Bootstrap> {
@@ -1485,5 +1594,25 @@ mod tests {
         let decoded = RegionalGraph::decode(&encoded).unwrap();
         assert_eq!(decoded.nodes, graph.nodes);
         assert_eq!(decoded.paths[&7].visits, graph.paths[&7].visits);
+    }
+
+    #[test]
+    fn boundary_edge_activates_after_both_endpoint_chunks_are_assembled() {
+        let mut graph = RegionalGraph::default();
+        let from = OrientedNode {
+            id: 1,
+            reverse: false,
+        };
+        let to = OrientedNode {
+            id: 2,
+            reverse: false,
+        };
+        graph.nodes.insert(from.id, b"A".to_vec());
+        graph.edges.insert(Edge { from, to });
+
+        assert!(graph.adjacency().is_empty());
+
+        graph.nodes.insert(to.id, b"C".to_vec());
+        assert_eq!(graph.adjacency().get(&from), Some(&BTreeSet::from([to])));
     }
 }

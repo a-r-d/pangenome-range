@@ -369,40 +369,46 @@ pub fn run_fixed_window_experiment(options: &ExperimentOptions) -> ExperimentRes
     let improvement_evidence = if options.mode == ExperimentMode::FullSweep {
         let baseline_aggregates = aggregates(&candidate_runs);
         let baseline_pareto = pareto_frontier(&candidate_runs, &baseline_aggregates, false);
-        let improvement_source = choose_dedup_source(&candidate_runs, &baseline_pareto)?;
-        let evidence = format!(
-            "{} exact repeated chunk payload entries accounted for {} avoidable compressed bytes ({:.1}% of the measured baseline archive)",
-            improvement_source.build.duplicate_payload_entries_observed,
-            improvement_source.build.avoidable_compressed_payload_bytes,
-            100.0
-                * ratio(
-                    improvement_source.build.avoidable_compressed_payload_bytes,
-                    improvement_source.build.archive_bytes,
-                )
-        );
-        eprintln!(
-            "measured next step: exact chunk deduplication for {} ({})",
-            improvement_source.config.experiment_id, evidence
-        );
-        let improved_config = FixedArchiveConfig {
-            experiment_id: format!("{}-dedup", improvement_source.config.experiment_id),
-            window_size: improvement_source.config.window_size,
-            codec: improvement_source.config.codec,
-            deduplicate_chunks: true,
-        };
-        let improved_run = run_candidate(
-            &graph,
-            &path_index,
-            source_bytes,
-            &workload,
-            &oracles,
-            &options.scratch_dir,
-            improved_config,
-            true,
-        )?;
-        append_candidate_rows(&mut query_rows, &workload, &improved_run.measurements)?;
-        candidate_runs.push(improved_run);
-        Some(evidence)
+        if let Some(improvement_source) = choose_dedup_source(&candidate_runs, &baseline_pareto) {
+            let evidence = format!(
+                "{} exact repeated chunk payload entries accounted for {} avoidable compressed bytes ({:.1}% of the measured baseline archive)",
+                improvement_source.build.duplicate_payload_entries_observed,
+                improvement_source.build.avoidable_compressed_payload_bytes,
+                100.0
+                    * ratio(
+                        improvement_source.build.avoidable_compressed_payload_bytes,
+                        improvement_source.build.archive_bytes,
+                    )
+            );
+            eprintln!(
+                "measured next step: exact chunk deduplication for {} ({})",
+                improvement_source.config.experiment_id, evidence
+            );
+            let improved_config = FixedArchiveConfig {
+                experiment_id: format!("{}-dedup", improvement_source.config.experiment_id),
+                window_size: improvement_source.config.window_size,
+                codec: improvement_source.config.codec,
+                deduplicate_chunks: true,
+            };
+            let improved_run = run_candidate(
+                &graph,
+                &path_index,
+                source_bytes,
+                &workload,
+                &oracles,
+                &options.scratch_dir,
+                improved_config,
+                true,
+            )?;
+            append_candidate_rows(&mut query_rows, &workload, &improved_run.measurements)?;
+            candidate_runs.push(improved_run);
+            Some(evidence)
+        } else {
+            eprintln!(
+                "baseline sweep found no exact repeated chunk payloads; retaining the sweep without an unjustified deduplication follow-up"
+            );
+            None
+        }
     } else {
         None
     };
@@ -956,8 +962,8 @@ fn dominates(left: &ParetoPoint, right: &ParetoPoint) -> bool {
 fn choose_dedup_source<'a>(
     runs: &'a [CandidateRun],
     pareto: &[ParetoPoint],
-) -> ExperimentResult<&'a CandidateRun> {
-    let best = pareto
+) -> Option<&'a CandidateRun> {
+    pareto
         .iter()
         .filter_map(|point| {
             let run = runs
@@ -976,14 +982,7 @@ fn choose_dedup_source<'a>(
             runs.iter()
                 .max_by_key(|run| run.build.avoidable_compressed_payload_bytes)
         })
-        .ok_or_else(|| invalid_data("no candidate run available for improvement"))?;
-    if best.build.avoidable_compressed_payload_bytes == 0 {
-        return Err(invalid_data(
-            "baseline sweep found no exact repeated chunks; refusing an unjustified deduplication experiment",
-        )
-        .into());
-    }
-    Ok(best)
+        .filter(|run| run.build.avoidable_compressed_payload_bytes > 0)
 }
 
 fn improvement_summary(
@@ -1441,7 +1440,13 @@ fn write_report(
     writeln!(output, "\n## Pareto frontier\n")?;
     writeln!(
         output,
-        "The frontier jointly considers archive bytes, p95 reads, bytes, local time, and simulated 20 ms latency. In smoke mode it contains only the single measured candidate and is not a comparative winner.\n"
+        "{}\n",
+        match options.mode {
+            ExperimentMode::FullSweep =>
+                "The frontier jointly considers archive bytes, p95 reads, bytes, local time, and simulated 20 ms latency. Timing noise can leave near-equivalent points on the frontier.",
+            ExperimentMode::SingleConfigSmoke =>
+                "The frontier jointly considers archive bytes, p95 reads, bytes, local time, and simulated 20 ms latency. In smoke mode it contains only the single measured candidate and is not a comparative winner.",
+        }
     )?;
     writeln!(
         output,
@@ -1512,10 +1517,15 @@ fn write_report(
                 .min_by(f64::total_cmp)
                 .unwrap_or(0.0)
         )?;
-    } else {
+    } else if options.mode == ExperimentMode::SingleConfigSmoke {
         writeln!(
             output,
             "- Single-config smoke mode cannot establish a new Pareto winner or attribute deduplication savings without a paired non-deduplicated build."
+        )?;
+    } else {
+        writeln!(
+            output,
+            "- The full sweep found no exact duplicate regional payloads, so it correctly skipped an unjustified deduplication follow-up."
         )?;
     }
     writeln!(
@@ -1534,10 +1544,15 @@ fn write_report(
             "Exact regional payloads recurred across distinct reference directory entries often enough to save {} bytes without changing query semantics or introducing a decode dependency. Coalescing beyond adjacency had limited value because path-local coordinate ordering already made each query's required payloads contiguous.\n",
             improvement.bytes_saved
         )?;
-    } else {
+    } else if options.mode == ExperimentMode::SingleConfigSmoke {
         writeln!(
             output,
             "Smoke mode intentionally did not search for a new structural improvement; it isolates correctness and scale behavior of the previously selected layout.\n"
+        )?;
+    } else {
+        writeln!(
+            output,
+            "Unlike the tiny fixture, this input produced no exact duplicate regional payloads in the measured matrix. Deduplication is therefore not assumed to help at this scale.\n"
         )?;
     }
 
@@ -1879,5 +1894,10 @@ mod tests {
     fn relative_latency_reports_direction() {
         assert_eq!(relative_latency(200.0, 100.0), "2.00x faster");
         assert_eq!(relative_latency(100.0, 400.0), "4.00x slower");
+    }
+
+    #[test]
+    fn empty_sweep_does_not_invent_a_deduplication_follow_up() {
+        assert!(choose_dedup_source(&[], &[]).is_none());
     }
 }

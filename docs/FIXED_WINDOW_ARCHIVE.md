@@ -87,8 +87,8 @@ a binary or hierarchical lookup.
 
 ## Regional chunk
 
-After decompression, each regional chunk contains a self-contained local graph
-materialization:
+After decompression, each regional chunk contains an independently decodable
+regional graph materialization:
 
 ```text
 magic                 [u8; 8] = PNGRGN01
@@ -126,7 +126,9 @@ to        oriented node
 ```
 
 Only canonical edge orientations are stored. The reader derives the reverse
-counterpart when it constructs adjacency.
+counterpart when it constructs adjacency. An edge may reference one endpoint
+whose node record is stored in a neighboring chunk; the construction and query
+sections describe how those boundary edges are handled.
 
 ### Path
 
@@ -174,8 +176,9 @@ For every reference path, the builder:
    them to the real path extent;
 2. asks the upstream GBZ-base subgraph selector for the window plus a 100-base
    graph-context halo;
-3. materializes selected node sequences, induced oriented edges, every original
-   path visit touching those nodes, and coordinate-bearing reference visits;
+3. materializes selected node sequences, canonical oriented edges incident to
+   those nodes, every original path visit touching those nodes, and
+   coordinate-bearing reference visits;
 4. serializes that regional graph and compresses it independently;
 5. creates a coordinate directory entry pointing at the stored payload.
 
@@ -183,6 +186,12 @@ The halo deliberately duplicates graph material around window boundaries so a
 query with up to 100 bases of context can be reconstructed without fetching an
 unbounded neighboring region. It is a construction/query contract: the current
 reader rejects a requested context larger than 100.
+
+An edge crossing a regional boundary is retained even when its other endpoint
+is not present in that chunk. After chunks are merged, the reader activates the
+edge for context traversal only if both endpoint nodes are present. This keeps a
+small query from following a dangling edge while preserving topology when a
+larger query fetches both endpoint regions.
 
 Physical chunks are written in source reference-path and coordinate order. The
 separately encoded directory is sorted by its lookup key.
@@ -257,6 +266,30 @@ requests.
 The selected deduplicated archive was also 100,430 bytes versus 172,032 bytes
 for GBZ-base on this fixture. It was still 1.359x the original 73,920-byte GBZ.
 
+### Medium MHC validation
+
+The 4,511,832-byte MHC fixture makes the size dependence clearer. A full sweep
+built 20 window/compression layouts and measured 40 deterministic queries at
+all six coalescing gaps: 4,800 candidate rows in total, all canonically exact.
+The latency-first point was 256 KiB with zstd-3. Its 4,273,073-byte archive was
+0.947x the source GBZ, and its p95 request shape was two reads and 1,700,198
+bytes (86.34 ms in the simulated 20 ms / 300 Mbps profile).
+
+Local p95 performance crossed over with query size:
+
+| Query size | Fixed-window versus GBZ-base p95 |
+|---:|---:|
+| 1 kb | 74.35x slower |
+| 10 kb | 6.92x slower |
+| 100 kb | 1.72x faster |
+| 1 Mb | 3.66x faster |
+
+In simple terms, this materialized prototype has substantial fixed decode and
+reconstruction overhead for tiny ranges, but pulls ahead once GBZ-base must
+assemble larger subgraphs. Unlike the tiny fixture, none of the 20 MHC layouts
+contained exact duplicate regional payloads, so the sweep did not add an
+unjustified deduplication follow-up.
+
 ## Limits and next experiment
 
 These numbers are directional, not a general performance claim:
@@ -266,7 +299,8 @@ These numbers are directional, not a general performance claim:
   so 256 KiB is not yet a proven optimum;
 - the local timings do not control cold/warm page cache and are not browser or
   object-store timings;
-- the fixture cannot exercise the planned 100 kb, 1 Mb, or 10,000-query loads;
+- the tiny fixture cannot exercise 100 kb or 1 Mb ranges; the MHC run exercised
+  both, but the planned 10,000-query load remains outstanding;
 - a flat directory that fits in the 16 KiB bootstrap will not scale to a whole
   genome;
 - path metadata and halo duplication may dominate at chromosome scale;
@@ -276,5 +310,7 @@ These numbers are directional, not a general performance claim:
 
 The next high-information test is one HPRC chromosome, with a hierarchical
 directory and a GBZ-record-preserving candidate tested beside this materialized
-encoding. See the [retained experiment report](../results/2026-08-25-fixed-window-c0-final/REPORT.md)
-for the full sweep, workload qualifications, and raw result-file locations.
+encoding. See the retained reports for the
+[tiny-locus sweep](../results/2026-08-25-fixed-window-c0-final/REPORT.md) and the
+[medium MHC sweep](../results/2026-08-25-mhc-fixed-window-c0-full/REPORT.md),
+including workload qualifications and raw result-file locations.
