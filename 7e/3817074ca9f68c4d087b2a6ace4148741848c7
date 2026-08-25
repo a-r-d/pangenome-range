@@ -1,0 +1,42 @@
+crates/pangenome-range-build/src/experiment.rs
+  s_54fde64f62d445::t_ec360d2fd72e8e 372,1445-1448
+  s_54fde64f62d445::t_234486e623ded5 373-411,965-966,985
+  s_54fde64f62d445::t_e98cfc67273298 1898-1902
+  s_54fde64f62d445::t_112c99dc9d79c0 1443-1444,1449,1520,1525-1529,1547,1552-1555
+  s_54fde64f62d445::t_d102b5d10aa2b4 1556
+crates/pangenome-range-build/src/fixed.rs
+  s_54fde64f62d445::t_81f0bbc040590c 568-575,1025-1047,1058-1064,1069-1079,1081-1090,1095-1119,1617
+  s_54fde64f62d445::t_f2c8c4925a0bfd 656
+  s_54fde64f62d445::t_fd9ef491304b24 1616
+  s_54fde64f62d445::t_99277f7374b35d 1024,1065-1068
+  s_54fde64f62d445::t_15049ce1ec8c04 653-655,838-843,1598-1615
+  s_54fde64f62d445::t_49fa79a486cda7 1048-1057,1080,1091-1094
+  s_54fde64f62d445::t_e5ddd9bc3d656a 1120
+docs/FIXED_WINDOW_ARCHIVE.md
+  s_54fde64f62d445::t_c423be9c80221a 90-91,129-131
+  s_54fde64f62d445::t_403bda92b5e644 179-181,190-195,269-292,302-303,313-316
+results/2026-08-25-mhc-fixed-window-c0-full/config.json
+  s_54fde64f62d445::t_cc57320c7b6a47 1-90
+results/2026-08-25-mhc-fixed-window-c0-full/REPORT.md
+  s_54fde64f62d445::t_2985d38e1e6ef6 1-122
+results/2026-08-25-mhc-fixed-window-c0-full/queries.csv
+  s_54fde64f62d445::t_bd82d9e59e9e0e 1-4881
+results/2026-08-25-mhc-fixed-window-c0-full/summary.json
+  s_54fde64f62d445::t_3a275d6810fdc9 1-64181
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.24",
+  "base_commit_sha": "7e3817074ca9f68c4d087b2a6ace4148741848c7",
+  "prompts": {},
+  "sessions": {
+    "s_54fde64f62d445": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a03960-ddaf-7240-9dd8-9234e3e1a812",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "aaron decker <aaron@ard.ninja>"
+    }
+  }
+}
