@@ -1,7 +1,8 @@
 use super::fixed::{
-    ArchiveBuildMetrics, ChunkCodec, DEFAULT_MAX_UNCOMPRESSED_CHUNK_BYTES, DEFAULT_MIN_WINDOW_SIZE,
+    ArchiveBuildMetrics, ArchiveBuildOptions, BuildProgressMode, ChunkCodec,
+    DEFAULT_MAX_QUEUED_BYTES, DEFAULT_MAX_UNCOMPRESSED_CHUNK_BYTES, DEFAULT_MIN_WINDOW_SIZE,
     ExperimentResult, FixedArchiveConfig, QueryMeasurement, QuerySpec, build_fixed_archive,
-    query_fixed_archive, reference_paths, source_oracle,
+    build_fixed_archive_with_options, query_fixed_archive, reference_paths, source_oracle,
 };
 use gbz::GBZ;
 use gbz_base::PathIndex;
@@ -19,6 +20,231 @@ const WINDOW_SIZE: u64 = 16_384;
 const QUERY_CONTEXT: u64 = 100;
 const QUERY_SIZES: [u64; 4] = [1_000, 10_000, 100_000, 1_000_000];
 const QUERY_COALESCING_GAP: u64 = 65_536;
+
+#[derive(Clone, Debug)]
+pub struct EncodeOptions {
+    pub input: PathBuf,
+    pub output: PathBuf,
+    pub report: Option<PathBuf>,
+    pub sample: Option<String>,
+    pub contig: Option<String>,
+    pub start: Option<u64>,
+    pub end: Option<u64>,
+    pub window_size: u64,
+    pub codec: ChunkCodec,
+    pub max_uncompressed_chunk_bytes: u64,
+    pub min_window_size: u64,
+    pub threads: usize,
+    pub max_queued_bytes: u64,
+    pub scratch_dir: Option<PathBuf>,
+    pub keep_partial: bool,
+    pub progress: BuildProgressMode,
+    pub max_chunks: Option<u64>,
+}
+
+impl EncodeOptions {
+    #[must_use]
+    pub fn new(input: PathBuf, output: PathBuf) -> Self {
+        Self {
+            input,
+            output,
+            report: None,
+            sample: None,
+            contig: None,
+            start: None,
+            end: None,
+            window_size: WINDOW_SIZE,
+            codec: ChunkCodec::Zstd3,
+            max_uncompressed_chunk_bytes: DEFAULT_MAX_UNCOMPRESSED_CHUNK_BYTES,
+            min_window_size: DEFAULT_MIN_WINDOW_SIZE,
+            threads: 1,
+            max_queued_bytes: DEFAULT_MAX_QUEUED_BYTES,
+            scratch_dir: None,
+            keep_partial: false,
+            progress: BuildProgressMode::Off,
+            max_chunks: None,
+        }
+    }
+}
+
+#[derive(Debug, Serialize)]
+pub struct EncodeSummary {
+    pub schema_version: u32,
+    pub source_path: PathBuf,
+    pub source_gbz_bytes: u64,
+    pub source_sha256: String,
+    pub source_checksum_wall_ms: f64,
+    pub source_load_wall_ms: f64,
+    pub rss_after_source_load_kib: Option<u64>,
+    pub path_index_wall_ms: f64,
+    pub rss_after_path_index_kib: Option<u64>,
+    pub process_peak_rss_kib: Option<u64>,
+    pub output_path: PathBuf,
+    pub output_sha256: String,
+    pub sample: Option<String>,
+    pub contig: Option<String>,
+    pub start: Option<u64>,
+    pub end: Option<u64>,
+    pub max_chunks: Option<u64>,
+    pub window_size: u64,
+    pub codec: ChunkCodec,
+    pub haplotype_semantics: &'static str,
+    pub threads: usize,
+    pub max_queued_bytes: u64,
+    pub scratch_dir: Option<PathBuf>,
+    pub chunks_per_second: f64,
+    pub reference_bp_per_second: f64,
+    pub time_to_first_payload_from_encode_start_ms: f64,
+    pub build: ArchiveBuildMetrics,
+}
+
+fn encode_progress(mode: BuildProgressMode, phase: &str, message: &str) {
+    match mode {
+        BuildProgressMode::Off => {}
+        BuildProgressMode::Plain => eprintln!("{phase}: {message}"),
+        BuildProgressMode::Json => eprintln!(
+            "{}",
+            serde_json::json!({ "phase": phase, "message": message })
+        ),
+    }
+}
+
+/// Runs the production-shaped direct archive encoder and writes a JSON report.
+///
+/// # Errors
+///
+/// Returns an error if inputs/options are invalid, construction fails, or the
+/// completed archive/report cannot be validated and persisted.
+#[allow(clippy::cast_precision_loss, clippy::too_many_lines)]
+pub fn run_encode(options: &EncodeOptions) -> ExperimentResult<EncodeSummary> {
+    let encode_started = Instant::now();
+    if !options.input.is_file() {
+        return Err(io::Error::new(
+            io::ErrorKind::NotFound,
+            format!("input GBZ does not exist: {}", options.input.display()),
+        )
+        .into());
+    }
+    if options.output.exists() {
+        return Err(io::Error::new(
+            io::ErrorKind::AlreadyExists,
+            format!(
+                "refusing to overwrite archive: {}",
+                options.output.display()
+            ),
+        )
+        .into());
+    }
+    if let Some(parent) = options
+        .output
+        .parent()
+        .filter(|parent| !parent.as_os_str().is_empty())
+    {
+        fs::create_dir_all(parent)?;
+    }
+    if let Some(scratch_dir) = &options.scratch_dir {
+        fs::create_dir_all(scratch_dir)?;
+    }
+    let source_gbz_bytes = fs::metadata(&options.input)?.len();
+    encode_progress(options.progress, "source_checksum", "hashing GBZ source");
+    let checksum_started = Instant::now();
+    let source_sha256 = file_sha256(&options.input)?;
+    let source_checksum_wall_ms = elapsed_ms(checksum_started);
+    encode_progress(options.progress, "source_load", "loading GBZ source");
+    let load_started = Instant::now();
+    let graph: GBZ = serialize::load_from(&options.input)?;
+    let source_load_wall_ms = elapsed_ms(load_started);
+    let rss_after_source_load_kib = process_current_rss_kib();
+    encode_progress(
+        options.progress,
+        "path_index",
+        "building compact reference path index",
+    );
+    let index_started = Instant::now();
+    let path_index = PathIndex::new(&graph, PATH_INDEX_INTERVAL, false)?;
+    let path_index_wall_ms = elapsed_ms(index_started);
+    let rss_after_path_index_kib = process_current_rss_kib();
+    let config = FixedArchiveConfig {
+        experiment_id: "fixed-v4-direct".into(),
+        window_size: options.window_size,
+        codec: options.codec,
+        deduplicate_chunks: false,
+        max_uncompressed_chunk_bytes: options.max_uncompressed_chunk_bytes,
+        min_window_size: options.min_window_size,
+    };
+    let build_options = ArchiveBuildOptions {
+        sample: options.sample.clone(),
+        contig: options.contig.clone(),
+        start: options.start,
+        end: options.end,
+        max_chunks: options.max_chunks,
+        threads: options.threads,
+        max_queued_bytes: options.max_queued_bytes,
+        keep_partial: options.keep_partial,
+        progress: options.progress,
+    };
+    encode_progress(
+        options.progress,
+        "archive_build",
+        "starting direct archive writer",
+    );
+    let prebuild_wall_ms = elapsed_ms(encode_started);
+    let build = build_fixed_archive_with_options(
+        &graph,
+        &path_index,
+        source_gbz_bytes,
+        &options.output,
+        &config,
+        &build_options,
+    )?;
+    let output_sha256 = file_sha256(&options.output)?;
+    let seconds = build.construction_wall_ms / 1_000.0;
+    let chunks_per_second = if seconds > 0.0 {
+        build.directory_entries as f64 / seconds
+    } else {
+        0.0
+    };
+    let reference_bp_per_second = if seconds > 0.0 {
+        build.reference_bases_processed as f64 / seconds
+    } else {
+        0.0
+    };
+    let summary = EncodeSummary {
+        schema_version: 1,
+        source_path: options.input.clone(),
+        source_gbz_bytes,
+        source_sha256,
+        source_checksum_wall_ms,
+        source_load_wall_ms,
+        rss_after_source_load_kib,
+        path_index_wall_ms,
+        rss_after_path_index_kib,
+        process_peak_rss_kib: process_peak_rss_kib(),
+        output_path: options.output.clone(),
+        output_sha256,
+        sample: options.sample.clone(),
+        contig: options.contig.clone(),
+        start: options.start,
+        end: options.end,
+        max_chunks: options.max_chunks,
+        window_size: options.window_size,
+        codec: options.codec,
+        haplotype_semantics: "anonymous-distinct-weighted-tile-paths",
+        threads: options.threads,
+        max_queued_bytes: options.max_queued_bytes,
+        scratch_dir: options.scratch_dir.clone(),
+        chunks_per_second,
+        reference_bp_per_second,
+        time_to_first_payload_from_encode_start_ms: prebuild_wall_ms + build.first_payload_wall_ms,
+        build,
+    };
+    let report = options
+        .report
+        .clone()
+        .unwrap_or_else(|| PathBuf::from(format!("{}.report.json", options.output.display())));
+    write_json(&report, &summary)?;
+    Ok(summary)
+}
 
 #[derive(Clone, Debug, Serialize)]
 pub struct EncoderScaleOptions {

@@ -23,6 +23,8 @@ The Rust binary is not shipped through npm. See
 ./scripts/fetch-test-data.sh
 cargo run --release -- inspect test-data/micb-kir3dl1.gbz
 cargo run --release -- benchmark-source test-data/micb-kir3dl1.gbz
+cargo run --release -- encode test-data/mhc-10.gbz /tmp/mhc.pngr \
+  --sample MHC-GRCh38 --contig MHC --threads 1 --progress plain
 ```
 
 Development checks:
@@ -59,7 +61,8 @@ opt-in; the default test suite uses synthetic bytes and stays fast.
 - `pangenome-range-build`: an interface for replaceable candidate-layout experiments.
 - `pangenome-range-query`: storage-independent query/correctness types and a canonical
   BLAKE3 comparison hash for local graph semantics.
-- `pangenome-range-cli`: GBZ inspection via upstream `gbz` plus a source-tracing probe.
+- `pangenome-range-cli`: the direct-write v4 encoder, GBZ inspection, source
+  tracing, and retained research benchmarks.
 - `packages/browser`: private ESM package skeleton with isolated reader,
   viewer, and Node exports. Archive decoding and rendering are not implemented.
 - `packages/benchmark`: private browser/Node benchmark scaffold; no benchmark
@@ -67,8 +70,11 @@ opt-in; the default test suite uses synthetic bytes and stays fast.
 - `docs`: the existing research Markdown plus a VitePress shell and demo
   placeholder deployed under `/pangenome-range/`.
 
-The planned CLI names `build`, `query`, `benchmark`, and `verify` are reserved but
-not implemented until there is a real experiment behind each one.
+`encode INPUT.gbz OUTPUT.pngr` is implemented with sample/contig/interval and
+`--max-chunks` pilot guards, bounded deterministic compression, JSON build
+reports, archive validation, and atomic rename. Run `pangenome-range help` for
+the complete option list. The planned CLI names `build`, `query`, `benchmark`,
+and `verify` remain reserved until there is a real experiment behind each one.
 
 ## Data tiers
 

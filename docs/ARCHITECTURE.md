@@ -16,6 +16,29 @@ first concrete candidate layout and its external-memory encoder. The current
 Candidate 1 object is specified in
 [Fixed-window archive v4](FIXED_WINDOW_ARCHIVE.md).
 
+## Direct archive construction
+
+The normal v4 encoder writes a temporary sibling of the requested `.pngr`
+object. It emits the provisional 64-byte header and root, reserves the exact
+fixed directory-page span, and then appends accepted payloads in deterministic
+reference/coordinate order. Compact per-reference/per-bucket descriptors are
+retained for directory backfill; there is no payload spool, second full-file
+copy, occurrence table, or global pending-entry sort.
+
+Topology-only preflight uses an upstream node safety limit once per directory
+bucket. Clearly oversized parents split before weighted haplotype extraction;
+every accepted candidate still undergoes authoritative encoded-size checking,
+so a conservative estimate cannot change correctness. Adjacent extractions
+reuse `Subgraph` record storage after an exact-output MHC experiment measured a
+1.175x extraction speedup.
+
+Compression may use bounded batches controlled by `--threads` and
+`--max-queued-bytes`. GBZ selection remains ordered and single-threaded. Worker
+results are consumed in input order, so thread completion order cannot change
+archive offsets or bytes. The completed temporary object is flushed, decoded,
+and every physical payload is decompressed and bounds-checked before atomic
+rename. Failed temporary objects are removed unless `--keep-partial` is set.
+
 ## TypeScript product boundary
 
 The TypeScript workspace is a separate consumer of the static archive, not a

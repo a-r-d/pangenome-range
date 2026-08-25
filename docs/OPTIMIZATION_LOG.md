@@ -135,3 +135,62 @@ The next highest-information optimization is removing the payload spool by
 reserving/backfilling the directory and appending compressed payloads directly
 to the temporary final archive. Source-wide GBZ deserialization remains a
 separate upstream limitation.
+
+## 2026-08-25: direct writer and bounded pilots accepted
+
+Archive v4 now reserves its fixed directory pages in a temporary final archive,
+appends compressed payloads directly, backfills pages/header, validates every
+physical payload through the Rust decoder, fsyncs, and atomically renames. The
+payload spool, second full-file copy, and global pending-entry sort are gone.
+Failure cleanup is the default; `--keep-partial` is explicit.
+
+The release MHC archive remained exactly 3,194,336 bytes with SHA-256
+`119f8e15a0681bd4418ba0eba71c590ca2b6dfc79c1625243bde05fa1358d89a`
+for both one and four compression threads. A regression test also exercises a
+four-chunk build at both thread counts and requires byte identity. The retained
+single-config smoke passed all 40 graph-oracle queries at six coalescing gaps
+(240 measurements) and freshly checked 4,338 selected tile payloads.
+The preceding spool smoke used the same fixed-seed queries and passed the same
+source-oracle gates, establishing decoded equivalence; its archive hash was not
+retained, so old/new byte identity is not claimed retroactively.
+
+Release standalone construction measurements were:
+
+| Phase | legacy occurrence-index + spool | local haplotype + spool | local haplotype + direct writer | direct writer + 4 threads |
+|---|---:|---:|---:|---:|
+| Construction wall | >2,847,000 ms; stopped | 1,660.006 ms | 1,754.494 ms | 1,808.041 ms |
+| First payload after build start | none | 11.282 ms | 11.222 ms | 14.686 ms |
+| Occurrence scratch | 157,105,246,208 B and growing | 0 B | 0 B | 0 B |
+| Payload-spool scratch | 0 B at stop | 3,153,203 B | 0 B | 0 B |
+| Final-copy phase | never reached | present, not separately timed | 0 ms | 0 ms |
+| Compression wall | never reached | 50.895 ms | 54.149 ms | 26.521 ms |
+| Peak queued raw / compressed | not bounded | 565,982 / 51,526 B | 565,982 / 51,526 B | 1,579,650 / 157,258 B |
+| Archive SHA-256 | none | not retained | `119f8e15...d89a` | `119f8e15...d89a` |
+
+Four compression workers halved compression wall time but made total MHC
+construction 3.1% slower in the paired final run because ordered GBZ extraction/materialization
+dominates. `--threads 1` therefore remains the default; bounded parallelism is
+available for inputs where compression is material, not claimed as a universal
+speedup.
+
+A controlled 32-chunk release experiment compared a new `Subgraph` per interval
+with sliding reuse. Exact emitted JSON hashes matched for every interval; reuse
+took 33.001 ms versus 38.784 ms (1.175x). Sequential extraction now reuses the
+record allocation. A safety-limited topology-only preflight runs once per fixed
+directory bucket, splits clearly oversized parents early, and retains exact
+post-materialization size checks for every candidate.
+
+The retained HPRC source was present, so a bounded `GRCh38#chr6 --max-chunks 2`
+pilot was run rather than a whole genome. It produced a 4,644-byte archive with
+the same SHA-256 across the before/after filtering runs. Moving the sample and
+contig filter ahead of reference-length traversal reduced manifest discovery
+and time to first payload after build start from 15,722.862 ms to 445.932 ms.
+The final run used zero occurrence bytes, zero spool/scratch bytes, a 4,266-byte
+provisional temp prefix, and peak queued raw/compressed bytes of 19,282 / 194.
+
+The final report hashed the 5,492,627,216-byte source in 20,824.260 ms, loaded it
+in 15,304.074 ms, built the compact reference index in 15,533.393 ms, and peaked
+at 8,775,512 KiB RSS. Total encode-start to first payload was 52,107.791 ms.
+This confirms that
+the next scale bottleneck is lazy/memory-mapped source access; it is not evidence
+of remaining encoder scratch or a reason to recreate a global occurrence index.

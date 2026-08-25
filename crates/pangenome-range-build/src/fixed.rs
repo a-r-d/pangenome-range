@@ -1,6 +1,8 @@
 use gbz::support;
 use gbz::{FullPathName, GBZ, Orientation};
-use gbz_base::{HaplotypeOutput, PathIndex, Subgraph, SubgraphQuery};
+use gbz_base::{
+    ErrorKind as GbzBaseErrorKind, HaplotypeOutput, PathIndex, Subgraph, SubgraphQuery,
+};
 use pangenome_range_format::{FileRangeSource, NetworkProfile, RangeSource, TracingRangeSource};
 use pangenome_range_query::{
     CanonicalHaplotypeTile, CanonicalPath, CanonicalSubgraph, Edge, HaplotypeSemantics,
@@ -11,7 +13,7 @@ use std::cmp::Reverse;
 use std::collections::{BTreeMap, BTreeSet, BinaryHeap, HashMap};
 use std::error::Error;
 use std::fs::{File, OpenOptions};
-use std::io::{self, BufWriter, Read, Seek, SeekFrom, Write};
+use std::io::{self, Read, Seek, SeekFrom, Write};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::Instant;
@@ -35,6 +37,7 @@ pub const BOOTSTRAP_LEN: usize = 16 * 1024;
 pub const CONSTRUCTION_CONTEXT: u64 = 100;
 pub const DEFAULT_MAX_UNCOMPRESSED_CHUNK_BYTES: u64 = 8 * 1024 * 1024;
 pub const DEFAULT_MIN_WINDOW_SIZE: u64 = 1024;
+pub const DEFAULT_MAX_QUEUED_BYTES: u64 = 32 * 1024 * 1024;
 const DEFAULT_DIRECTORY_CACHE_BYTES: usize = 1024 * 1024;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -96,6 +99,55 @@ pub struct FixedArchiveConfig {
     pub min_window_size: u64,
 }
 
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum BuildProgressMode {
+    #[default]
+    Off,
+    Plain,
+    Json,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ArchiveBuildOptions {
+    pub sample: Option<String>,
+    pub contig: Option<String>,
+    pub start: Option<u64>,
+    pub end: Option<u64>,
+    pub max_chunks: Option<u64>,
+    pub threads: usize,
+    pub max_queued_bytes: u64,
+    pub keep_partial: bool,
+    pub progress: BuildProgressMode,
+}
+
+impl Default for ArchiveBuildOptions {
+    fn default() -> Self {
+        Self {
+            sample: None,
+            contig: None,
+            start: None,
+            end: None,
+            max_chunks: None,
+            threads: 1,
+            max_queued_bytes: DEFAULT_MAX_QUEUED_BYTES,
+            keep_partial: false,
+            progress: BuildProgressMode::Off,
+        }
+    }
+}
+
+fn emit_progress(mode: BuildProgressMode, phase: &str, message: &str) {
+    match mode {
+        BuildProgressMode::Off => {}
+        BuildProgressMode::Plain => eprintln!("{phase}: {message}"),
+        BuildProgressMode::Json => eprintln!(
+            "{}",
+            serde_json::json!({ "phase": phase, "message": message })
+        ),
+    }
+}
+
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct QuerySpec {
     pub id: String,
@@ -155,14 +207,31 @@ pub struct ArchiveBuildMetrics {
     pub payload_spool_bytes: u64,
     pub path_occurrence_index_bytes: u64,
     pub path_occurrence_index_wall_ms: f64,
+    pub reference_manifest_discovery_wall_ms: f64,
     pub subgraph_selection_wall_ms: f64,
+    pub local_haplotype_extraction_wall_ms: f64,
     pub regional_materialization_wall_ms: f64,
     pub regional_encoding_wall_ms: f64,
     pub compression_wall_ms: f64,
+    pub preflight_selection_wall_ms: f64,
+    pub writer_finalization_wall_ms: f64,
+    pub archive_validation_wall_ms: f64,
+    pub final_copy_wall_ms: f64,
     pub adaptive_splits: u64,
+    pub preflight_splits: u64,
+    pub post_materialization_splits: u64,
+    pub largest_rejected_parent_bytes: u64,
     pub first_payload_wall_ms: f64,
+    pub references_processed: u64,
     pub reference_bases_processed: u64,
     pub scratch_bytes: u64,
+    pub scratch_bytes_before_first_payload: u64,
+    pub temporary_file_bytes_before_first_payload: u64,
+    pub temporary_file_peak_bytes: u64,
+    pub payload_bytes: u64,
+    pub peak_queued_raw_bytes: u64,
+    pub peak_queued_compressed_bytes: u64,
+    pub peak_queued_total_bytes: u64,
     pub haplotype_extraction_evidence: Option<HaplotypeExtractionEvidence>,
     pub construction_wall_ms: f64,
 }
@@ -337,20 +406,35 @@ impl Default for RegionalGraph {
 }
 
 #[derive(Clone, Debug)]
-struct SpooledChunk {
-    spool_offset: u64,
+struct StoredChunk {
+    archive_offset: u64,
     compressed_len: u64,
     uncompressed_len: u64,
-    archive_offset: u64,
 }
 
-#[derive(Clone, Debug)]
-struct PendingEntry {
+#[derive(Debug)]
+struct PendingRawChunk {
     reference_id: usize,
-    bucket_index: u64,
     start: u64,
     end: u64,
-    chunk_id: usize,
+    raw: Vec<u8>,
+    hash: blake3::Hash,
+}
+
+#[derive(Default)]
+struct DirectWriterState {
+    chunks: Vec<StoredChunk>,
+    chunk_by_hash: HashMap<blake3::Hash, Vec<usize>>,
+    duplicate_payload_entries_observed: u64,
+    avoidable_compressed_payload_bytes: u64,
+    peak_compressed_chunk_bytes: u64,
+    compression_wall_ms: f64,
+    first_payload_wall_ms: Option<f64>,
+    accepted_chunks: u64,
+    reference_bases_processed: u64,
+    peak_queued_raw_bytes: u64,
+    peak_queued_compressed_bytes: u64,
+    peak_queued_total_bytes: u64,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
@@ -398,11 +482,14 @@ pub struct FixedArchiveReader {
 struct TemporaryFile {
     file: File,
     path: PathBuf,
+    keep_on_drop: bool,
 }
 
 impl Drop for TemporaryFile {
     fn drop(&mut self) {
-        let _ = std::fs::remove_file(&self.path);
+        if !self.keep_on_drop && !self.path.as_os_str().is_empty() {
+            let _ = std::fs::remove_file(&self.path);
+        }
     }
 }
 
@@ -414,6 +501,14 @@ pub struct ReferencePathSpec {
 }
 
 pub fn reference_paths(graph: &GBZ) -> ExperimentResult<Vec<ReferencePathSpec>> {
+    reference_paths_filtered(graph, None, None)
+}
+
+fn reference_paths_filtered(
+    graph: &GBZ,
+    sample_filter: Option<&str>,
+    contig_filter: Option<&str>,
+) -> ExperimentResult<Vec<ReferencePathSpec>> {
     let metadata = graph
         .metadata()
         .ok_or_else(|| invalid_data("GBZ metadata is required"))?;
@@ -425,6 +520,11 @@ pub fn reference_paths(graph: &GBZ) -> ExperimentResult<Vec<ReferencePathSpec>> 
         }
         let name = FullPathName::from_metadata(metadata, path_id)
             .ok_or_else(|| invalid_data(format!("missing metadata for path {path_id}")))?;
+        if sample_filter.is_some_and(|sample| name.sample != sample)
+            || contig_filter.is_some_and(|contig| name.contig != contig)
+        {
+            continue;
+        }
         let length = graph
             .path(path_id, Orientation::Forward)
             .ok_or_else(|| invalid_data(format!("missing path {path_id}")))?
@@ -476,7 +576,13 @@ impl TemporaryFile {
                 .create_new(true)
                 .open(&path)
             {
-                Ok(file) => return Ok(Self { file, path }),
+                Ok(file) => {
+                    return Ok(Self {
+                        file,
+                        path,
+                        keep_on_drop: false,
+                    });
+                }
                 Err(error) if error.kind() == io::ErrorKind::AlreadyExists => {}
                 Err(error) => return Err(error),
             }
@@ -491,7 +597,16 @@ impl TemporaryFile {
         self.file.sync_all()?;
         std::fs::rename(&self.path, output)?;
         self.path.clear();
+        let parent = output
+            .parent()
+            .filter(|parent| !parent.as_os_str().is_empty())
+            .unwrap_or_else(|| Path::new("."));
+        File::open(parent)?.sync_all()?;
         Ok(())
+    }
+
+    fn keep_on_failure(&mut self) {
+        self.keep_on_drop = true;
     }
 }
 
@@ -597,13 +712,35 @@ fn extract_local_region(
     context: u64,
     output: HaplotypeOutput,
 ) -> ExperimentResult<(RegionalGraph, HaplotypeModeEvidence)> {
+    extract_local_region_with_subgraph(
+        graph,
+        path_index,
+        &mut Subgraph::new(),
+        reference,
+        core_start,
+        core_end,
+        context,
+        output,
+    )
+}
+
+#[allow(clippy::too_many_arguments)]
+fn extract_local_region_with_subgraph(
+    graph: &GBZ,
+    path_index: &PathIndex,
+    subgraph: &mut Subgraph,
+    reference: &FullPathName,
+    core_start: u64,
+    core_end: u64,
+    context: u64,
+    output: HaplotypeOutput,
+) -> ExperimentResult<(RegionalGraph, HaplotypeModeEvidence)> {
     let query = SubgraphQuery::path_interval(
         reference,
         u64_to_usize(core_start)?..u64_to_usize(core_end)?,
     )
     .with_context(u64_to_usize(context)?)
     .with_haplotypes(output);
-    let mut subgraph = Subgraph::new();
     let extraction_started = Instant::now();
     subgraph.from_gbz(graph, Some(path_index), None, &query)?;
     let extraction_wall_ms = extraction_started.elapsed().as_secs_f64() * 1_000.0;
@@ -658,7 +795,7 @@ fn extract_local_region(
     traversals.sort();
     let evidence = mode_evidence(output, &traversals, extraction_wall_ms, json.len())?;
 
-    let mut regional = RegionalGraph::topology_from_subgraph(&subgraph)?;
+    let mut regional = RegionalGraph::topology_from_subgraph(subgraph)?;
     regional.semantics = match output {
         HaplotypeOutput::All => HaplotypeSemantics::AnonymousAllTilePaths,
         HaplotypeOutput::Distinct => HaplotypeSemantics::AnonymousDistinctWeightedTilePaths,
@@ -722,6 +859,254 @@ pub fn compare_haplotype_outputs(
     })
 }
 
+fn preflight_region(
+    graph: &GBZ,
+    path_index: &PathIndex,
+    reusable: &mut Subgraph,
+    reference: &FullPathName,
+    start: u64,
+    end: u64,
+    max_raw_bytes: u64,
+) -> ExperimentResult<Option<u64>> {
+    // The topology-only representation is materially smaller than the final
+    // weighted traversal payload. This limit is therefore deliberately
+    // conservative and only prevents clearly oversized parent allocations.
+    let node_limit = u64_to_usize((max_raw_bytes / 32).max(1))?;
+    let query = SubgraphQuery::path_interval(reference, u64_to_usize(start)?..u64_to_usize(end)?)
+        .with_context(u64_to_usize(CONSTRUCTION_CONTEXT)?)
+        .with_haplotypes(HaplotypeOutput::None)
+        .with_limit(Some(node_limit));
+    match reusable.from_gbz(graph, Some(path_index), None, &query) {
+        Ok(()) => {
+            let sequence_bytes = reusable.node_iter().try_fold(0_u64, |total, node_id| {
+                total
+                    .checked_add(usize_to_u64(reusable.sequence_len(node_id).unwrap_or(0))?)
+                    .ok_or_else(|| invalid_data("preflight sequence byte estimate overflow"))
+            })?;
+            let node_bytes = usize_to_u64(reusable.nodes())?
+                .checked_mul(64)
+                .ok_or_else(|| invalid_data("preflight node estimate overflow"))?;
+            let estimated_bytes = sequence_bytes
+                .checked_add(node_bytes)
+                .ok_or_else(|| invalid_data("preflight byte estimate overflow"))?;
+            Ok((estimated_bytes > max_raw_bytes).then_some(estimated_bytes))
+        }
+        Err(error) if error.kind() == GbzBaseErrorKind::LimitExceeded => {
+            Ok(Some(max_raw_bytes.saturating_add(1)))
+        }
+        Err(error) => Err(error.into()),
+    }
+}
+
+fn selected_reference_paths(
+    graph: &GBZ,
+    config: &FixedArchiveConfig,
+    options: &ArchiveBuildOptions,
+) -> ExperimentResult<Vec<ReferencePathSpec>> {
+    let mut references =
+        reference_paths_filtered(graph, options.sample.as_deref(), options.contig.as_deref())?
+            .into_iter()
+            .filter_map(|mut reference| {
+                reference.start = reference
+                    .start
+                    .max(options.start.unwrap_or(reference.start));
+                reference.end = reference.end.min(options.end.unwrap_or(reference.end));
+                (reference.start < reference.end).then_some(reference)
+            })
+            .collect::<Vec<_>>();
+    if let Some(max_chunks) = options.max_chunks {
+        if max_chunks == 0 {
+            return Err(invalid_input("--max-chunks must be greater than zero").into());
+        }
+        if references.len() != 1 {
+            return Err(invalid_input(
+                "--max-chunks requires filters that select exactly one reference path",
+            )
+            .into());
+        }
+        let max_span = max_chunks
+            .checked_mul(config.window_size)
+            .ok_or_else(|| invalid_data("--max-chunks coordinate span overflow"))?;
+        references[0].end = references[0]
+            .end
+            .min(references[0].start.saturating_add(max_span));
+    }
+    Ok(references)
+}
+
+#[allow(clippy::too_many_arguments, clippy::too_many_lines)]
+fn flush_pending_chunks(
+    pending: &mut Vec<PendingRawChunk>,
+    archive: &mut File,
+    manifests: &mut [ReferenceManifest],
+    bucket_entries: &mut [Vec<Vec<ArchiveEntry>>],
+    bucket_span: u64,
+    config: &FixedArchiveConfig,
+    options: &ArchiveBuildOptions,
+    build_started: Instant,
+    state: &mut DirectWriterState,
+) -> ExperimentResult<()> {
+    if pending.is_empty() {
+        return Ok(());
+    }
+    let batch = std::mem::take(pending);
+    let queued_raw_bytes = batch.iter().try_fold(0_u64, |total, chunk| {
+        total
+            .checked_add(usize_to_u64(chunk.raw.len())?)
+            .ok_or_else(|| invalid_data("queued raw byte count overflow"))
+    })?;
+    state.peak_queued_raw_bytes = state.peak_queued_raw_bytes.max(queued_raw_bytes);
+
+    let compression_started = Instant::now();
+    let compressed = if options.threads == 1 || batch.len() == 1 {
+        batch
+            .iter()
+            .map(|chunk| compress(config.codec, &chunk.raw))
+            .collect::<io::Result<Vec<_>>>()?
+    } else {
+        std::thread::scope(|scope| {
+            let handles = batch
+                .iter()
+                .map(|chunk| scope.spawn(|| compress(config.codec, &chunk.raw)))
+                .collect::<Vec<_>>();
+            handles
+                .into_iter()
+                .map(|handle| {
+                    handle
+                        .join()
+                        .map_err(|_| invalid_data("compression worker panicked"))?
+                })
+                .collect::<io::Result<Vec<_>>>()
+        })?
+    };
+    state.compression_wall_ms += compression_started.elapsed().as_secs_f64() * 1_000.0;
+    let queued_compressed_bytes = compressed.iter().try_fold(0_u64, |total, bytes| {
+        total
+            .checked_add(usize_to_u64(bytes.len())?)
+            .ok_or_else(|| invalid_data("queued compressed byte count overflow"))
+    })?;
+    state.peak_queued_compressed_bytes = state
+        .peak_queued_compressed_bytes
+        .max(queued_compressed_bytes);
+    let queued_total_bytes = queued_raw_bytes
+        .checked_add(queued_compressed_bytes)
+        .ok_or_else(|| invalid_data("total queued byte count overflow"))?;
+    state.peak_queued_total_bytes = state.peak_queued_total_bytes.max(queued_total_bytes);
+    if queued_total_bytes > options.max_queued_bytes {
+        return Err(invalid_data(format!(
+            "compression batch exceeded the {} byte queue cap",
+            options.max_queued_bytes
+        ))
+        .into());
+    }
+
+    for (chunk, compressed) in batch.into_iter().zip(compressed) {
+        let raw_len = usize_to_u64(chunk.raw.len())?;
+        let identical = find_identical_archive_chunk(
+            archive,
+            &state.chunks,
+            state.chunk_by_hash.get(&chunk.hash),
+            config.codec,
+            &chunk.raw,
+        )?;
+        if let Some(existing) = identical {
+            state.duplicate_payload_entries_observed = state
+                .duplicate_payload_entries_observed
+                .checked_add(1)
+                .ok_or_else(|| invalid_data("duplicate payload count overflow"))?;
+            state.avoidable_compressed_payload_bytes = state
+                .avoidable_compressed_payload_bytes
+                .checked_add(state.chunks[existing].compressed_len)
+                .ok_or_else(|| invalid_data("avoidable payload byte count overflow"))?;
+        }
+        let chunk_id = if config.deduplicate_chunks {
+            identical
+        } else {
+            None
+        }
+        .map_or_else(
+            || -> ExperimentResult<usize> {
+                let compressed_len = usize_to_u64(compressed.len())?;
+                state.peak_compressed_chunk_bytes =
+                    state.peak_compressed_chunk_bytes.max(compressed_len);
+                let archive_offset = archive.seek(SeekFrom::End(0))?;
+                archive.write_all(&compressed)?;
+                if state.first_payload_wall_ms.is_none() {
+                    let elapsed = build_started.elapsed().as_secs_f64() * 1_000.0;
+                    state.first_payload_wall_ms = Some(elapsed);
+                    emit_progress(
+                        options.progress,
+                        "writer_append",
+                        &format!("first payload written after {elapsed:.3} ms"),
+                    );
+                }
+                let chunk_id = state.chunks.len();
+                state.chunks.push(StoredChunk {
+                    archive_offset,
+                    compressed_len,
+                    uncompressed_len: raw_len,
+                });
+                state
+                    .chunk_by_hash
+                    .entry(chunk.hash)
+                    .or_default()
+                    .push(chunk_id);
+                Ok(chunk_id)
+            },
+            Ok,
+        )?;
+        state.accepted_chunks = state
+            .accepted_chunks
+            .checked_add(1)
+            .ok_or_else(|| invalid_data("accepted chunk count overflow"))?;
+        if options
+            .max_chunks
+            .is_some_and(|max_chunks| state.accepted_chunks > max_chunks)
+        {
+            return Err(invalid_data(
+                "adaptive splitting exceeded --max-chunks; narrow the interval or raise the guard",
+            )
+            .into());
+        }
+        let manifest = manifests
+            .get_mut(chunk.reference_id)
+            .ok_or_else(|| invalid_data("pending chunk reference is out of range"))?;
+        let bucket_index = chunk
+            .start
+            .checked_sub(manifest.grid_start)
+            .ok_or_else(|| invalid_data("chunk starts before its reference grid"))?
+            / bucket_span;
+        manifest.entry_count = manifest
+            .entry_count
+            .checked_add(1)
+            .ok_or_else(|| invalid_data("manifest entry count overflow"))?;
+        let bucket = bucket_entries
+            .get_mut(chunk.reference_id)
+            .and_then(|buckets| buckets.get_mut(u64_to_usize(bucket_index).ok()?))
+            .ok_or_else(|| invalid_data("chunk directory bucket is out of range"))?;
+        if bucket.len() >= DIRECTORY_ENTRIES_PER_PAGE {
+            return Err(invalid_data(format!(
+                "directory bucket {bucket_index} exceeds fixed page capacity {DIRECTORY_ENTRIES_PER_PAGE}",
+            ))
+            .into());
+        }
+        let stored = &state.chunks[chunk_id];
+        bucket.push(ArchiveEntry {
+            start: chunk.start,
+            end: chunk.end,
+            offset: stored.archive_offset,
+            compressed_len: stored.compressed_len,
+            uncompressed_len: stored.uncompressed_len,
+            codec: config.codec,
+        });
+        state.reference_bases_processed = state
+            .reference_bases_processed
+            .checked_add(chunk.end - chunk.start)
+            .ok_or_else(|| invalid_data("processed reference bases overflow"))?;
+    }
+    Ok(())
+}
+
 #[allow(clippy::too_many_lines)]
 pub fn build_fixed_archive(
     graph: &GBZ,
@@ -729,6 +1114,31 @@ pub fn build_fixed_archive(
     source_gbz_bytes: u64,
     output: &Path,
     config: &FixedArchiveConfig,
+) -> ExperimentResult<ArchiveBuildMetrics> {
+    build_fixed_archive_with_options(
+        graph,
+        path_index,
+        source_gbz_bytes,
+        output,
+        config,
+        &ArchiveBuildOptions::default(),
+    )
+}
+
+#[allow(clippy::too_many_lines)]
+/// Builds a filtered v4 archive through the bounded direct-write pipeline.
+///
+/// # Errors
+///
+/// Returns an error for invalid filters or limits, GBZ extraction failures,
+/// archive encoding/corruption errors, or destination I/O failures.
+pub fn build_fixed_archive_with_options(
+    graph: &GBZ,
+    path_index: &PathIndex,
+    source_gbz_bytes: u64,
+    output: &Path,
+    config: &FixedArchiveConfig,
+    options: &ArchiveBuildOptions,
 ) -> ExperimentResult<ArchiveBuildMetrics> {
     if config.window_size == 0 {
         return Err(invalid_input("window size must be greater than zero").into());
@@ -739,8 +1149,22 @@ pub fn build_fixed_archive(
     if config.max_uncompressed_chunk_bytes == 0 {
         return Err(invalid_input("maximum uncompressed chunk bytes must be nonzero").into());
     }
+    if options.threads == 0 {
+        return Err(invalid_input("thread count must be greater than zero").into());
+    }
+    if options.max_queued_bytes == 0 {
+        return Err(invalid_input("maximum queued bytes must be greater than zero").into());
+    }
+    if (options.start.is_some() || options.end.is_some()) && options.contig.is_none() {
+        return Err(invalid_input("--start/--end require a contig filter").into());
+    }
     let started = Instant::now();
-    let references = reference_paths(graph)?;
+    let manifest_started = Instant::now();
+    let references = selected_reference_paths(graph, config, options)?;
+    let reference_manifest_discovery_wall_ms = manifest_started.elapsed().as_secs_f64() * 1_000.0;
+    if references.is_empty() {
+        return Err(invalid_input("no reference paths match the requested filters").into());
+    }
     let bucket_span = config
         .window_size
         .checked_mul(DIRECTORY_BUCKET_WINDOWS)
@@ -772,30 +1196,72 @@ pub fn build_fixed_archive(
             })
         })
         .collect::<ExperimentResult<Vec<_>>>()?;
-    let mut spool = TemporaryFile::create_near(output, "payload-spool")?;
-    let mut chunks: Vec<SpooledChunk> = Vec::new();
-    let mut pending_entries: Vec<PendingEntry> = Vec::new();
-    let mut chunk_by_hash: HashMap<blake3::Hash, Vec<usize>> = HashMap::new();
-    let mut duplicate_payload_entries_observed = 0_u64;
-    let mut avoidable_compressed_payload_bytes = 0_u64;
+    let provisional_root = encode_root_index(&manifests)?;
+    let mut next_page_offset = usize_to_u64(HEADER_LEN + provisional_root.len())?;
+    for manifest in &mut manifests {
+        manifest.first_page_offset = next_page_offset;
+        next_page_offset = next_page_offset
+            .checked_add(
+                manifest
+                    .page_count
+                    .checked_mul(usize_to_u64(DIRECTORY_PAGE_BYTES)?)
+                    .ok_or_else(|| invalid_data("directory byte count overflow"))?,
+            )
+            .ok_or_else(|| invalid_data("archive data offset overflow"))?;
+    }
+    let data_offset = next_page_offset;
+    let root = encode_root_index(&manifests)?;
+    if root.len() != provisional_root.len() {
+        return Err(invalid_data("root index size changed after assigning offsets").into());
+    }
+    let mut archive_temp = TemporaryFile::create_near(output, "archive")?;
+    if options.keep_partial {
+        archive_temp.keep_on_failure();
+    }
+    archive_temp
+        .file
+        .write_all(&encode_header(usize_to_u64(root.len())?, 0, data_offset))?;
+    archive_temp.file.write_all(&root)?;
+    archive_temp.file.set_len(data_offset)?;
+    archive_temp.file.seek(SeekFrom::Start(data_offset))?;
+
+    let mut bucket_entries = manifests
+        .iter()
+        .map(|manifest| {
+            Ok(vec![
+                Vec::<ArchiveEntry>::new();
+                u64_to_usize(manifest.page_count)?
+            ])
+        })
+        .collect::<Result<Vec<_>, io::Error>>()?;
+    let mut writer = DirectWriterState::default();
+    let mut pending = Vec::<PendingRawChunk>::with_capacity(options.threads);
+    let mut pending_raw_bytes = 0_u64;
+    let mut pending_memory_bound = 0_u64;
     let mut peak_raw_chunk_bytes = 0_u64;
-    let mut peak_compressed_chunk_bytes = 0_u64;
     let mut adaptive_splits = 0_u64;
+    let mut preflight_splits = 0_u64;
+    let mut post_materialization_splits = 0_u64;
+    let mut largest_rejected_parent_bytes = 0_u64;
+    let mut preflight_selection_wall_ms = 0.0;
     let mut subgraph_selection_wall_ms = 0.0;
     let mut regional_materialization_wall_ms = 0.0;
     let mut regional_encoding_wall_ms = 0.0;
-    let mut compression_wall_ms = 0.0;
-    let mut first_payload_wall_ms = None;
-    let mut reference_bases_processed = 0_u64;
     let mut haplotype_extraction_evidence = None;
 
     for (reference_id, reference) in references.iter().enumerate() {
-        eprintln!(
-            "encoding reference {}#{} {}-{}",
-            reference.name.sample, reference.name.contig, reference.start, reference.end
+        emit_progress(
+            options.progress,
+            "preflight_selection",
+            &format!(
+                "encoding reference {}#{} {}-{}",
+                reference.name.sample, reference.name.contig, reference.start, reference.end
+            ),
         );
         let first_boundary = (reference.start / config.window_size) * config.window_size;
         let mut boundary = first_boundary;
+        let mut preflight_subgraph = Subgraph::new();
+        let mut extraction_subgraph = Subgraph::new();
         while boundary < reference.end {
             let boundary_end = boundary
                 .checked_add(config.window_size)
@@ -805,18 +1271,54 @@ pub fn build_fixed_archive(
             if start < end {
                 let mut intervals = vec![(start, end)];
                 while let Some((part_start, part_end)) = intervals.pop() {
-                    if chunks.is_empty() && pending_entries.is_empty() {
-                        eprintln!(
-                            "first chunk selection started at {}#{}:{}-{}",
-                            reference.name.sample, reference.name.contig, part_start, part_end
-                        );
-                    }
                     let query_name = FullPathName {
                         sample: reference.name.sample.clone(),
                         contig: reference.name.contig.clone(),
                         haplotype: reference.name.haplotype,
                         fragment: 0,
                     };
+                    // Probe once per directory bucket. Exact encoded-size checks
+                    // remain authoritative for every chunk, while the periodic
+                    // safety-limited topology probe catches obviously hostile
+                    // regions without doubling ordinary selection work.
+                    let base_window_index = boundary
+                        .checked_sub(first_boundary)
+                        .ok_or_else(|| invalid_data("preflight window index underflow"))?
+                        / config.window_size;
+                    let preflight_rejected = if base_window_index % DIRECTORY_BUCKET_WINDOWS == 0 {
+                        let preflight_started = Instant::now();
+                        let result = preflight_region(
+                            graph,
+                            path_index,
+                            &mut preflight_subgraph,
+                            &query_name,
+                            part_start,
+                            part_end,
+                            config.max_uncompressed_chunk_bytes,
+                        )?;
+                        preflight_selection_wall_ms +=
+                            preflight_started.elapsed().as_secs_f64() * 1_000.0;
+                        result
+                    } else {
+                        None
+                    };
+                    if let Some(estimated_bytes) = preflight_rejected {
+                        let width = part_end.saturating_sub(part_start);
+                        if width > config.min_window_size {
+                            let midpoint = part_start + width / 2;
+                            intervals.push((midpoint, part_end));
+                            intervals.push((part_start, midpoint));
+                            preflight_splits = preflight_splits
+                                .checked_add(1)
+                                .ok_or_else(|| invalid_data("preflight split count overflow"))?;
+                            adaptive_splits = adaptive_splits
+                                .checked_add(1)
+                                .ok_or_else(|| invalid_data("adaptive split count overflow"))?;
+                            largest_rejected_parent_bytes =
+                                largest_rejected_parent_bytes.max(estimated_bytes);
+                            continue;
+                        }
+                    }
                     let phase_started = Instant::now();
                     if haplotype_extraction_evidence.is_none() {
                         let evidence = compare_haplotype_outputs(
@@ -830,9 +1332,10 @@ pub fn build_fixed_archive(
                         }
                         haplotype_extraction_evidence = Some(evidence);
                     }
-                    let (regional, local_evidence) = extract_local_region(
+                    let (regional, local_evidence) = extract_local_region_with_subgraph(
                         graph,
                         path_index,
+                        &mut extraction_subgraph,
                         &query_name,
                         part_start,
                         part_end,
@@ -857,138 +1360,118 @@ pub fn build_fixed_archive(
                     )? {
                         intervals.push(right);
                         intervals.push(left);
+                        post_materialization_splits =
+                            post_materialization_splits.checked_add(1).ok_or_else(|| {
+                                invalid_data("post-materialization split count overflow")
+                            })?;
                         adaptive_splits = adaptive_splits
                             .checked_add(1)
                             .ok_or_else(|| invalid_data("adaptive split count overflow"))?;
+                        largest_rejected_parent_bytes = largest_rejected_parent_bytes.max(raw_len);
                         continue;
                     }
 
+                    let compressed_bound = match config.codec {
+                        ChunkCodec::None => raw_len,
+                        _ => usize_to_u64(zstd::zstd_safe::compress_bound(raw.len()))?,
+                    };
+                    let chunk_memory_bound = raw_len
+                        .checked_add(compressed_bound)
+                        .ok_or_else(|| invalid_data("chunk queue bound overflow"))?;
+                    if chunk_memory_bound > options.max_queued_bytes {
+                        return Err(invalid_input(format!(
+                            "accepted raw+compressed chunk bound is {chunk_memory_bound} bytes, above the {} byte queue cap",
+                            options.max_queued_bytes
+                        ))
+                        .into());
+                    }
+                    if !pending.is_empty()
+                        && (pending.len() >= options.threads
+                            || pending_memory_bound.saturating_add(chunk_memory_bound)
+                                > options.max_queued_bytes)
+                    {
+                        flush_pending_chunks(
+                            &mut pending,
+                            &mut archive_temp.file,
+                            &mut manifests,
+                            &mut bucket_entries,
+                            bucket_span,
+                            config,
+                            options,
+                            started,
+                            &mut writer,
+                        )?;
+                        pending_raw_bytes = 0;
+                        pending_memory_bound = 0;
+                    }
                     let hash = blake3::hash(&raw);
-                    let identical = find_identical_spooled_chunk(
-                        &mut spool.file,
-                        &chunks,
-                        chunk_by_hash.get(&hash),
-                        config.codec,
-                        &raw,
-                    )?;
-                    if let Some(existing) = identical {
-                        duplicate_payload_entries_observed += 1;
-                        avoidable_compressed_payload_bytes = avoidable_compressed_payload_bytes
-                            .checked_add(chunks[existing].compressed_len)
-                            .ok_or_else(|| invalid_data("avoidable payload byte count overflow"))?;
-                    }
-                    let chunk_id = if config.deduplicate_chunks {
-                        identical
-                    } else {
-                        None
-                    }
-                    .map_or_else(
-                        || -> ExperimentResult<usize> {
-                            let phase_started = Instant::now();
-                            let compressed = compress(config.codec, &raw)?;
-                            compression_wall_ms += phase_started.elapsed().as_secs_f64() * 1_000.0;
-                            let compressed_len = usize_to_u64(compressed.len())?;
-                            peak_compressed_chunk_bytes =
-                                peak_compressed_chunk_bytes.max(compressed_len);
-                            let spool_offset = spool.file.stream_position()?;
-                            spool.file.write_all(&compressed)?;
-                            if first_payload_wall_ms.is_none() {
-                                let elapsed = started.elapsed().as_secs_f64() * 1_000.0;
-                                first_payload_wall_ms = Some(elapsed);
-                                eprintln!(
-                                    "first payload written after {elapsed:.3} ms ({} raw bytes, {} compressed bytes)",
-                                    raw.len(),
-                                    compressed.len()
-                                );
-                            }
-                            let chunk_id = chunks.len();
-                            chunks.push(SpooledChunk {
-                                spool_offset,
-                                compressed_len,
-                                uncompressed_len: raw_len,
-                                archive_offset: 0,
-                            });
-                            chunk_by_hash.entry(hash).or_default().push(chunk_id);
-                            Ok(chunk_id)
-                        },
-                        Ok,
-                    )?;
-                    let bucket_index = part_start
-                        .checked_sub(manifests[reference_id].grid_start)
-                        .ok_or_else(|| {
-                        invalid_data("chunk starts before its reference grid")
-                    })? / bucket_span;
-                    manifests[reference_id].entry_count = manifests[reference_id]
-                        .entry_count
-                        .checked_add(1)
-                        .ok_or_else(|| invalid_data("manifest entry count overflow"))?;
-                    pending_entries.push(PendingEntry {
+                    pending.push(PendingRawChunk {
                         reference_id,
-                        bucket_index,
                         start: part_start,
                         end: part_end,
-                        chunk_id,
+                        raw,
+                        hash,
                     });
-                    reference_bases_processed = reference_bases_processed
-                        .checked_add(part_end - part_start)
-                        .ok_or_else(|| invalid_data("processed reference bases overflow"))?;
+                    pending_raw_bytes = pending_raw_bytes
+                        .checked_add(raw_len)
+                        .ok_or_else(|| invalid_data("pending raw byte count overflow"))?;
+                    pending_memory_bound = pending_memory_bound
+                        .checked_add(chunk_memory_bound)
+                        .ok_or_else(|| invalid_data("pending queue bound overflow"))?;
+                    if pending.len() >= options.threads {
+                        flush_pending_chunks(
+                            &mut pending,
+                            &mut archive_temp.file,
+                            &mut manifests,
+                            &mut bucket_entries,
+                            bucket_span,
+                            config,
+                            options,
+                            started,
+                            &mut writer,
+                        )?;
+                        pending_raw_bytes = 0;
+                        pending_memory_bound = 0;
+                    }
                 }
             }
             boundary = boundary_end;
         }
     }
 
-    pending_entries.sort_by(|left, right| {
-        (left.reference_id, left.bucket_index, left.start, left.end).cmp(&(
-            right.reference_id,
-            right.bucket_index,
-            right.start,
-            right.end,
-        ))
-    });
-    let provisional_root = encode_root_index(&manifests)?;
-    let mut next_page_offset = usize_to_u64(HEADER_LEN + provisional_root.len())?;
-    for manifest in &mut manifests {
-        manifest.first_page_offset = next_page_offset;
-        next_page_offset = next_page_offset
-            .checked_add(
-                manifest
-                    .page_count
-                    .checked_mul(usize_to_u64(DIRECTORY_PAGE_BYTES)?)
-                    .ok_or_else(|| invalid_data("directory byte count overflow"))?,
-            )
-            .ok_or_else(|| invalid_data("archive data offset overflow"))?;
-    }
-    let data_offset = next_page_offset;
-    for chunk in &mut chunks {
-        chunk.archive_offset = data_offset
-            .checked_add(chunk.spool_offset)
-            .ok_or_else(|| invalid_data("archive size overflow"))?;
-    }
-    let entries = archive_entries(&pending_entries, &chunks, config.codec)?;
-    let root = encode_root_index(&manifests)?;
-    if root.len() != provisional_root.len() {
-        return Err(invalid_data("root index size changed after assigning offsets").into());
-    }
-    let header = encode_header(
-        usize_to_u64(root.len())?,
-        usize_to_u64(entries.len())?,
-        data_offset,
+    flush_pending_chunks(
+        &mut pending,
+        &mut archive_temp.file,
+        &mut manifests,
+        &mut bucket_entries,
+        bucket_span,
+        config,
+        options,
+        started,
+        &mut writer,
+    )?;
+
+    let directory_entries = manifests.iter().try_fold(0_u64, |total, manifest| {
+        total
+            .checked_add(manifest.entry_count)
+            .ok_or_else(|| invalid_data("directory entry count overflow"))
+    })?;
+    emit_progress(
+        options.progress,
+        "writer_finalization",
+        "backfilling directory pages and final header",
     );
-    let mut archive_temp = TemporaryFile::create_near(output, "archive")?;
-    let mut writer = BufWriter::new(&mut archive_temp.file);
-    writer.write_all(&header)?;
-    writer.write_all(&root)?;
-    let mut cursor = 0_usize;
+    let finalization_started = Instant::now();
+    let root = encode_root_index(&manifests)?;
+    archive_temp.file.seek(SeekFrom::Start(0))?;
+    archive_temp.file.write_all(&encode_header(
+        usize_to_u64(root.len())?,
+        directory_entries,
+        data_offset,
+    ))?;
+    archive_temp.file.write_all(&root)?;
     for (reference_id, manifest) in manifests.iter().enumerate() {
         for bucket_index in 0..manifest.page_count {
-            let page_start = cursor;
-            while cursor < pending_entries.len()
-                && pending_entries[cursor].reference_id == reference_id
-                && pending_entries[cursor].bucket_index == bucket_index
-            {
-                cursor += 1;
-            }
             let bucket_start = manifest
                 .grid_start
                 .checked_add(
@@ -997,25 +1480,37 @@ pub fn build_fixed_archive(
                         .ok_or_else(|| invalid_data("directory bucket offset overflow"))?,
                 )
                 .ok_or_else(|| invalid_data("directory bucket coordinate overflow"))?;
-            let page = encode_directory_page(&entries[page_start..cursor], bucket_start)?;
-            writer.write_all(&page)?;
+            let entries = &bucket_entries[reference_id][u64_to_usize(bucket_index)?];
+            let page = encode_directory_page(entries, bucket_start)?;
+            archive_temp
+                .file
+                .seek(SeekFrom::Start(directory_page_offset(
+                    manifest,
+                    bucket_index,
+                )?))?;
+            archive_temp.file.write_all(&page)?;
         }
     }
-    if cursor != entries.len() {
-        return Err(invalid_data("directory entries were not assigned to pages").into());
-    }
-    spool.file.seek(SeekFrom::Start(0))?;
-    io::copy(&mut spool.file, &mut writer)?;
-    writer.flush()?;
-    drop(writer);
+    archive_temp.file.sync_all()?;
+    let writer_finalization_wall_ms = finalization_started.elapsed().as_secs_f64() * 1_000.0;
+    let archive_bytes = archive_temp.file.metadata()?.len();
+    emit_progress(
+        options.progress,
+        "archive_validation",
+        "validating all directory entries and physical payloads",
+    );
+    let validation_started = Instant::now();
+    validate_archive_file(&archive_temp.path)?;
+    let archive_validation_wall_ms = validation_started.elapsed().as_secs_f64() * 1_000.0;
     archive_temp.persist(output)?;
 
-    let archive_bytes = std::fs::metadata(output)?.len();
-    let mut chunk_sizes = chunks
+    let mut chunk_sizes = writer
+        .chunks
         .iter()
         .map(|chunk| chunk.compressed_len)
         .collect::<Vec<_>>();
-    let max_uncompressed_chunk_bytes = chunks
+    let max_uncompressed_chunk_bytes = writer
+        .chunks
         .iter()
         .map(|chunk| chunk.uncompressed_len)
         .max()
@@ -1023,12 +1518,8 @@ pub fn build_fixed_archive(
     chunk_sizes.sort_unstable();
     let index_bytes = data_offset;
     let root_index_bytes = usize_to_u64(HEADER_LEN + root.len())?;
-    let directory_entries = usize_to_u64(entries.len())?;
-    let physical_chunks = usize_to_u64(chunks.len())?;
+    let physical_chunks = usize_to_u64(writer.chunks.len())?;
     let directory_pages = manifests.iter().map(|manifest| manifest.page_count).sum();
-    let payload_spool_bytes = chunks
-        .last()
-        .map_or(0, |chunk| chunk.spool_offset + chunk.compressed_len);
     Ok(ArchiveBuildMetrics {
         experiment_id: config.experiment_id.clone(),
         source_gbz_bytes,
@@ -1041,26 +1532,43 @@ pub fn build_fixed_archive(
         directory_entries,
         physical_chunks,
         deduplicated_entries: directory_entries.saturating_sub(physical_chunks),
-        duplicate_payload_entries_observed,
-        avoidable_compressed_payload_bytes,
+        duplicate_payload_entries_observed: writer.duplicate_payload_entries_observed,
+        avoidable_compressed_payload_bytes: writer.avoidable_compressed_payload_bytes,
         mean_chunk_bytes: mean(&chunk_sizes),
         median_chunk_bytes: percentile_u64(&chunk_sizes, 0.5),
         p95_chunk_bytes: percentile_u64(&chunk_sizes, 0.95),
         max_chunk_bytes: chunk_sizes.last().copied().unwrap_or(0),
         max_uncompressed_chunk_bytes,
         peak_raw_chunk_bytes,
-        peak_compressed_chunk_bytes,
-        payload_spool_bytes,
+        peak_compressed_chunk_bytes: writer.peak_compressed_chunk_bytes,
+        payload_spool_bytes: 0,
         path_occurrence_index_bytes: 0,
         path_occurrence_index_wall_ms: 0.0,
+        reference_manifest_discovery_wall_ms,
         subgraph_selection_wall_ms,
+        local_haplotype_extraction_wall_ms: subgraph_selection_wall_ms,
         regional_materialization_wall_ms,
         regional_encoding_wall_ms,
-        compression_wall_ms,
+        compression_wall_ms: writer.compression_wall_ms,
+        preflight_selection_wall_ms,
+        writer_finalization_wall_ms,
+        archive_validation_wall_ms,
+        final_copy_wall_ms: 0.0,
         adaptive_splits,
-        first_payload_wall_ms: first_payload_wall_ms.unwrap_or(0.0),
-        reference_bases_processed,
-        scratch_bytes: payload_spool_bytes,
+        preflight_splits,
+        post_materialization_splits,
+        largest_rejected_parent_bytes,
+        first_payload_wall_ms: writer.first_payload_wall_ms.unwrap_or(0.0),
+        references_processed: usize_to_u64(references.len())?,
+        reference_bases_processed: writer.reference_bases_processed,
+        scratch_bytes: 0,
+        scratch_bytes_before_first_payload: 0,
+        temporary_file_bytes_before_first_payload: data_offset,
+        temporary_file_peak_bytes: archive_bytes,
+        payload_bytes: archive_bytes.saturating_sub(data_offset),
+        peak_queued_raw_bytes: writer.peak_queued_raw_bytes,
+        peak_queued_compressed_bytes: writer.peak_queued_compressed_bytes,
+        peak_queued_total_bytes: writer.peak_queued_total_bytes,
         haplotype_extraction_evidence,
         construction_wall_ms: started.elapsed().as_secs_f64() * 1_000.0,
     })
@@ -2565,29 +3073,6 @@ fn decode_header(bytes: &[u8]) -> io::Result<Header> {
     })
 }
 
-fn archive_entries(
-    pending_entries: &[PendingEntry],
-    chunks: &[SpooledChunk],
-    codec: ChunkCodec,
-) -> ExperimentResult<Vec<ArchiveEntry>> {
-    pending_entries
-        .iter()
-        .map(|entry| {
-            let chunk = chunks
-                .get(entry.chunk_id)
-                .ok_or_else(|| invalid_data("directory entry refers to an absent chunk"))?;
-            Ok(ArchiveEntry {
-                start: entry.start,
-                end: entry.end,
-                offset: chunk.archive_offset,
-                compressed_len: chunk.compressed_len,
-                uncompressed_len: chunk.uncompressed_len,
-                codec,
-            })
-        })
-        .collect()
-}
-
 fn encode_root_index(manifests: &[ReferenceManifest]) -> ExperimentResult<Vec<u8>> {
     let mut output = Vec::new();
     put_u64(&mut output, usize_to_u64(manifests.len())?);
@@ -2843,9 +3328,9 @@ fn compress(codec: ChunkCodec, bytes: &[u8]) -> io::Result<Vec<u8>> {
     }
 }
 
-fn find_identical_spooled_chunk(
-    spool: &mut File,
-    chunks: &[SpooledChunk],
+fn find_identical_archive_chunk(
+    archive: &mut File,
+    chunks: &[StoredChunk],
     candidates: Option<&Vec<usize>>,
     codec: ChunkCodec,
     raw: &[u8],
@@ -2857,16 +3342,16 @@ fn find_identical_spooled_chunk(
         let candidate = chunks
             .get(candidate_id)
             .ok_or_else(|| invalid_data("deduplication hash refers to an absent chunk"))?;
-        spool.seek(SeekFrom::Start(candidate.spool_offset))?;
+        archive.seek(SeekFrom::Start(candidate.archive_offset))?;
         let mut compressed = vec![0_u8; u64_to_usize(candidate.compressed_len)?];
-        spool.read_exact(&mut compressed)?;
+        archive.read_exact(&mut compressed)?;
         let candidate_raw = decompress(codec, &compressed, candidate.uncompressed_len)?;
         if candidate_raw == raw {
-            spool.seek(SeekFrom::End(0))?;
+            archive.seek(SeekFrom::End(0))?;
             return Ok(Some(candidate_id));
         }
     }
-    spool.seek(SeekFrom::End(0))?;
+    archive.seek(SeekFrom::End(0))?;
     Ok(None)
 }
 
@@ -2883,6 +3368,60 @@ fn decompress(codec: ChunkCodec, bytes: &[u8], expected_len: u64) -> io::Result<
         )));
     }
     Ok(result)
+}
+
+fn validate_archive_file(path: &Path) -> ExperimentResult<()> {
+    let source = FileRangeSource::open(path)?;
+    let bootstrap = load_bootstrap(&source)?;
+    let header = decode_header(&bootstrap.bytes[..HEADER_LEN])?;
+    let source_len = source.len()?;
+    let mut entry_count = 0_u64;
+    let mut decoded_payloads = BTreeSet::new();
+    for manifest in &bootstrap.root.manifests {
+        for bucket_index in 0..manifest.page_count {
+            let page_offset = directory_page_offset(manifest, bucket_index)?;
+            let page = source.read_range(page_offset, DIRECTORY_PAGE_BYTES)?;
+            let entries = decode_directory_page(&page, manifest, bucket_index)?.entries;
+            entry_count = entry_count
+                .checked_add(usize_to_u64(entries.len())?)
+                .ok_or_else(|| invalid_data("validated directory entry count overflow"))?;
+            for entry in entries {
+                let payload_end = entry
+                    .offset
+                    .checked_add(entry.compressed_len)
+                    .ok_or_else(|| invalid_data("payload range overflow during validation"))?;
+                if entry.offset < header.data_offset || payload_end > source_len {
+                    return Err(invalid_data("payload range is outside the archive").into());
+                }
+                if !decoded_payloads.insert((
+                    entry.offset,
+                    entry.compressed_len,
+                    entry.uncompressed_len,
+                    entry.codec.code(),
+                )) {
+                    continue;
+                }
+                let compressed =
+                    source.read_range(entry.offset, u64_to_usize(entry.compressed_len)?)?;
+                let raw = decompress(entry.codec, &compressed, entry.uncompressed_len)?;
+                let regional = RegionalGraph::decode(&raw)?;
+                let tile = regional
+                    .haplotype_tiles
+                    .first()
+                    .ok_or_else(|| invalid_data("validated v4 payload has no tile provenance"))?;
+                if tile.core_start != entry.start || tile.core_end != entry.end {
+                    return Err(invalid_data(
+                        "validated payload provenance differs from its directory entry",
+                    )
+                    .into());
+                }
+            }
+        }
+    }
+    if entry_count != header.entry_count {
+        return Err(invalid_data("validated directory count differs from archive header").into());
+    }
+    Ok(())
 }
 
 fn encode_canonical(graph: &CanonicalSubgraph) -> ExperimentResult<Vec<u8>> {
@@ -3237,6 +3776,26 @@ mod tests {
     }
 
     #[test]
+    fn temporary_archive_cleanup_is_default_and_retention_is_explicit() {
+        let output = simple_sds::serialize::temp_file_name("pangenome-range-cleanup");
+        let temporary_path = {
+            let temporary = TemporaryFile::create_near(&output, "archive").unwrap();
+            let path = temporary.path.clone();
+            assert!(path.is_file());
+            path
+        };
+        assert!(!temporary_path.exists());
+
+        let retained_path = {
+            let mut temporary = TemporaryFile::create_near(&output, "archive").unwrap();
+            temporary.keep_on_failure();
+            temporary.path.clone()
+        };
+        assert!(retained_path.is_file());
+        std::fs::remove_file(retained_path).unwrap();
+    }
+
+    #[test]
     fn regional_graph_round_trip() {
         let mut graph = RegionalGraph::default();
         graph.nodes.insert(1, b"AC".to_vec());
@@ -3319,6 +3878,125 @@ mod tests {
         assert_eq!(
             evidence.all.weighted_traversal_nodes,
             evidence.distinct.weighted_traversal_nodes
+        );
+    }
+
+    #[test]
+    fn mhc_direct_writer_is_byte_identical_across_thread_counts() {
+        let source = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../test-data/mhc-10.gbz");
+        if !source.is_file() {
+            eprintln!(
+                "skipping direct-writer determinism test because {} is absent",
+                source.display()
+            );
+            return;
+        }
+        let graph: GBZ = simple_sds::serialize::load_from(&source).unwrap();
+        let path_index = PathIndex::new(&graph, 1_000, false).unwrap();
+        let reference = reference_paths(&graph).unwrap().remove(0);
+        let first = simple_sds::serialize::temp_file_name("pangenome-range-direct-one");
+        let parallel = simple_sds::serialize::temp_file_name("pangenome-range-direct-parallel");
+        let config = FixedArchiveConfig {
+            experiment_id: "direct-determinism".into(),
+            window_size: 16_384,
+            codec: ChunkCodec::Zstd3,
+            deduplicate_chunks: false,
+            max_uncompressed_chunk_bytes: DEFAULT_MAX_UNCOMPRESSED_CHUNK_BYTES,
+            min_window_size: DEFAULT_MIN_WINDOW_SIZE,
+        };
+        let base_options = ArchiveBuildOptions {
+            sample: Some(reference.name.sample),
+            contig: Some(reference.name.contig),
+            max_chunks: Some(4),
+            ..ArchiveBuildOptions::default()
+        };
+        build_fixed_archive_with_options(
+            &graph,
+            &path_index,
+            std::fs::metadata(&source).unwrap().len(),
+            &first,
+            &config,
+            &base_options,
+        )
+        .unwrap();
+        build_fixed_archive_with_options(
+            &graph,
+            &path_index,
+            std::fs::metadata(&source).unwrap().len(),
+            &parallel,
+            &config,
+            &ArchiveBuildOptions {
+                threads: 4,
+                ..base_options
+            },
+        )
+        .unwrap();
+        assert_eq!(
+            std::fs::read(&first).unwrap(),
+            std::fs::read(&parallel).unwrap()
+        );
+        std::fs::remove_file(first).unwrap();
+        std::fs::remove_file(parallel).unwrap();
+    }
+
+    #[test]
+    fn mhc_sliding_subgraph_experiment_preserves_local_extraction() {
+        let source = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../test-data/mhc-10.gbz");
+        if !source.is_file() {
+            eprintln!(
+                "skipping sliding Subgraph experiment because {} is absent",
+                source.display()
+            );
+            return;
+        }
+        let graph: GBZ = simple_sds::serialize::load_from(&source).unwrap();
+        let path_index = PathIndex::new(&graph, 1_000, false).unwrap();
+        let reference = reference_paths(&graph).unwrap().remove(0);
+        let intervals = (0..32_u64)
+            .filter_map(|index| {
+                let start = reference.start + index * 16_384;
+                let end = (start + 16_384).min(reference.end);
+                (start < end).then_some((start, end))
+            })
+            .collect::<Vec<_>>();
+        let query_name = FullPathName {
+            sample: reference.name.sample,
+            contig: reference.name.contig,
+            haplotype: reference.name.haplotype,
+            fragment: 0,
+        };
+        let extract = |subgraph: &mut Subgraph, start, end| {
+            let query = SubgraphQuery::path_interval(
+                &query_name,
+                usize::try_from(start).unwrap()..usize::try_from(end).unwrap(),
+            )
+            .with_context(usize::try_from(CONSTRUCTION_CONTEXT).unwrap())
+            .with_haplotypes(HaplotypeOutput::Distinct);
+            subgraph
+                .from_gbz(&graph, Some(&path_index), None, &query)
+                .unwrap();
+            let mut json = Vec::new();
+            subgraph.write_json(&mut json, false).unwrap();
+            blake3::hash(&json)
+        };
+        let fresh_started = Instant::now();
+        let fresh = intervals
+            .iter()
+            .map(|&(start, end)| extract(&mut Subgraph::new(), start, end))
+            .collect::<Vec<_>>();
+        let fresh_ms = fresh_started.elapsed().as_secs_f64() * 1_000.0;
+        let reused_started = Instant::now();
+        let mut reused_subgraph = Subgraph::new();
+        let reused = intervals
+            .iter()
+            .map(|&(start, end)| extract(&mut reused_subgraph, start, end))
+            .collect::<Vec<_>>();
+        let reused_ms = reused_started.elapsed().as_secs_f64() * 1_000.0;
+        assert_eq!(fresh, reused);
+        eprintln!(
+            "sliding Subgraph experiment: chunks={} fresh_ms={fresh_ms:.3} reused_ms={reused_ms:.3} speedup={:.3}",
+            intervals.len(),
+            fresh_ms / reused_ms
         );
     }
 

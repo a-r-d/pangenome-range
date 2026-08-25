@@ -1387,7 +1387,7 @@ fn write_report(
     writeln!(output, "\n## Encoder construction\n")?;
     writeln!(
         output,
-        "The v4 encoder completed in {:.3} ms while retaining only chunk metadata plus one regional raw/compressed payload at a time. The first payload was written after {:.3} ms. It wrote a {}-byte payload spool and exactly {} occurrence-index bytes. Peak raw/compressed payload buffers were {} / {} bytes; {} adaptive splits were required.\n",
+        "The v4 direct writer completed in {:.3} ms with bounded directory metadata and raw/compressed queues. The first payload was written after {:.3} ms. It wrote a {}-byte payload spool and exactly {} occurrence-index bytes. Peak raw/compressed payload buffers were {} / {} bytes; {} adaptive splits were required.\n",
         selected_run.build.construction_wall_ms,
         selected_run.build.first_payload_wall_ms,
         selected_run.build.payload_spool_bytes,
@@ -1398,12 +1398,17 @@ fn write_report(
     )?;
     writeln!(
         output,
-        "| Phase | Wall time |\n|---|---:|\n| occurrence index (removed) | {:.3} ms |\n| upstream regional selection | {:.3} ms |\n| regional materialization | {:.3} ms |\n| packed binary encoding | {:.3} ms |\n| compression | {:.3} ms |\n",
+        "| Phase | Wall time |\n|---|---:|\n| occurrence index (removed) | {:.3} ms |\n| reference manifest discovery | {:.3} ms |\n| topology preflight | {:.3} ms |\n| local haplotype extraction | {:.3} ms |\n| regional materialization | {:.3} ms |\n| packed binary encoding | {:.3} ms |\n| compression | {:.3} ms |\n| writer finalization | {:.3} ms |\n| archive validation | {:.3} ms |\n| final copy (removed) | {:.3} ms |\n",
         selected_run.build.path_occurrence_index_wall_ms,
-        selected_run.build.subgraph_selection_wall_ms,
+        selected_run.build.reference_manifest_discovery_wall_ms,
+        selected_run.build.preflight_selection_wall_ms,
+        selected_run.build.local_haplotype_extraction_wall_ms,
         selected_run.build.regional_materialization_wall_ms,
         selected_run.build.regional_encoding_wall_ms,
         selected_run.build.compression_wall_ms,
+        selected_run.build.writer_finalization_wall_ms,
+        selected_run.build.archive_validation_wall_ms,
+        selected_run.build.final_copy_wall_ms,
     )?;
     if let Some(evidence) = &selected_run.build.haplotype_extraction_evidence {
         writeln!(
@@ -1716,7 +1721,7 @@ fn write_report(
             ExperimentMode::FullSweep =>
                 "Run the same retained matrix on one HPRC chromosome, adding a GBZ-record-preserving representation beside this locally materialized encoding. That scale will reveal whether path metadata/halo duplication or decompressed regional materialization is the dominant expansion source, and it enables the required 100 kb, 1 Mb, and 10,000-query workloads.",
             ExperimentMode::SingleConfigSmoke =>
-                "Implement the TypeScript HTTP-range reader and rerun the 1 kb and 10 kb workloads in a real browser with explicit cold and warm cache phases. In parallel, generate the GB-scale fixture and use the retained encoder phase/RSS/disk metrics to validate linear scaling before attempting another full layout matrix.",
+                "Prototype lazy or memory-mapped GBZ source access and repeat the bounded HPRC chr6 pilot. Direct writing is now bounded, while full source deserialization and path-index construction dominate time to first payload and process RSS.",
         }
     )?;
     output.flush()?;

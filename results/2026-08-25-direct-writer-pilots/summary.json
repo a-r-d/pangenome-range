@@ -1,0 +1,61 @@
+{
+  "schema_version": 1,
+  "base_commit": "9cd4b4ef8dad8cc3ebfc292b72f86cc16300c458",
+  "rustc": "1.97.1 (8bab26f4f 2026-07-14)",
+  "host": "Linux apollo 6.17.0-41-generic x86_64",
+  "cpu": "Intel Core i7-10700, 8 cores, 16 threads",
+  "mhc": {
+    "source_bytes": 4511832,
+    "threads_1": {
+      "construction_wall_ms": 1754.494341,
+      "first_payload_wall_ms": 11.221607,
+      "compression_wall_ms": 54.148615,
+      "archive_bytes": 3194336,
+      "index_bytes": 41133,
+      "payload_bytes": 3153203,
+      "payload_spool_bytes": 0,
+      "scratch_bytes": 0,
+      "peak_queued_raw_bytes": 565982,
+      "peak_queued_compressed_bytes": 51526,
+      "peak_queued_total_bytes": 617508,
+      "sha256": "119f8e15a0681bd4418ba0eba71c590ca2b6dfc79c1625243bde05fa1358d89a"
+    },
+    "threads_4": {
+      "construction_wall_ms": 1808.040607,
+      "first_payload_wall_ms": 14.685710,
+      "compression_wall_ms": 26.520670,
+      "archive_bytes": 3194336,
+      "index_bytes": 41133,
+      "payload_bytes": 3153203,
+      "payload_spool_bytes": 0,
+      "scratch_bytes": 0,
+      "peak_queued_raw_bytes": 1579650,
+      "peak_queued_compressed_bytes": 157258,
+      "peak_queued_total_bytes": 1736908,
+      "sha256": "119f8e15a0681bd4418ba0eba71c590ca2b6dfc79c1625243bde05fa1358d89a"
+    }
+  },
+  "hprc_chr6_two_chunks": {
+    "source_bytes": 5492627216,
+    "source_sha256": "11d6047f79575ffb83757462484bad134ed20928bd2c8171ec52e35a54976e2b",
+    "source_checksum_wall_ms": 20824.260155,
+    "source_load_wall_ms": 15304.073941,
+    "path_index_wall_ms": 15533.393079,
+    "reference_manifest_discovery_wall_ms": 444.869173,
+    "first_payload_wall_ms": 445.932171,
+    "encode_start_to_first_payload_ms": 52107.790991,
+    "construction_wall_ms": 446.212033,
+    "process_peak_rss_kib": 8775512,
+    "archive_bytes": 4644,
+    "index_bytes": 4266,
+    "payload_bytes": 378,
+    "path_occurrence_index_bytes": 0,
+    "payload_spool_bytes": 0,
+    "scratch_bytes": 0,
+    "temporary_file_bytes_before_first_payload": 4266,
+    "peak_queued_raw_bytes": 19282,
+    "peak_queued_compressed_bytes": 194,
+    "peak_queued_total_bytes": 19476,
+    "sha256": "69703d39204afcf3856b2151b0a948d1a4e6ff81d82514bc4256219b450a1887"
+  }
+}

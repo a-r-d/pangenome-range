@@ -83,9 +83,9 @@ cargo run --release -p pangenome-range-cli -- \
 ```
 
 It builds exactly one archive with the v4 16 KiB/zstd-3 configuration. The
-archive and bounded payload spool are placed below the
-supplied work root, while only `config.json`, `summary.json`, and `REPORT.md` are
-retained under `results/<run-id>`. This mode deliberately skips GBZ-base and the
+direct-written archive is placed below the supplied work root; there is no
+payload spool. Only `config.json`, `summary.json`, and `REPORT.md` are retained
+under `results/<run-id>`. This mode deliberately skips GBZ-base and the
 20-layout sweep. After encoding, it checks deterministic 1 kb, 10 kb, 100 kb,
 and 1 Mb queries against the loaded source graph.
 The upstream `gbz` crate still deserializes the source in full; encoder-only
@@ -95,6 +95,22 @@ The first HPRC whole-genome attempt exposed an unacceptable global occurrence
 index. Archive v4 removed it; encoder-scale metrics must report zero occurrence
 bytes/time and a nonzero time to first payload before another whole-genome run.
 See the [optimization log](OPTIMIZATION_LOG.md) before repeating that run.
+
+For cheap construction-only pilots, use the public encoder directly:
+
+```bash
+cargo run --release -p pangenome-range-cli -- encode INPUT.gbz OUTPUT.pngr \
+  --sample GRCh38 --contig chr6 --max-chunks 2 \
+  --threads 1 --progress json --report build-report.json
+```
+
+The report separates source checksum, source load, reference path index, manifest discovery,
+topology preflight, local haplotype extraction, materialization, binary encode,
+compression, finalization, validation, and the removed copy/occurrence phases.
+It also retains input/output SHA-256, time to first payload, archive/index/payload
+bytes, queue peaks, scratch/temp bytes, throughput, and process RSS. A filtered
+pilot still pays the current full GBZ deserialization and `PathIndex` costs, but
+reference-length discovery is restricted before walking reference paths.
 
 The full comparative matrix remains:
 
