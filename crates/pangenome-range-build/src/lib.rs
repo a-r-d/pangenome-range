@@ -7,6 +7,12 @@ use pangenome_range_format::RangeSource;
 use std::io;
 use std::path::Path;
 
+mod experiment;
+mod fixed;
+
+pub use experiment::{ExperimentMode, ExperimentOptions, run_fixed_window_experiment};
+pub use fixed::{ChunkCodec, FixedArchiveConfig, QuerySpec, internal_gbz_base_query};
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct BuildReport {
     pub experiment: String,

@@ -34,7 +34,8 @@ and negative/absent-coordinate cases.
 - **Mergeable read:** a nonempty request overlapping or adjacent to another
   request after sorting by offset.
 - **Request dependency depth:** serial read rounds required by lookup logic. This
-  is distinct from request count and is not yet captured automatically.
+  is distinct from request count. Candidate experiments explicitly model the
+  bootstrap/index dependency groups followed by the data group.
 
 Always retain the raw range list; aggregates alone cannot reveal scatter or a
 serial index walk.
@@ -66,3 +67,26 @@ At minimum compare source GBZ full load/query, GBZ-base on local SSD, and every
 candidate over local positioned reads. When HTTP support exists, serve immutable
 objects from a range-capable origin and distinguish cold CDN, warm CDN, browser
 cache, and origin responses.
+
+## Experiment modes
+
+The full comparative matrix remains:
+
+```bash
+cargo run --release -p pangenome-range-cli -- \
+  benchmark-fixed-windows <graph.gbz> <run-id> [random-queries-per-size]
+```
+
+Before paying for all 20 window/compression builds on a new input, run the
+previously selected 256 KiB, zstd-6, exact-deduplication configuration alone:
+
+```bash
+cargo run --release -p pangenome-range-cli -- \
+  benchmark-fixed-window-smoke <graph.gbz> <run-id> [random-queries-per-size]
+```
+
+Smoke mode defaults to 10 deterministic random queries for each available size.
+It still builds GBZ and GBZ-base baselines, exercises every coalescing threshold,
+and requires canonical correctness for every candidate query. Because it runs
+only one candidate, it cannot establish a new Pareto winner or measure the
+incremental benefit of deduplication.

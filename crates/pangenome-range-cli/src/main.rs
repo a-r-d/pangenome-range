@@ -1,9 +1,14 @@
 use gbz::GBZ;
+use pangenome_range_build::{
+    ExperimentMode, ExperimentOptions, internal_gbz_base_query, run_fixed_window_experiment,
+};
 use pangenome_range_format::{FileRangeSource, NetworkProfile, RangeSource, TracingRangeSource};
 use simple_sds::serialize;
 use std::collections::BTreeSet;
 use std::error::Error;
-use std::path::Path;
+use std::path::{Path, PathBuf};
+
+type AppResult<T> = Result<T, Box<dyn Error + Send + Sync>>;
 
 fn main() {
     if let Err(error) = run(std::env::args().skip(1)) {
@@ -12,7 +17,7 @@ fn main() {
     }
 }
 
-fn run(mut args: impl Iterator<Item = String>) -> Result<(), Box<dyn Error>> {
+fn run(mut args: impl Iterator<Item = String>) -> AppResult<()> {
     let Some(command) = args.next() else {
         print_help();
         return Ok(());
@@ -27,6 +32,11 @@ fn run(mut args: impl Iterator<Item = String>) -> Result<(), Box<dyn Error>> {
             let path = one_path_argument(&mut args, "benchmark-source")?;
             benchmark_source(&path)
         }
+        "benchmark-fixed-windows" => benchmark_fixed_windows(&mut args, ExperimentMode::FullSweep),
+        "benchmark-fixed-window-smoke" => {
+            benchmark_fixed_windows(&mut args, ExperimentMode::SingleConfigSmoke)
+        }
+        "internal-gbz-base-query" => run_internal_gbz_base_query(&mut args),
         "help" | "--help" | "-h" => {
             print_help();
             Ok(())
@@ -39,10 +49,7 @@ fn run(mut args: impl Iterator<Item = String>) -> Result<(), Box<dyn Error>> {
     }
 }
 
-fn one_path_argument(
-    args: &mut impl Iterator<Item = String>,
-    command: &str,
-) -> Result<String, Box<dyn Error>> {
+fn one_path_argument(args: &mut impl Iterator<Item = String>, command: &str) -> AppResult<String> {
     let path = args
         .next()
         .ok_or_else(|| format!("usage: pangenome-range {command} <file>"))?;
@@ -52,7 +59,7 @@ fn one_path_argument(
     Ok(path)
 }
 
-fn inspect_gbz(path: impl AsRef<Path>) -> Result<(), Box<dyn Error>> {
+fn inspect_gbz(path: impl AsRef<Path>) -> AppResult<()> {
     let path = path.as_ref();
     if !GBZ::is_gbz(path) {
         return Err(format!("{} is not recognized as a GBZ file", path.display()).into());
@@ -137,7 +144,7 @@ fn print_named_list(label: &str, values: &[String], limit: usize) {
     }
 }
 
-fn benchmark_source(path: impl AsRef<Path>) -> Result<(), Box<dyn Error>> {
+fn benchmark_source(path: impl AsRef<Path>) -> AppResult<()> {
     let path = path.as_ref();
     let source = TracingRangeSource::new(FileRangeSource::open(path)?);
     let len = source.len()?;
@@ -187,7 +194,7 @@ fn benchmark_source(path: impl AsRef<Path>) -> Result<(), Box<dyn Error>> {
     Ok(())
 }
 
-fn read_probe(source: &impl RangeSource, offset: u64, length: u64) -> Result<(), Box<dyn Error>> {
+fn read_probe(source: &impl RangeSource, offset: u64, length: u64) -> AppResult<()> {
     let length = usize::try_from(length)?;
     let _bytes = source.read_range(offset, length)?;
     Ok(())
@@ -199,6 +206,67 @@ fn print_help() {
     println!("Usage:");
     println!("  pangenome-range inspect <graph.gbz>");
     println!("  pangenome-range benchmark-source <file>");
+    println!(
+        "  pangenome-range benchmark-fixed-windows <graph.gbz> <run-id> [random-queries-per-size]"
+    );
+    println!(
+        "  pangenome-range benchmark-fixed-window-smoke <graph.gbz> <run-id> [random-queries-per-size]"
+    );
     println!();
     println!("Reserved experiment commands: build, query, benchmark, verify");
+}
+
+fn benchmark_fixed_windows(
+    args: &mut impl Iterator<Item = String>,
+    mode: ExperimentMode,
+) -> AppResult<()> {
+    let command = match mode {
+        ExperimentMode::FullSweep => "benchmark-fixed-windows",
+        ExperimentMode::SingleConfigSmoke => "benchmark-fixed-window-smoke",
+    };
+    let usage =
+        format!("usage: pangenome-range {command} <graph.gbz> <run-id> [random-queries-per-size]");
+    let input = PathBuf::from(args.next().ok_or_else(|| usage.clone())?);
+    let run_id = args.next().ok_or_else(|| usage.clone())?;
+    if !run_id
+        .chars()
+        .all(|character| character.is_ascii_alphanumeric() || matches!(character, '-' | '_' | '.'))
+    {
+        return Err("run ID may contain only ASCII letters, digits, '-', '_', and '.'".into());
+    }
+    let random_queries_per_size = args
+        .next()
+        .map(|value| value.parse::<usize>())
+        .transpose()?
+        .unwrap_or(match mode {
+            ExperimentMode::FullSweep => 100,
+            ExperimentMode::SingleConfigSmoke => 10,
+        });
+    if let Some(extra) = args.next() {
+        return Err(format!("unexpected argument '{extra}'").into());
+    }
+    let options = ExperimentOptions {
+        input,
+        results_dir: PathBuf::from("results").join(&run_id),
+        scratch_dir: PathBuf::from("target/experiment-scratch").join(&run_id),
+        run_id,
+        random_queries_per_size,
+        mode,
+    };
+    run_fixed_window_experiment(&options)?;
+    println!("results: {}", options.results_dir.display());
+    Ok(())
+}
+
+fn run_internal_gbz_base_query(args: &mut impl Iterator<Item = String>) -> AppResult<()> {
+    let database = PathBuf::from(args.next().ok_or("missing database path")?);
+    let sample = args.next().ok_or("missing reference sample")?;
+    let contig = args.next().ok_or("missing reference contig")?;
+    let start = args.next().ok_or("missing start")?.parse()?;
+    let end = args.next().ok_or("missing end")?.parse()?;
+    let context = args.next().ok_or("missing context")?.parse()?;
+    if let Some(extra) = args.next() {
+        return Err(format!("unexpected argument '{extra}'").into());
+    }
+    internal_gbz_base_query(&database, &sample, &contig, start, end, context)
 }

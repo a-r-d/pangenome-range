@@ -57,11 +57,63 @@ impl NetworkProfile {
     #[must_use]
     #[allow(clippy::cast_precision_loss)] // Millisecond simulation intentionally uses f64.
     pub fn estimate(&self, trace: &TraceSummary) -> NetworkCost {
+        self.estimate_plan(
+            trace.read_operations,
+            u64::from(trace.read_operations > 0),
+            trace.total_bytes_requested,
+        )
+    }
+
+    /// Estimates latency for a read plan with explicit sequential dependencies.
+    ///
+    /// The request-wave count is bounded by both request parallelism and the
+    /// number of dependency rounds. Reads within a dependency round are assumed
+    /// to be issued in parallel.
+    #[must_use]
+    #[allow(clippy::cast_precision_loss)] // Millisecond simulation intentionally uses f64.
+    pub fn estimate_plan(
+        &self,
+        read_operations: u64,
+        dependency_rounds: u64,
+        total_bytes: u64,
+    ) -> NetworkCost {
         let parallel = u64::from(self.max_parallel_requests.max(1));
-        let rounds = trace.read_operations.div_ceil(parallel);
+        let parallel_rounds = read_operations.div_ceil(parallel);
+        let rounds = dependency_rounds.max(parallel_rounds);
         let request_latency_ms = rounds as f64 * (self.rtt_ms + self.per_request_overhead_ms);
         let transfer_ms = if self.bandwidth_mbps > 0.0 {
-            trace.total_bytes_requested as f64 * 8.0 / (self.bandwidth_mbps * 1_000.0)
+            total_bytes as f64 * 8.0 / (self.bandwidth_mbps * 1_000.0)
+        } else {
+            f64::INFINITY
+        };
+        NetworkCost {
+            request_rounds: rounds,
+            request_latency_ms,
+            transfer_ms,
+            estimated_total_ms: request_latency_ms + transfer_ms,
+        }
+    }
+
+    /// Estimates latency from the number of reads in each dependency group.
+    ///
+    /// Groups execute sequentially, while reads within each group may use all
+    /// available parallel request slots. This avoids the optimistic rounding
+    /// that an aggregate read count can introduce for uneven groups.
+    #[must_use]
+    #[allow(clippy::cast_precision_loss)] // Millisecond simulation intentionally uses f64.
+    pub fn estimate_dependency_groups(
+        &self,
+        reads_per_group: &[u64],
+        total_bytes: u64,
+    ) -> NetworkCost {
+        let parallel = u64::from(self.max_parallel_requests.max(1));
+        let rounds = reads_per_group
+            .iter()
+            .map(|reads| reads.div_ceil(parallel))
+            .sum::<u64>();
+        let request_latency_ms = rounds as f64 * (self.rtt_ms + self.per_request_overhead_ms);
+        let transfer_ms = if self.bandwidth_mbps > 0.0 {
+            total_bytes as f64 * 8.0 / (self.bandwidth_mbps * 1_000.0)
         } else {
             f64::INFINITY
         };
@@ -105,5 +157,32 @@ mod tests {
         assert!((cost.request_latency_ms - 33.0).abs() < f64::EPSILON);
         assert!((cost.transfer_ms - 80.0).abs() < f64::EPSILON);
         assert!((cost.estimated_total_ms - 113.0).abs() < f64::EPSILON);
+    }
+
+    #[test]
+    fn dependency_rounds_bound_parallelism() {
+        let profile = NetworkProfile {
+            name: "test",
+            rtt_ms: 10.0,
+            bandwidth_mbps: 100.0,
+            max_parallel_requests: 6,
+            per_request_overhead_ms: 1.0,
+        };
+        let cost = profile.estimate_plan(4, 4, 0);
+        assert_eq!(cost.request_rounds, 4);
+        assert!((cost.estimated_total_ms - 44.0).abs() < f64::EPSILON);
+    }
+
+    #[test]
+    fn empty_trace_has_no_request_wave() {
+        let cost = NetworkProfile::GOOD_CDN.estimate(&TraceSummary::default());
+        assert_eq!(cost.request_rounds, 0);
+        assert!(cost.estimated_total_ms.abs() < f64::EPSILON);
+    }
+
+    #[test]
+    fn uneven_dependency_groups_round_independently() {
+        let cost = NetworkProfile::GOOD_CDN.estimate_dependency_groups(&[7, 1], 0);
+        assert_eq!(cost.request_rounds, 3);
     }
 }

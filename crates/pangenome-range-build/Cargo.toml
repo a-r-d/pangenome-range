@@ -8,7 +8,16 @@ rust-version.workspace = true
 description = "Experimental candidate-layout builders for pangenome-range"
 
 [dependencies]
+blake3.workspace = true
+gbz.workspace = true
+gbz-base.workspace = true
 pangenome-range-format = { path = "../pangenome-range-format" }
+pangenome-range-query = { path = "../pangenome-range-query" }
+serde.workspace = true
+serde_json.workspace = true
+sha2.workspace = true
+simple-sds.workspace = true
+zstd.workspace = true
 
 [lints]
 workspace = true

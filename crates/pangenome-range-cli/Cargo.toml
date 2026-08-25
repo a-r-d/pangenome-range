@@ -9,6 +9,7 @@ description = "Research CLI for pangenome-range"
 
 [dependencies]
 gbz.workspace = true
+pangenome-range-build = { path = "../pangenome-range-build" }
 pangenome-range-format = { path = "../pangenome-range-format" }
 pangenome-range-query = { path = "../pangenome-range-query" }
 simple-sds.workspace = true

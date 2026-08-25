@@ -10,6 +10,7 @@ dependency pins unless explicitly listed in `Cargo.lock`.
 | GBWTGraph | <https://github.com/jltsiren/gbwtgraph> | `e27bc439cf110ac8cca89fcecacda993d2c9df70` | MIT | GBZ v3 / GBWTGraph v4 serialization reference |
 | GBWT | <https://github.com/jltsiren/gbwt> | `c2e0199694fe41ec46c61c201c6ae0cd7dd08783` | MIT | Compressed haplotype index implementation/serialization |
 | vg | <https://github.com/vgteam/vg> | `ac5822f8d22a80df02f7c101aa90914d1bce0cfd` | MIT (repository; contrib/submodules vary) | Producer/tooling and fixture provenance |
+| vg Snakemake | <https://github.com/vgteam/vg_snakemake> | `d938c2035fa5ce16acd69147743762b513292173` | GPL-3.0 | Medium MHC Minigraph-Cactus GBZ fixture and construction provenance |
 | HPRC resources | <https://github.com/human-pangenomics/hpp_pangenome_resources> | `cd99ffb2fbddd2d5bd91f4483065a44bfe83b287` | No repository license found; HPRC Data Use Protocol applies | Current v2.1 object list and data caveats |
 | PMTiles | <https://github.com/protomaps/PMTiles> | `182d5b3cfdc2f5a6adbc54630c612da2f6086bdd` | Spec CC0; reference implementations BSD-3-Clause | Range-oriented single-object directory analogy |
 | COG spec | <https://github.com/cogeotiff/cog-spec> | `203241975d054e5c933493f65bc4810e93d0048a` | CC BY 4.0 | Ordered metadata/overview/block analogy |
@@ -20,8 +21,12 @@ Direct dependencies are constrained in the workspace manifest and exactly
 resolved by `Cargo.lock`:
 
 - `gbz = 0.7.0`
+- `gbz-base = 0.6.1`
 - `simple-sds = 0.4.2`
 - `blake3 = 1.8.7` (resolved from the compatible `1.8.2` requirement)
+- `serde = 1.0.229` and `serde_json = 1.0.151`
+- `sha2 = 0.10.9`
+- `zstd = 0.13.3`
 
 GBZ 0.7.0 itself uses `simple-sds` 0.4.2 and `zstd` 0.13.3 in this lockfile.
 
@@ -37,6 +42,16 @@ Before distributing that binary or derived datasets, re-check the upstream
 license/provenance and applicable HPRC Data Use Protocol. HPRC v2.1 resources in
 particular are currently described upstream as not fully QC'd, unpublished, and
 potentially containing known issues.
+
+`mhc-10.gbz` is fetched from the pinned vg Snakemake commit above. Its upstream
+README says it was built with Minigraph-Cactus from 10 haplotypes selected from
+Heng Li's MHC-61 dataset, Zenodo DOI
+<https://doi.org/10.5281/zenodo.6617246>. The fetch script verifies a size of
+4,511,832 bytes and SHA-256
+`a0b44236852d5659202a6855308020df05efd7c2be90645d341d94fb775df685`.
+This small medium-scale fixture is intentionally committed for hermetic research
+tests. Re-check the source record's license and HPRC data-use terms before
+redistributing it or derived archives outside this repository.
 
 ## Literature
 

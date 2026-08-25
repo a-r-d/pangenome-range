@@ -1,0 +1,81 @@
+{
+  "bootstrap_prefix_bytes": 16384,
+  "benchmark_command": "cargo run --release -p pangenome-range-cli -- benchmark-fixed-windows test-data/micb-kir3dl1.gbz 2026-08-25-fixed-window-c0-final 100",
+  "cargo_lock_sha256": "be3e3a8161d6ec1d1e728292a8cd8835012bd70a7ae4704599d9f31b6b4eebed",
+  "coalescing_gaps": [
+    0,
+    4096,
+    16384,
+    65536,
+    262144,
+    1048576
+  ],
+  "compressions": [
+    "none",
+    "zstd1",
+    "zstd3",
+    "zstd6"
+  ],
+  "construction_boundary_strategy": "duplicate with 100 bp graph context halo",
+  "context": 100,
+  "fixed_rng_seed": 5782989464532832077,
+  "execution_environment": {
+    "architecture": "x86_64",
+    "cache_state": "uncontrolled; interpret local timings as warm/mixed, not cold-cache claims",
+    "cpu": "Intel Core i7-10700, 8 cores / 16 threads",
+    "filesystem": "XFS",
+    "kernel": "Linux 6.17.0-41-generic",
+    "os": "linux",
+    "storage": "Samsung SSD 970 EVO Plus 2TB NVMe",
+    "storage_api": "local positioned FileRangeSource reads"
+  },
+  "improvement_policy": "after the baseline sweep, apply exact content-addressed chunk deduplication to the latency-first Pareto point that contains measured repeated payloads",
+  "input": "test-data/micb-kir3dl1.gbz",
+  "local_timing_scope": "storage lookup, decompression/decode, and subgraph reconstruction; correctness serialization/hash/comparison instrumentation excluded",
+  "network_profiles": [
+    {
+      "bandwidth_mbps": 300,
+      "label": "A",
+      "max_parallel_requests": 6,
+      "per_request_overhead_ms": 0.5,
+      "rtt_ms": 20
+    },
+    {
+      "bandwidth_mbps": 100,
+      "label": "B",
+      "max_parallel_requests": 6,
+      "per_request_overhead_ms": 1.0,
+      "rtt_ms": 50
+    },
+    {
+      "bandwidth_mbps": 30,
+      "label": "C",
+      "max_parallel_requests": 4,
+      "per_request_overhead_ms": 2.0,
+      "rtt_ms": 100
+    }
+  ],
+  "physical_order": "source reference-path order, then coordinate within each path",
+  "project": "pangenome-range",
+  "random_queries_per_available_size": 100,
+  "repository_base_commit": "5bb73a753d3191d3be707d656c180bdfdbfe0b43",
+  "repository_state": "benchmark implementation was an uncommitted worktree change; retained source files and Cargo.lock accompany this result",
+  "requested_query_sizes": [
+    1000,
+    10000,
+    100000,
+    1000000
+  ],
+  "run_id": "2026-08-25-fixed-window-c0-final",
+  "schema_version": 1,
+  "source_gbz_bytes": 73920,
+  "source_url": "https://raw.githubusercontent.com/jltsiren/gbz-base/a5ed1ff3ddc402e230d1187afa438e05c8b3654e/test-data/micb-kir3dl1.gbz",
+  "source_sha256": "1d574ede7533150eb87f6837a7763d4eac120aa03f34877392ecdd53b0410788",
+  "window_sizes": [
+    16384,
+    65536,
+    262144,
+    1048576,
+    4194304
+  ]
+}

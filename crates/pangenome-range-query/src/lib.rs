@@ -61,7 +61,6 @@ impl CanonicalSubgraph {
     pub fn normalized(&self) -> Self {
         let mut normalized = self.clone();
         normalized.paths.sort();
-        normalized.paths.dedup();
         normalized
     }
 
@@ -166,6 +165,17 @@ mod tests {
         left.paths.push(path("sample"));
         let mut right = left.clone();
         right.paths[0].traversal[0].reverse = true;
+
+        assert!(!left.equivalent_to(&right));
+        assert_ne!(left.canonical_hash(), right.canonical_hash());
+    }
+
+    #[test]
+    fn duplicate_path_multiplicity_is_semantically_significant() {
+        let mut left = CanonicalSubgraph::default();
+        left.paths.push(path("sample"));
+        let mut right = left.clone();
+        right.paths.push(path("sample"));
 
         assert!(!left.equivalent_to(&right));
         assert_ne!(left.canonical_hash(), right.canonical_hash());
