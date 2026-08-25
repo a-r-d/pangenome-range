@@ -1,0 +1,111 @@
+packages/browser/src/reader/types.ts
+  s_e18f25a7dcf767::t_ec65f39dfe4c2e 1-93
+docs/.vitepress/theme/index.ts
+  s_e18f25a7dcf767::t_ec65f39dfe4c2e 1-3
+docs/package.json
+  s_e18f25a7dcf767::t_ec65f39dfe4c2e 1-19
+packages/browser/package.json
+  s_e18f25a7dcf767::t_ec65f39dfe4c2e 1-40
+docs/DISTRIBUTION.md
+  s_e18f25a7dcf767::t_ec65f39dfe4c2e 1-38
+docs/demo.md
+  s_e18f25a7dcf767::t_ec65f39dfe4c2e 1-15
+docs/OPTIMIZATION_LOG.md
+  s_e18f25a7dcf767::t_0162b4a04cbdbf 45
+packages/browser/test/reader.test.ts
+  s_e18f25a7dcf767::t_dae8c5e6a9c10b 34-41
+  s_e18f25a7dcf767::t_ec65f39dfe4c2e 1-33,42-43
+packages/browser/tsconfig.json
+  s_e18f25a7dcf767::t_ec65f39dfe4c2e 1-8
+docs/index.md
+  s_e18f25a7dcf767::t_ec65f39dfe4c2e 1-39
+docs/FIXED_WINDOW_ARCHIVE.md
+  s_e18f25a7dcf767::t_0162b4a04cbdbf 228
+packages/browser/src/index.ts
+  s_e18f25a7dcf767::t_ec65f39dfe4c2e 1
+packages/browser/test/export-smoke.mjs
+  s_e18f25a7dcf767::t_87fd63a218ad3a 3
+  s_e18f25a7dcf767::t_ec65f39dfe4c2e 1-2,4-14
+docs/tsconfig.json
+  s_e18f25a7dcf767::t_ec65f39dfe4c2e 1-7
+packages/benchmark/package.json
+  s_e18f25a7dcf767::t_ec65f39dfe4c2e 1-21
+.github/workflows/ci.yml
+  s_e18f25a7dcf767::t_cf3fea361c8357 22-23
+  s_e18f25a7dcf767::t_ec65f39dfe4c2e 1-11,13-15,17,21,24
+  s_e18f25a7dcf767::t_ea7c93b9d6a670 12,16,18-20
+packages/browser/src/node/index.ts
+  s_e18f25a7dcf767::t_87fd63a218ad3a 1
+  s_e18f25a7dcf767::t_ec65f39dfe4c2e 2-70
+.nvmrc
+  s_e18f25a7dcf767::t_ec65f39dfe4c2e 1
+packages/browser/tsup.config.ts
+  s_e18f25a7dcf767::t_ec65f39dfe4c2e 1-17
+docs/.vitepress/config.ts
+  s_e18f25a7dcf767::t_88f5afd91455eb 50
+  s_e18f25a7dcf767::t_ec65f39dfe4c2e 1-49,51-54
+README.md
+  s_e18f25a7dcf767::t_cf3fea361c8357 40-41,45-47
+  s_e18f25a7dcf767::t_ec65f39dfe4c2e 3-17,36-39,42-43,48-51,63-68
+  s_e18f25a7dcf767::t_b8939e9af89ac4 44
+docs/ARCHITECTURE.md
+  s_e18f25a7dcf767::t_f0daa0e2dd94fc 19-31
+docs/components/PackageVersion.vue
+  s_e18f25a7dcf767::t_ec65f39dfe4c2e 1-18
+packages/browser/src/viewer/types.ts
+  s_e18f25a7dcf767::t_ec65f39dfe4c2e 1-13
+scripts/check-rust.sh
+  s_e18f25a7dcf767::t_cf3fea361c8357 1-7
+packages/benchmark/scripts/test-placeholder.mjs
+  s_e18f25a7dcf767::t_88f5afd91455eb 1-3
+.github/workflows/pages.yml
+  s_e18f25a7dcf767::t_ec65f39dfe4c2e 1-20,27-43
+  s_e18f25a7dcf767::t_ea7c93b9d6a670 21-26
+packages/benchmark/tsconfig.json
+  s_e18f25a7dcf767::t_ec65f39dfe4c2e 1-9
+packages/browser/src/viewer/index.ts
+  s_e18f25a7dcf767::t_dae8c5e6a9c10b 6,8
+  s_e18f25a7dcf767::t_ec65f39dfe4c2e 1-5,7,9-12
+packages/benchmark/tsup.config.ts
+  s_e18f25a7dcf767::t_ec65f39dfe4c2e 1-11
+packages/benchmark/src/index.ts
+  s_e18f25a7dcf767::t_ec65f39dfe4c2e 1
+packages/browser/src/reader/index.ts
+  s_e18f25a7dcf767::t_ec65f39dfe4c2e 1-55,60-68,70-77
+  s_e18f25a7dcf767::t_88f5afd91455eb 56-59,69
+packages/benchmark/scripts/browser-placeholder.mjs
+  s_e18f25a7dcf767::t_88f5afd91455eb 1-3
+pnpm-workspace.yaml
+  s_e18f25a7dcf767::t_d313ed06431f28 5
+  s_e18f25a7dcf767::t_b57e49b1caba4f 6
+  s_e18f25a7dcf767::t_ec65f39dfe4c2e 1-4
+biome.json
+  s_e18f25a7dcf767::t_cf3fea361c8357 1-8,18-27,29-36,50
+  s_e18f25a7dcf767::t_0bfd592d59eee8 9-17,28,37-49
+AGENTS.md
+  s_e18f25a7dcf767::t_cf3fea361c8357 457,460,463-465,472,476,481-484,501,540
+tsconfig.base.json
+  s_e18f25a7dcf767::t_439712d2dacb6e 8
+  s_e18f25a7dcf767::t_ec65f39dfe4c2e 1-7,9-18
+package.json
+  s_e18f25a7dcf767::t_ec65f39dfe4c2e 1-10,14-15,18-24,27-28
+  s_e18f25a7dcf767::t_cf3fea361c8357 11-13,16-17,25-26
+pnpm-lock.yaml
+  s_e18f25a7dcf767::t_07c4b4ddeb8144 1-3035
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.24",
+  "base_commit_sha": "b303fdc84fa4bbb60a0aeeab661706d23016a883",
+  "prompts": {},
+  "sessions": {
+    "s_e18f25a7dcf767": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a03aa5-78bd-7070-bfcd-8b3978af06b8",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "aaron decker <aaron@ard.ninja>"
+    }
+  }
+}
