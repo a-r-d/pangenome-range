@@ -1,0 +1,16 @@
+[package]
+name = "panrange-query"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+description = "Storage-independent query and correctness types for pangenome-range"
+
+[dependencies]
+blake3.workspace = true
+panrange-format = { path = "../panrange-format" }
+
+[lints]
+workspace = true
+
