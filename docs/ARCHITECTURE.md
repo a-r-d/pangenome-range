@@ -12,8 +12,9 @@ pangenome-range-cli ──> pangenome-range-build ──> pangenome-range-query
 `pangenome-range-format` contains the storage seam and network cost model, but no
 graph semantics. `pangenome-range-query` contains the canonical semantic result
 types. `pangenome-range-build` contains the GBZ/GBZ-base source adapters and the
-first concrete candidate layout. The implemented Candidate 0 object is specified
-in [Fixed-window archive v1](FIXED_WINDOW_ARCHIVE.md).
+first concrete candidate layout and its external-memory encoder. The current
+Candidate 1 object is specified in
+[Fixed-window archive v3](FIXED_WINDOW_ARCHIVE.md).
 
 ## Range sources and traces
 
@@ -68,7 +69,7 @@ The experiment now emits `CanonicalSubgraph` from:
 1. an upstream GBZ/GBZ-base reference query, and
 2. the fixed-window candidate reader over `RangeSource`.
 
-Every retained Candidate 0 query is compared against that source oracle for node
+Every retained candidate query is compared against that source oracle for node
 sequences, oriented edges, path traversal multiplicity/orientation, and reference
 coordinates. The candidate path is range-shaped; the oracle remains a full local
 source load and is not presented as a remotely efficient reader.

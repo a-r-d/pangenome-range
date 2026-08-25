@@ -1,7 +1,7 @@
 use super::fixed::{
-    ArchiveBuildMetrics, ChunkCodec, ExperimentResult, FixedArchiveConfig, OracleResult,
-    QueryMeasurement, QuerySpec, build_fixed_archive, query_fixed_archive, reference_paths,
-    source_oracle,
+    ArchiveBuildMetrics, ChunkCodec, DEFAULT_MAX_UNCOMPRESSED_CHUNK_BYTES, DEFAULT_MIN_WINDOW_SIZE,
+    ExperimentResult, FixedArchiveConfig, FixedArchiveReader, OracleResult, QueryMeasurement,
+    QuerySpec, build_fixed_archive, reference_paths, source_oracle,
 };
 use gbz::{FullPathName, GBZ};
 use gbz_base::{GBZBase, GraphInterface, HaplotypeOutput, PathIndex, Subgraph, SubgraphQuery};
@@ -78,6 +78,7 @@ struct QueryRow {
     logical_index_bytes: Option<u64>,
     directory_page_bytes_fetched: Option<u64>,
     directory_pages_selected: Option<u64>,
+    directory_page_cache_hits: Option<u64>,
     data_bytes_fetched: Option<u64>,
     required_compressed_payload_bytes: Option<u64>,
     canonical_payload_bytes: Option<u64>,
@@ -118,6 +119,7 @@ struct QueryAggregate {
     bytes_fetched: Distribution,
     directory_page_bytes_fetched: Distribution,
     directory_pages_selected: Distribution,
+    directory_page_cache_hits: Distribution,
     read_amplification: Distribution,
     index_lookup_us: Distribution,
     decompression_us: Distribution,
@@ -218,7 +220,9 @@ pub fn run_fixed_window_experiment(options: &ExperimentOptions) -> ExperimentRes
             "window_sizes": [16_384_u64],
             "compressions": [ChunkCodec::Zstd3],
             "deduplication": "disabled because the MHC sweep found no exact duplicate payloads",
-            "purpose": "focused correctness and small-query performance smoke test of the two-level directory candidate; not a layout comparison",
+            "max_uncompressed_chunk_bytes": DEFAULT_MAX_UNCOMPRESSED_CHUNK_BYTES,
+            "minimum_adaptive_window_size": DEFAULT_MIN_WINDOW_SIZE,
+            "purpose": "focused correctness, encoder-scaling, and small-query smoke test of archive v3; not a layout comparison",
         }),
     };
     write_json(
@@ -235,12 +239,13 @@ pub fn run_fixed_window_experiment(options: &ExperimentOptions) -> ExperimentRes
                 ExperimentMode::FullSweep => "benchmark-fixed-windows",
                 ExperimentMode::SingleConfigSmoke => "benchmark-fixed-window-smoke",
             }, options.input.display(), options.run_id, options.random_queries_per_size),
-            "archive_format": "fixed-window-v2-two-level-directory",
+            "archive_format": "fixed-window-v3-arithmetic-manifest",
             "execution_environment": {
                 "os": std::env::consts::OS,
                 "architecture": std::env::consts::ARCH,
                 "storage_api": "local positioned FileRangeSource reads",
-                "cache_state": "uncontrolled; interpret local timings as warm/mixed, not cold-cache claims",
+                "os_cache_state": "uncontrolled; interpret local timings as warm/mixed, not cold-cache claims",
+                "reader_cache_state": "new reusable reader per coalescing gap; bootstrap and leaf cache cold for the first query and retained within that gap",
             },
             "network_profiles": [
                 {"label": "A", "rtt_ms": 20, "bandwidth_mbps": 300, "max_parallel_requests": 6, "per_request_overhead_ms": 0.5},
@@ -267,7 +272,7 @@ pub fn run_fixed_window_experiment(options: &ExperimentOptions) -> ExperimentRes
             "local_timing_scope": "storage lookup, decompression/decode, and subgraph reconstruction; correctness serialization/hash/comparison instrumentation excluded",
             "improvement_policy": match options.mode {
                 ExperimentMode::FullSweep => "after the baseline sweep, apply exact content-addressed chunk deduplication to the latency-first Pareto point that contains measured repeated payloads",
-                ExperimentMode::SingleConfigSmoke => "no improvement search; measure the 16 KiB zstd-3 two-level-directory candidate only",
+                ExperimentMode::SingleConfigSmoke => "no improvement search; measure the 16 KiB zstd-3 archive-v3 candidate only",
             },
         }),
     )?;
@@ -397,6 +402,10 @@ pub fn run_fixed_window_experiment(options: &ExperimentOptions) -> ExperimentRes
                 window_size: improvement_source.config.window_size,
                 codec: improvement_source.config.codec,
                 deduplicate_chunks: true,
+                max_uncompressed_chunk_bytes: improvement_source
+                    .config
+                    .max_uncompressed_chunk_bytes,
+                min_window_size: improvement_source.config.min_window_size,
             };
             let improved_run = run_candidate(
                 &graph,
@@ -513,6 +522,8 @@ fn planned_configs(mode: ExperimentMode) -> Vec<FixedArchiveConfig> {
                     window_size,
                     codec,
                     deduplicate_chunks: false,
+                    max_uncompressed_chunk_bytes: DEFAULT_MAX_UNCOMPRESSED_CHUNK_BYTES,
+                    min_window_size: DEFAULT_MIN_WINDOW_SIZE,
                 })
             })
             .collect(),
@@ -521,6 +532,8 @@ fn planned_configs(mode: ExperimentMode) -> Vec<FixedArchiveConfig> {
             window_size: 16_384,
             codec: ChunkCodec::Zstd3,
             deduplicate_chunks: false,
+            max_uncompressed_chunk_bytes: DEFAULT_MAX_UNCOMPRESSED_CHUNK_BYTES,
+            min_window_size: DEFAULT_MIN_WINDOW_SIZE,
         }],
     }
 }
@@ -659,11 +672,12 @@ fn run_candidate(
     let build = build_fixed_archive(graph, path_index, source_bytes, &archive, &config)?;
     let mut measurements = Vec::with_capacity(workload.len() * COALESCING_GAPS.len());
     for &gap in &COALESCING_GAPS {
+        let mut reader = FixedArchiveReader::open(&archive)?;
         for query in workload {
             let oracle = oracles
                 .get(&query.id)
                 .ok_or_else(|| invalid_data(format!("missing oracle for {}", query.id)))?;
-            let measurement = query_fixed_archive(&archive, &config, query, gap, oracle)?;
+            let measurement = reader.query(&config, query, gap, oracle)?;
             if !measurement.correctness {
                 return Err(invalid_data(format!(
                     "candidate {} failed correctness for query {} at coalescing gap {}",
@@ -717,6 +731,7 @@ fn append_candidate_rows(
             logical_index_bytes: Some(measurement.logical_index_bytes),
             directory_page_bytes_fetched: Some(measurement.directory_page_bytes_fetched),
             directory_pages_selected: Some(measurement.directory_pages_selected),
+            directory_page_cache_hits: Some(measurement.directory_page_cache_hits),
             data_bytes_fetched: Some(measurement.data_bytes_fetched),
             required_compressed_payload_bytes: Some(measurement.required_compressed_payload_bytes),
             canonical_payload_bytes: Some(measurement.canonical_payload_bytes),
@@ -774,6 +789,7 @@ fn baseline_row(
         logical_index_bytes: None,
         directory_page_bytes_fetched: None,
         directory_pages_selected: None,
+        directory_page_cache_hits: None,
         data_bytes_fetched: total_bytes,
         required_compressed_payload_bytes: None,
         canonical_payload_bytes: None,
@@ -870,6 +886,12 @@ fn aggregates(runs: &[CandidateRun]) -> Vec<QueryAggregate> {
                         selected
                             .iter()
                             .map(|measurement| measurement.directory_pages_selected as f64)
+                            .collect(),
+                    ),
+                    directory_page_cache_hits: distribution(
+                        selected
+                            .iter()
+                            .map(|measurement| measurement.directory_page_cache_hits as f64)
                             .collect(),
                     ),
                     read_amplification: distribution(
@@ -1195,7 +1217,7 @@ fn write_report(
     )?;
     writeln!(
         output,
-        "This is a measured fixed-window archive v2 result for `{}` in `{}` mode, not a format recommendation. All candidate rows passed node, sequence, edge, path-multiplicity/orientation, and reference-coordinate canonical comparison.\n",
+        "This is a measured fixed-window archive v3 result for `{}` in `{}` mode, not a stable-format recommendation. All candidate rows passed node, sequence, edge, path-multiplicity/orientation, and reference-coordinate canonical comparison.\n",
         options.input.display(),
         match options.mode {
             ExperimentMode::FullSweep => "full-sweep",
@@ -1322,10 +1344,10 @@ fn write_report(
         .iter()
         .find(|run| run.config.experiment_id == latency_first.experiment_id)
         .ok_or_else(|| invalid_data("missing selected candidate run"))?;
-    writeln!(output, "\n## Two-level directory lookup\n")?;
+    writeln!(output, "\n## Arithmetic manifest lookup\n")?;
     writeln!(
         output,
-        "The selected archive has a {}-byte header/root bootstrap index and {} leaf pages. Leaf bytes below count only bytes fetched beyond the 16 KiB bootstrap; a zero means the selected page was already resident in that prefix.\n",
+        "The selected archive has a {}-byte header/root bootstrap index and {} fixed 4 KiB leaf pages. The root contains one manifest per reference path; a reader computes the required page offset directly from the query coordinate. Leaf bytes below count only bytes fetched beyond the 16 KiB bootstrap; a zero means the selected page was already resident in that prefix.\n",
         selected_run.build.root_index_bytes, selected_run.build.directory_pages
     )?;
     writeln!(
@@ -1355,6 +1377,26 @@ fn write_report(
             aggregate.index_lookup_us.p95,
         )?;
     }
+    writeln!(output, "\n## Encoder construction\n")?;
+    writeln!(
+        output,
+        "The v3 encoder completed in {:.3} ms while retaining only chunk metadata plus one regional raw/compressed payload at a time. It wrote a {}-byte payload spool and a temporary {}-byte disk-backed path-occurrence index. Peak raw/compressed payload buffers were {} / {} bytes; {} adaptive splits were required.\n",
+        selected_run.build.construction_wall_ms,
+        selected_run.build.payload_spool_bytes,
+        selected_run.build.path_occurrence_index_bytes,
+        selected_run.build.peak_raw_chunk_bytes,
+        selected_run.build.peak_compressed_chunk_bytes,
+        selected_run.build.adaptive_splits,
+    )?;
+    writeln!(
+        output,
+        "| Phase | Wall time |\n|---|---:|\n| temporary occurrence index | {:.3} ms |\n| upstream regional selection | {:.3} ms |\n| regional materialization | {:.3} ms |\n| packed binary encoding | {:.3} ms |\n| compression | {:.3} ms |\n",
+        selected_run.build.path_occurrence_index_wall_ms,
+        selected_run.build.subgraph_selection_wall_ms,
+        selected_run.build.regional_materialization_wall_ms,
+        selected_run.build.regional_encoding_wall_ms,
+        selected_run.build.compression_wall_ms,
+    )?;
 
     writeln!(output, "\n## Local latency comparison by query size\n")?;
     writeln!(
@@ -1611,7 +1653,7 @@ fn write_report(
     } else if options.mode == ExperimentMode::SingleConfigSmoke {
         writeln!(
             output,
-            "Smoke mode isolates correctness and scale behavior of the 16 KiB/zstd-3 two-level-directory candidate; it does not establish a cross-layout winner.\n"
+            "Smoke mode isolates correctness and scale behavior of the 16 KiB/zstd-3 archive-v3 candidate; it does not establish a cross-layout winner.\n"
         )?;
     } else {
         writeln!(
@@ -1628,7 +1670,7 @@ fn write_report(
             ExperimentMode::FullSweep =>
                 "Run the same retained matrix on one HPRC chromosome, adding a GBZ-record-preserving representation beside this locally materialized encoding. That scale will reveal whether path metadata/halo duplication or decompressed regional materialization is the dominant expansion source, and it enables the required 100 kb, 1 Mb, and 10,000-query workloads.",
             ExperimentMode::SingleConfigSmoke =>
-                "Repeat the 1 kb and 10 kb classes with at least 100 queries per size under controlled cache conditions, comparing 16 KiB and 64 KiB payloads. That separates the extra leaf-directory request cost from decode/reconstruction CPU before another full matrix.",
+                "Implement the TypeScript HTTP-range reader and rerun the 1 kb and 10 kb workloads in a real browser with explicit cold and warm cache phases. In parallel, generate the GB-scale fixture and use the retained encoder phase/RSS/disk metrics to validate linear scaling before attempting another full layout matrix.",
         }
     )?;
     output.flush()?;
@@ -1659,6 +1701,7 @@ fn write_queries_csv(path: &Path, rows: &[QueryRow]) -> ExperimentResult<()> {
         "logical_index_bytes",
         "directory_page_bytes_fetched",
         "directory_pages_selected",
+        "directory_page_cache_hits",
         "data_bytes_fetched",
         "required_compressed_payload_bytes",
         "canonical_payload_bytes",
@@ -1701,6 +1744,7 @@ fn write_queries_csv(path: &Path, rows: &[QueryRow]) -> ExperimentResult<()> {
             option_string(row.logical_index_bytes),
             option_string(row.directory_page_bytes_fetched),
             option_string(row.directory_pages_selected),
+            option_string(row.directory_page_cache_hits),
             option_string(row.data_bytes_fetched),
             option_string(row.required_compressed_payload_bytes),
             option_string(row.canonical_payload_bytes),

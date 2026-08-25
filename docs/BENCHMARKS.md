@@ -78,8 +78,8 @@ cargo run --release -p pangenome-range-cli -- \
 ```
 
 Before paying for all 20 window/compression builds on a new input, run the
-current small-query candidate alone: 16 KiB windows, zstd-3, the v2 two-level
-directory, and no deduplication:
+current small-query candidate alone: 16 KiB base windows, zstd-3, the v3
+arithmetic manifest, an 8 MiB raw-payload cap, and no deduplication:
 
 ```bash
 cargo run --release -p pangenome-range-cli -- \
@@ -88,6 +88,8 @@ cargo run --release -p pangenome-range-cli -- \
 
 Smoke mode defaults to 10 deterministic random queries for each available size.
 It still builds GBZ and GBZ-base baselines, exercises every coalescing threshold,
-and requires canonical correctness for every candidate query. Because it runs
-only one candidate, it cannot establish a new Pareto winner or measure the
-incremental benefit of deduplication.
+and requires canonical correctness for every candidate query. Each threshold
+uses one reusable archive reader, cold on its first query and retaining its
+bootstrap/leaf cache thereafter. OS page-cache state remains uncontrolled.
+Because smoke mode runs only one candidate, it cannot establish a new Pareto
+winner or measure the incremental benefit of deduplication.
