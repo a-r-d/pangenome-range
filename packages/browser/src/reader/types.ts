@@ -54,6 +54,7 @@ export interface OpenPangenomeOptions {
   maxFullResponseBytes?: number;
   directoryCacheBytes?: number;
   payloadCacheBytes?: number;
+  extensionCacheBytes?: number;
   payloadCoalescingGapBytes?: number;
   maxRootBytes?: number;
   maxChunkBytes?: number;
@@ -176,12 +177,99 @@ export interface ArchiveCacheStats {
   readonly directoryEntries: number;
   readonly payloadBytes: number;
   readonly payloadEntries: number;
+  readonly extensionBytes: number;
+  readonly extensionEntries: number;
+}
+
+export interface ArchiveCapabilities {
+  readonly namedLoci: boolean;
+  readonly multiscaleSummaries: boolean;
+}
+
+export interface FeatureRequestRange {
+  readonly offset: bigint;
+  readonly length: number;
+  readonly layer: "extension-descriptor" | "extension-page";
+}
+
+export interface FeatureQueryTrace {
+  readonly dependencyRounds: number;
+  readonly requestRanges: readonly FeatureRequestRange[];
+  readonly totalBytes: number;
+  readonly cacheHits: number;
+  readonly integrityMs: number;
+  readonly decompressionMs: number;
+  readonly decodeMs: number;
+}
+
+export interface LocusSearch {
+  readonly name: string;
+  readonly mode?: "exact" | "prefix";
+  readonly sample?: string;
+  readonly contig?: string;
+  readonly limit?: number;
+  readonly signal?: AbortSignal;
+  readonly trace?: boolean | ((trace: FeatureQueryTrace) => void);
+}
+
+export interface LocusHit {
+  readonly matchedName: string;
+  readonly displayName: string;
+  readonly stableId: string;
+  readonly featureType: string;
+  readonly reference: ReferenceDescriptor;
+  readonly strand: "unknown" | "forward" | "reverse";
+}
+
+export interface LocusSearchResult {
+  readonly query: string;
+  readonly normalizedQuery: string;
+  readonly mode: "exact" | "prefix";
+  readonly annotationName?: string;
+  readonly annotationSha256?: string;
+  readonly totalIndexedRecords: bigint;
+  readonly hits: readonly LocusHit[];
+  readonly truncated: boolean;
+  readonly trace?: FeatureQueryTrace;
+}
+
+export interface SummaryQuery {
+  readonly sample: string;
+  readonly contig: string;
+  readonly start: number;
+  readonly end: number;
+  readonly maxBins?: number;
+  readonly signal?: AbortSignal;
+  readonly trace?: boolean | ((trace: FeatureQueryTrace) => void);
+}
+
+export interface OverviewBin {
+  readonly reference: ReferenceDescriptor;
+  readonly level: number;
+  readonly binSpan: number;
+  readonly coveredBases: bigint;
+  readonly tileCount: bigint;
+  readonly encodedBytes: bigint;
+  readonly decodedBytes: bigint;
+  readonly nodeRecords: bigint;
+  readonly edgeRecords: bigint;
+  readonly gbwtRecords: bigint;
+  readonly occurrences: bigint;
+}
+
+export interface SummaryResult {
+  readonly query: Readonly<SummaryQuery>;
+  readonly bins: readonly OverviewBin[];
+  readonly trace?: FeatureQueryTrace;
 }
 
 export interface PangenomeArchive {
   readonly formatVersion: number;
   readonly semantics: HaplotypeSemantics;
   references(): readonly ReferenceDescriptor[];
+  capabilities(): ArchiveCapabilities;
+  searchLoci(query: LocusSearch): Promise<LocusSearchResult>;
+  summary(query: SummaryQuery): Promise<SummaryResult>;
   query(query: RegionQuery): Promise<RegionResult>;
   queryTiles(query: RegionQuery): AsyncIterable<RegionTile>;
   cacheStats(): ArchiveCacheStats;

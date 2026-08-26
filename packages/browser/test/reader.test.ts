@@ -2,6 +2,10 @@ import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { describe, expect, it, vi } from "vitest";
 import {
+  type NamedLociDescriptor,
+  selectLocusPages,
+} from "../src/reader/features.js";
+import {
   CorruptRegionalPayloadError,
   canonicalGraphHash,
   canonicalHaplotypeTileHash,
@@ -139,6 +143,44 @@ const recordArchiveFixture = new Uint8Array(
   ),
 );
 
+const recordArchiveMetadata = JSON.parse(
+  readFileSync(
+    new URL(
+      "../../../test-data/golden/record-archive-v1.json",
+      import.meta.url,
+    ),
+    "utf8",
+  ),
+) as {
+  features: {
+    typeIds: string[];
+    namedLoci: {
+      recordCount: number;
+      pageCount: number;
+      query: string;
+      mode: "prefix";
+      expected: {
+        matchedName: string;
+        displayName: string;
+        stableId: string;
+        featureType: string;
+        sample: string;
+        contig: string;
+        start: number;
+        end: number;
+        strand: "forward";
+      };
+    };
+    summary: {
+      seriesCount: number;
+      binCount: number;
+      coveredBases: number;
+      tileCount: number;
+      baseBinSpan: number;
+    };
+  };
+};
+
 const recordRegionalExpected = JSON.parse(
   readFileSync(
     new URL(
@@ -165,6 +207,38 @@ const recordRegionalExpected = JSON.parse(
 };
 
 describe("reader contract validation", () => {
+  it("binary-searches sorted locus leaf fences", () => {
+    const storage = {
+      offset: 10_000n,
+      encodedLength: 10n,
+      decodedLength: 20n,
+      codec: 3 as const,
+      integrity: new Uint8Array(16),
+    };
+    const descriptor: NamedLociDescriptor = {
+      annotationSha256: new Uint8Array(32),
+      annotationName: "genes.gff3",
+      recordCount: 6n,
+      pages: [
+        { firstKey: "a", lastKey: "bq", recordCount: 2n, storage },
+        {
+          firstKey: "brca1",
+          lastKey: "brca2",
+          recordCount: 2n,
+          storage,
+        },
+        { firstKey: "brcb", lastKey: "z", recordCount: 2n, storage },
+      ],
+    };
+    expect(selectLocusPages(descriptor, "brca1", "exact")).toEqual([
+      descriptor.pages[1],
+    ]);
+    expect(selectLocusPages(descriptor, "brca", "prefix")).toEqual([
+      descriptor.pages[1],
+    ]);
+    expect(selectLocusPages(descriptor, "zzzz", "exact")).toEqual([]);
+  });
+
   it("consumes the normative machine-readable format constants and checksums", () => {
     expect(conformanceManifest).toMatchObject({
       schemaVersion: 2,
@@ -543,6 +617,63 @@ describe("reader contract validation", () => {
         end: 31_351_896,
       }),
     ]);
+    expect(archive.capabilities()).toEqual({
+      namedLoci: true,
+      multiscaleSummaries: true,
+    });
+    const loci = await archive.searchLoci({
+      name: recordArchiveMetadata.features.namedLoci.query,
+      mode: recordArchiveMetadata.features.namedLoci.mode,
+      trace: true,
+    });
+    expect(loci).toMatchObject({
+      normalizedQuery: recordArchiveMetadata.features.namedLoci.query,
+      annotationName: "record-annotations-v1.gff3",
+      totalIndexedRecords: BigInt(
+        recordArchiveMetadata.features.namedLoci.recordCount,
+      ),
+      truncated: false,
+      hits: [
+        {
+          matchedName:
+            recordArchiveMetadata.features.namedLoci.expected.matchedName,
+          displayName:
+            recordArchiveMetadata.features.namedLoci.expected.displayName,
+          stableId: recordArchiveMetadata.features.namedLoci.expected.stableId,
+          featureType:
+            recordArchiveMetadata.features.namedLoci.expected.featureType,
+          reference: {
+            sample: recordArchiveMetadata.features.namedLoci.expected.sample,
+            contig: recordArchiveMetadata.features.namedLoci.expected.contig,
+            start: recordArchiveMetadata.features.namedLoci.expected.start,
+            end: recordArchiveMetadata.features.namedLoci.expected.end,
+          },
+          strand: recordArchiveMetadata.features.namedLoci.expected.strand,
+        },
+      ],
+    });
+    expect(loci.annotationSha256).toMatch(/^[0-9a-f]{64}$/);
+    const overview = await archive.summary({
+      sample: "CHM13",
+      contig: "chr6",
+      start: 31_350_872,
+      end: 31_351_896,
+      maxBins: 10,
+      trace: true,
+    });
+    expect(overview.bins).toHaveLength(
+      recordArchiveMetadata.features.summary.binCount,
+    );
+    expect(overview.bins[0]).toMatchObject({
+      level: 0,
+      binSpan: recordArchiveMetadata.features.summary.baseBinSpan,
+      coveredBases: BigInt(recordArchiveMetadata.features.summary.coveredBases),
+      tileCount: BigInt(recordArchiveMetadata.features.summary.tileCount),
+    });
+    expect(overview.bins[0]?.nodeRecords).toBeGreaterThan(0n);
+    expect(overview.bins[0]?.edgeRecords).toBeGreaterThan(0n);
+    expect(overview.bins[0]?.gbwtRecords).toBeGreaterThan(0n);
+    expect(overview.bins[0]?.occurrences).toBeGreaterThan(0n);
     const result = await archive.query({
       sample: "CHM13",
       contig: "chr6",
@@ -568,6 +699,10 @@ describe("reader contract validation", () => {
     expect(archive.cacheStats()).toMatchObject({
       directoryEntries: 1,
       payloadEntries: 1,
+      extensionEntries:
+        2 +
+        recordArchiveMetadata.features.namedLoci.pageCount +
+        recordArchiveMetadata.features.summary.seriesCount,
     });
     archive.clearCaches();
     expect(archive.cacheStats()).toEqual({
@@ -575,6 +710,8 @@ describe("reader contract validation", () => {
       directoryEntries: 0,
       payloadBytes: 0,
       payloadEntries: 0,
+      extensionBytes: 0,
+      extensionEntries: 0,
     });
     await archive.close();
 

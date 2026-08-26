@@ -7,11 +7,12 @@ use gbz::{FullPathName, GBZ, Orientation, Pos};
 use gbz_base::{HaplotypeOutput, PathIndex, Subgraph, SubgraphQuery};
 use pangenome_range_format::{
     ARCHIVE_VERSION, ArchiveEntry, ArchiveValidationProgress, Bootstrap, DIRECTORY_BUCKET_WINDOWS,
-    DIRECTORY_ENTRIES_PER_PAGE, DIRECTORY_PAGE_BYTES, FileRangeSource, HEADER_LEN, NetworkProfile,
-    PackedEdge, PackedGbwtRecord, REGION_VERSION, RangeSource, RecordRegionalPayload,
-    ReferenceManifest, TracingRangeSource, bootstrap as format_bootstrap,
-    compress as format_compress, decode_directory_page as format_decode_directory_page,
-    decompress as format_decompress, directory_page_offset as format_directory_page_offset,
+    DIRECTORY_ENTRIES_PER_PAGE, DIRECTORY_PAGE_BYTES, EXTENSION_DIRECTORY_HEADER_BYTES,
+    EXTENSION_ENTRY_BYTES, FileRangeSource, HEADER_LEN, NetworkProfile, PackedEdge,
+    PackedGbwtRecord, REGION_VERSION, RangeSource, RecordRegionalPayload, ReferenceManifest,
+    TracingRangeSource, bootstrap as format_bootstrap, compress as format_compress,
+    decode_directory_page as format_decode_directory_page, decompress as format_decompress,
+    directory_page_offset as format_directory_page_offset,
     encode_directory_page as format_encode_directory_page,
     encode_extension_directory as format_encode_extension_directory,
     encode_header as format_encode_header,
@@ -36,6 +37,9 @@ use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::Instant;
 
+use crate::features::{
+    BaseSummaryBins, FeatureBuildOptions, summary_base_bin_span, write_default_feature_extensions,
+};
 use crate::local_subgraph::LocalSubgraph;
 use crate::source::{LoadedGbzSource, PangenomeSource, SourcePathIndex};
 
@@ -82,6 +86,8 @@ pub struct ArchiveBuildOptions {
     pub keep_partial: bool,
     pub progress: BuildProgressMode,
     pub progress_interval_ms: u64,
+    pub annotations: Option<PathBuf>,
+    pub annotation_sample: Option<String>,
 }
 
 impl Default for ArchiveBuildOptions {
@@ -97,6 +103,8 @@ impl Default for ArchiveBuildOptions {
             keep_partial: false,
             progress: BuildProgressMode::Off,
             progress_interval_ms: DEFAULT_PROGRESS_INTERVAL_MS,
+            annotations: None,
+            annotation_sample: None,
         }
     }
 }
@@ -396,6 +404,12 @@ pub struct ArchiveBuildMetrics {
     pub temporary_file_bytes_before_first_payload: u64,
     pub temporary_file_peak_bytes: u64,
     pub payload_bytes: u64,
+    pub extension_encoded_bytes: u64,
+    pub extension_decoded_bytes: u64,
+    pub named_locus_records: u64,
+    pub named_locus_pages: u64,
+    pub summary_series: u64,
+    pub summary_bins: u64,
     pub peak_queued_raw_bytes: u64,
     pub peak_queued_compressed_bytes: u64,
     pub peak_queued_total_bytes: u64,
@@ -532,6 +546,10 @@ struct PendingRawChunk {
     end: u64,
     raw: Vec<u8>,
     hash: blake3::Hash,
+    node_records: u64,
+    edge_records: u64,
+    gbwt_records: u64,
+    occurrences: u64,
 }
 
 #[derive(Default)]
@@ -550,6 +568,8 @@ struct DirectWriterState {
     peak_queued_total_bytes: u64,
     last_progress_emit_ms: f64,
     progress_events_emitted: u64,
+    summary_base_bin_span: u64,
+    summary_bins: BaseSummaryBins,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
@@ -926,6 +946,10 @@ struct DirectPathRecord {
 #[derive(Debug)]
 struct RecordChunk {
     raw: Vec<u8>,
+    node_records: u64,
+    edge_records: u64,
+    gbwt_records: u64,
+    occurrences: u64,
     subgraph_selection_wall_ms: f64,
     regional_materialization_wall_ms: f64,
     regional_encoding_wall_ms: f64,
@@ -1327,6 +1351,10 @@ fn construct_record_chunk(
     let regional_materialization_wall_ms =
         materialization_started.elapsed().as_secs_f64() * 1_000.0;
     let encoding_started = Instant::now();
+    let node_records = usize_to_u64(payload.nodes.len())?;
+    let edge_records = usize_to_u64(payload.edges.len())?;
+    let gbwt_records = usize_to_u64(payload.records.len())?;
+    let occurrences = payload.total_occurrences;
     let raw = payload.encode()?;
     let regional_encoding_wall_ms = encoding_started.elapsed().as_secs_f64() * 1_000.0;
     if usize_to_u64(raw.len())? != estimated_bytes {
@@ -1338,6 +1366,10 @@ fn construct_record_chunk(
     }
     Ok(RecordChunkOutcome::Accepted(RecordChunk {
         raw,
+        node_records,
+        edge_records,
+        gbwt_records,
+        occurrences,
         subgraph_selection_wall_ms,
         regional_materialization_wall_ms,
         regional_encoding_wall_ms,
@@ -1780,6 +1812,18 @@ fn flush_pending_chunks(
             integrity: stored.integrity,
             codec: config.codec,
         });
+        state.summary_bins.add_tile(
+            chunk.reference_id,
+            state.summary_base_bin_span,
+            chunk.start,
+            chunk.end,
+            stored.compressed_len,
+            raw_len,
+            chunk.node_records,
+            chunk.edge_records,
+            chunk.gbwt_records,
+            chunk.occurrences,
+        )?;
         state.reference_bases_processed = state
             .reference_bases_processed
             .checked_add(chunk.end - chunk.start)
@@ -1866,6 +1910,10 @@ fn queue_record_chunk(
         end: task.end,
         raw: record_chunk.raw,
         hash,
+        node_records: record_chunk.node_records,
+        edge_records: record_chunk.edge_records,
+        gbwt_records: record_chunk.gbwt_records,
+        occurrences: record_chunk.occurrences,
     });
     *pending_memory_bound = pending_memory_bound
         .checked_add(chunk_memory_bound)
@@ -1970,6 +2018,9 @@ pub fn build_fixed_archive_from_source_with_options(
     if (options.start.is_some() || options.end.is_some()) && options.contig.is_none() {
         return Err(invalid_input("--start/--end require a contig filter").into());
     }
+    if options.annotation_sample.is_some() && options.annotations.is_none() {
+        return Err(invalid_input("--annotation-sample requires --annotations").into());
+    }
     let started = Instant::now();
     let manifest_started = Instant::now();
     let references = selected_reference_paths(path_index, config, options)?;
@@ -2028,7 +2079,17 @@ pub fn build_fixed_archive_from_source_with_options(
         })
         .collect::<ExperimentResult<Vec<_>>>()?;
     let provisional_root = encode_root_index(&manifests)?;
-    let mut next_page_offset = usize_to_u64(HEADER_LEN + provisional_root.len())?;
+    let extension_directory_len = EXTENSION_DIRECTORY_HEADER_BYTES
+        .checked_add(
+            2_usize
+                .checked_mul(EXTENSION_ENTRY_BYTES)
+                .ok_or_else(|| invalid_data("extension directory length overflow"))?,
+        )
+        .ok_or_else(|| invalid_data("extension directory length overflow"))?;
+    let extension_directory_offset = usize_to_u64(HEADER_LEN + provisional_root.len())?;
+    let mut next_page_offset = extension_directory_offset
+        .checked_add(usize_to_u64(extension_directory_len)?)
+        .ok_or_else(|| invalid_data("directory start overflow"))?;
     for manifest in &mut manifests {
         manifest.first_page_offset = next_page_offset;
         next_page_offset = next_page_offset
@@ -2051,7 +2112,13 @@ pub fn build_fixed_archive_from_source_with_options(
     }
     archive_temp
         .file
-        .write_all(&encode_header(usize_to_u64(root.len())?, 0, data_offset))?;
+        .write_all(&format_encode_header_with_extensions(
+            usize_to_u64(root.len())?,
+            0,
+            data_offset,
+            extension_directory_offset,
+            usize_to_u64(extension_directory_len)?,
+        ))?;
     archive_temp.file.write_all(&root)?;
     archive_temp.file.set_len(data_offset)?;
     archive_temp.file.seek(SeekFrom::Start(data_offset))?;
@@ -2065,7 +2132,11 @@ pub fn build_fixed_archive_from_source_with_options(
             ])
         })
         .collect::<Result<Vec<_>, io::Error>>()?;
-    let mut writer = DirectWriterState::default();
+    let summary_base_bin_span = summary_base_bin_span(config.window_size)?;
+    let mut writer = DirectWriterState {
+        summary_base_bin_span,
+        ..DirectWriterState::default()
+    };
     let mut pending = Vec::<PendingRawChunk>::with_capacity(options.threads);
     let mut pending_memory_bound = 0_u64;
     let mut ready_raw_bytes = 0_u64;
@@ -2298,17 +2369,37 @@ pub fn build_fixed_archive_from_source_with_options(
     emit_progress(
         options.progress,
         "writer_finalization",
-        "backfilling directory pages and final header",
+        "writing default feature indexes and backfilling archive metadata",
     );
     let finalization_started = Instant::now();
+    let (extensions, feature_metrics) = write_default_feature_extensions(
+        &mut archive_temp.file,
+        &manifests,
+        summary_base_bin_span,
+        &writer.summary_bins,
+        &FeatureBuildOptions {
+            annotation_path: options.annotations.clone(),
+            annotation_sample: options.annotation_sample.clone(),
+        },
+        data_offset,
+    )?;
+    let extension_directory = format_encode_extension_directory(&extensions)?;
+    if extension_directory.len() != extension_directory_len {
+        return Err(invalid_data("default extension directory length changed").into());
+    }
     let root = encode_root_index(&manifests)?;
     archive_temp.file.seek(SeekFrom::Start(0))?;
-    archive_temp.file.write_all(&encode_header(
-        usize_to_u64(root.len())?,
-        directory_entries,
-        data_offset,
-    ))?;
+    archive_temp
+        .file
+        .write_all(&format_encode_header_with_extensions(
+            usize_to_u64(root.len())?,
+            directory_entries,
+            data_offset,
+            extension_directory_offset,
+            usize_to_u64(extension_directory.len())?,
+        ))?;
     archive_temp.file.write_all(&root)?;
+    archive_temp.file.write_all(&extension_directory)?;
     for (reference_id, manifest) in manifests.iter().enumerate() {
         for bucket_index in 0..manifest.page_count {
             let bucket_start = manifest
@@ -2427,6 +2518,12 @@ pub fn build_fixed_archive_from_source_with_options(
         temporary_file_bytes_before_first_payload: data_offset,
         temporary_file_peak_bytes: archive_bytes,
         payload_bytes: archive_bytes.saturating_sub(data_offset),
+        extension_encoded_bytes: feature_metrics.extension_encoded_bytes,
+        extension_decoded_bytes: feature_metrics.extension_decoded_bytes,
+        named_locus_records: feature_metrics.named_locus_records,
+        named_locus_pages: feature_metrics.named_locus_pages,
+        summary_series: feature_metrics.summary_series,
+        summary_bins: feature_metrics.summary_bins,
         peak_queued_raw_bytes: writer.peak_queued_raw_bytes,
         peak_queued_compressed_bytes: writer.peak_queued_compressed_bytes,
         peak_queued_total_bytes: writer.peak_queued_total_bytes,
@@ -4338,10 +4435,21 @@ mod tests {
     }
 
     #[test]
+    #[allow(clippy::too_many_lines)]
     fn record_archive_v1_golden_is_deterministic_and_matches_source_oracle() {
         let source = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../test-data/micb-kir3dl1.gbz");
         let fixture = Path::new(env!("CARGO_MANIFEST_DIR"))
             .join("../../test-data/golden/record-archive-v1.pngr");
+        let metadata: serde_json::Value = serde_json::from_slice(
+            &std::fs::read(
+                Path::new(env!("CARGO_MANIFEST_DIR"))
+                    .join("../../test-data/golden/record-archive-v1.json"),
+            )
+            .unwrap(),
+        )
+        .unwrap();
+        let annotations = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../test-data/golden/record-annotations-v1.gff3");
         let graph: GBZ = simple_sds::serialize::load_from(&source).unwrap();
         let path_index = PathIndex::new(&graph, 1_000, false).unwrap();
         let config = FixedArchiveConfig {
@@ -4353,7 +4461,7 @@ mod tests {
             min_window_size: DEFAULT_MIN_WINDOW_SIZE,
         };
         let output = simple_sds::serialize::temp_file_name("pangenome-range-record-golden");
-        build_fixed_archive_with_options(
+        let build = build_fixed_archive_with_options(
             &graph,
             &path_index,
             std::fs::metadata(&source).unwrap().len(),
@@ -4365,10 +4473,36 @@ mod tests {
                 start: Some(31_350_872),
                 end: Some(31_351_896),
                 threads: 1,
+                annotations: Some(annotations),
+                annotation_sample: Some("CHM13".into()),
                 ..ArchiveBuildOptions::default()
             },
         )
         .unwrap();
+        assert_eq!(
+            build.named_locus_records,
+            metadata["features"]["namedLoci"]["recordCount"]
+                .as_u64()
+                .unwrap()
+        );
+        assert_eq!(
+            build.named_locus_pages,
+            metadata["features"]["namedLoci"]["pageCount"]
+                .as_u64()
+                .unwrap()
+        );
+        assert_eq!(
+            build.summary_series,
+            metadata["features"]["summary"]["seriesCount"]
+                .as_u64()
+                .unwrap()
+        );
+        assert_eq!(
+            build.summary_bins,
+            metadata["features"]["summary"]["binCount"]
+                .as_u64()
+                .unwrap()
+        );
         assert_eq!(
             std::fs::read(&output).unwrap(),
             std::fs::read(&fixture).unwrap()
@@ -4431,6 +4565,69 @@ mod tests {
         assert!(validate_fixed_archive(&corrupt).is_err());
         std::fs::remove_file(corrupt).unwrap();
         std::fs::remove_file(output).unwrap();
+    }
+
+    #[test]
+    fn structural_validation_rejects_corrupt_known_extension_pages() {
+        let fixture = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../test-data/golden/record-archive-v1.pngr");
+        let source = FileRangeSource::open(&fixture).unwrap();
+        let bootstrap = format_bootstrap(&source).unwrap();
+        for type_id in [
+            pangenome_range_format::NAMED_LOCI_TYPE_ID,
+            pangenome_range_format::SUMMARY_PYRAMID_TYPE_ID,
+        ] {
+            let extension = bootstrap
+                .extensions
+                .iter()
+                .find(|entry| entry.type_id == type_id)
+                .unwrap();
+            let encoded = source
+                .read_range(
+                    extension.offset,
+                    u64_to_usize(extension.encoded_len).unwrap(),
+                )
+                .unwrap();
+            let decoded =
+                pangenome_range_format::validate_extension_payload(extension, &encoded).unwrap();
+            let page_offset = if type_id == pangenome_range_format::NAMED_LOCI_TYPE_ID {
+                pangenome_range_format::decode_named_loci_descriptor(
+                    &decoded,
+                    bootstrap.header.data_offset,
+                    source.len().unwrap(),
+                )
+                .unwrap()
+                .pages[0]
+                    .storage
+                    .offset
+            } else {
+                pangenome_range_format::decode_summary_descriptor(
+                    &decoded,
+                    bootstrap.header.data_offset,
+                    source.len().unwrap(),
+                )
+                .unwrap()
+                .series[0]
+                    .storage
+                    .offset
+            };
+            let corrupt = simple_sds::serialize::temp_file_name("corrupt-feature-page");
+            std::fs::copy(&fixture, &corrupt).unwrap();
+            let mut file = OpenOptions::new()
+                .read(true)
+                .write(true)
+                .open(&corrupt)
+                .unwrap();
+            file.seek(SeekFrom::Start(page_offset)).unwrap();
+            let mut byte = [0_u8; 1];
+            file.read_exact(&mut byte).unwrap();
+            byte[0] ^= 1;
+            file.seek(SeekFrom::Start(page_offset)).unwrap();
+            file.write_all(&byte).unwrap();
+            file.sync_all().unwrap();
+            assert!(validate_fixed_archive(&corrupt).is_err());
+            std::fs::remove_file(corrupt).unwrap();
+        }
     }
 
     #[test]

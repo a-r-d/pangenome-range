@@ -23,6 +23,10 @@ declaring stable v1.
 | V1-H02 | Extension pointer fields are both zero or both valid and contiguous after the root. | Shared `corrupt-archive-header-reserved` half-pointer case. | PASS |
 | V1-H03 | Unknown magic/version is unsupported and never dispatched to an old decoder. | Typed Rust/TypeScript version tests and corrupt fixtures. | PASS |
 | V1-H04 | Any use of header bytes 48..63 is governed by the v1 extension ADR. | Extension-policy ADR. | POLICY |
+| V1-E01 | Default feature entries use registered, sorted, unique 16-byte type identifiers and remain optional to graph-only readers. | Rust encoder plus TypeScript capabilities/legacy-archive tests. | PASS |
+| V1-E02 | Named-locus descriptors, leaves, normalization, ordering, counts, provenance, and result truncation are bounded and exact. | Annotated Rust golden plus TypeScript alias-search test. | PASS |
+| V1-E03 | Summary levels use canonical arithmetic spans and exact sums of one contribution per core tile. | Rust format/builder tests plus TypeScript summary decode. | PASS |
+| V1-E04 | Known child pages cannot overlap stored sections and pass BLAKE3 before exact decompression/decode. | Structural validator and feature-page codec tests. | PASS |
 
 ## Root manifests and directory pages
 
@@ -128,7 +132,8 @@ declaring stable v1.
 | Timing integrity | Schema-3 encoder report plus RC retained result; output SHA-256 is timed and worker CPU is separate. | PASS |
 | Atomic validation | Standard gate checks ranges, BLAKE3, exact decompression, and structural decode before rename; full/source modes remain distinct. | PASS |
 | Whole HPRC | Candidate validated 363,105 payloads and passed 9/9 graph plus 9/9 tile-set source-oracle queries; MHC t1/t4 proves worker determinism. | PASS |
-| Source RAM | Full-load requirement is measured/preflighted and a focused upstream lazy-access issue is retained. | PASS |
+| Source RAM | Project-owned disk source whole-HPRC run peaked at 608,060 KiB with byte-identical graph payloads; loaded mode remains an oracle. | PASS |
+| Default viewer indexes | Bounded MHC size/determinism and annotated cross-language golden pass; whole-HPRC regeneration remains required before freeze. | OPEN |
 | 1000GP responsibility | Two-chunk pilot remained at 8,776,080 KiB RSS; whole 1000GP is explicitly not authorized. | PASS |
 
 Stable v1 is blocked while any `OPEN` row above is release-critical. A row may

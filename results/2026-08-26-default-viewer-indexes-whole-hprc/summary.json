@@ -1,0 +1,76 @@
+{
+  "schemaVersion": 1,
+  "verdict": "default-viewer-indexes-whole-hprc-accepted",
+  "source": {
+    "bytes": 5492627216,
+    "sha256": "11d6047f79575ffb83757462484bad134ed20928bd2c8171ec52e35a54976e2b"
+  },
+  "archive": {
+    "bytesBefore": 8828788418,
+    "bytesAfter": 8829030376,
+    "growthBytes": 241958,
+    "growthPercent": 0.002740557,
+    "expansionRatio": 1.6074330240874661,
+    "sha256": "0b03325564dcfd558015f4722f509fd749216e30f98522c550182c1090317293",
+    "regionalPayloadChanged": false
+  },
+  "index": {
+    "bytesBefore": 47376617,
+    "bytesAfter": 47376777,
+    "growthBytes": 160,
+    "directoryPages": 11559,
+    "directoryEntries": 363105,
+    "physicalChunks": 363105
+  },
+  "extensions": {
+    "directoryBytes": 160,
+    "encodedBytes": 241798,
+    "decodedBytes": 588832,
+    "namedLocusRecords": 0,
+    "namedLocusPages": 0,
+    "summarySeries": 591,
+    "summaryBins": 8017
+  },
+  "performance": {
+    "baselineWholeWallSeconds": 499.34,
+    "wholeWallSeconds": 503.36,
+    "wholeWallDeltaSeconds": 4.02,
+    "wholeWallDeltaPercent": 0.805063,
+    "reportWallMs": 503190.8913,
+    "sourceChecksumWallMs": 20957.139369,
+    "sourceCacheBuildWallMs": 30331.018044,
+    "pathIndexWallMs": 61610.823406,
+    "prebuildWallMs": 112899.107467,
+    "constructionWallMs": 357659.885697,
+    "payloadPipelineWallMs": 328715.353135,
+    "writerFinalizationWallMs": 188.822977,
+    "validationWallMs": 28743.136512,
+    "outputChecksumWallMs": 32557.307637,
+    "peakRssKiB": 642220,
+    "baselinePeakRssKiB": 608060,
+    "peakRssDeltaKiB": 34160,
+    "peakQueuedTotalBytes": 35562074,
+    "timeToFirstPayloadMs": 112930.084501
+  },
+  "correctness": {
+    "atomicEncodeCompleted": true,
+    "structuralDirectoryPagesValidated": 11559,
+    "structuralPayloadsValidated": 363105,
+    "sourceOracleQueriesPassed": 9,
+    "sourceOracleQueriesTotal": 9,
+    "sourceOracleHaplotypeTilesPassed": 58,
+    "sourceOracleHaplotypeTilesTotal": 58
+  },
+  "scratch": {
+    "ephemeralSourceCacheBytes": 11921858427,
+    "sourceCacheRemovedOnExit": true,
+    "occurrenceIndexBytes": 0,
+    "payloadSpoolBytes": 0,
+    "generalEncoderScratchBytes": 0
+  },
+  "separateSourceOracleProcess": {
+    "wholeWallSeconds": 81.58,
+    "peakRssKiB": 12973152,
+    "includedInEncoderMetrics": false
+  }
+}

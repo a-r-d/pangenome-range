@@ -1,0 +1,83 @@
+{
+  "schemaVersion": 1,
+  "verdict": "whole-source-feature-accepted",
+  "format": {
+    "archiveVersion": 1,
+    "defaultExtensionEntries": 2,
+    "typeIds": ["named-loci-v1---", "summary-pyr-v1--"],
+    "requiredFlags": false,
+    "regionalPayloadChanged": false
+  },
+  "mhc": {
+    "archiveBytesBefore": 4806677,
+    "archiveBytesAfter": 4807552,
+    "archiveGrowthBytes": 875,
+    "archiveGrowthPercent": 0.018203846836026226,
+    "bootstrapIndexGrowthBytes": 160,
+    "extensionEncodedBytes": 715,
+    "extensionDecodedBytes": 992,
+    "summarySeries": 3,
+    "summaryBins": 8,
+    "namedLocusRecords": 0,
+    "threads1Sha256": "bcdf56f5b63124af54e28580e9b679d193b44c9f0e659a8ce0296a1c2e854503",
+    "threads4Sha256": "bcdf56f5b63124af54e28580e9b679d193b44c9f0e659a8ce0296a1c2e854503",
+    "byteIdenticalAcrossWorkers": true,
+    "threads1ConstructionWallMs": 601.870563,
+    "threads4ConstructionWallMs": 309.010887,
+    "threads1PeakRssKiB": 23712,
+    "threads4PeakRssKiB": 28452,
+    "threads1StandardValidationWallMs": 87.562149,
+    "threads4StandardValidationWallMs": 31.658948,
+    "fullValidationWallMs": 274.426256
+  },
+  "annotatedGolden": {
+    "archiveBytesBefore": 7354,
+    "archiveBytesAfter": 8045,
+    "archiveGrowthBytes": 691,
+    "annotationSha256": "c5da1051c54eda4d6cc8f159d39497c00191ac9f79aecfcaa1634b70be4efef3",
+    "namedLocusRecords": 4,
+    "namedLocusPages": 1,
+    "summarySeries": 1,
+    "summaryBins": 1,
+    "archiveSha256": "817de27e942b0126c3e0bb01848df0a3ea9dd31631c78943b8e838e8481d1047"
+  },
+  "wholeHprc": {
+    "archiveBytesBefore": 8828788418,
+    "archiveBytesAfter": 8829030376,
+    "archiveGrowthBytes": 241958,
+    "archiveGrowthPercent": 0.002740557,
+    "archiveSha256": "0b03325564dcfd558015f4722f509fd749216e30f98522c550182c1090317293",
+    "extensionEncodedBytes": 241798,
+    "summarySeries": 591,
+    "summaryBins": 8017,
+    "wholeWallSecondsBefore": 499.34,
+    "wholeWallSecondsAfter": 503.36,
+    "peakRssKiBBefore": 608060,
+    "peakRssKiBAfter": 642220,
+    "sourceOracleQueriesPassed": 9,
+    "sourceOracleHaplotypeTilesPassed": 58
+  },
+  "correctness": {
+    "sourceOracleGraphMatch": true,
+    "sourceOracleTileLocalHaplotypeMatches": 7,
+    "rustStructuralValidation": true,
+    "rustFullValidation": true,
+    "typescriptAnnotatedAliasSearch": true,
+    "typescriptSummaryDecode": true,
+    "typescriptTestFilesPassed": 2,
+    "typescriptTestsPassed": 25
+  },
+  "gates": {
+    "pnpmCheckRust": "pass",
+    "pnpmCheck": "pass",
+    "pnpmBuild": "pass",
+    "pnpmTestBrowser": "pass",
+    "browserMeasurements": 36,
+    "browserFailures": 0
+  },
+  "limitations": [
+    "GFF3 searchable records are currently sorted in memory before leaf encoding.",
+    "The summary counters are tile-local record totals, not population frequencies or globally unique graph counts.",
+    "The independent whole-HPRC source oracle still fully loads its source structures and peaked at 12973152 KiB; this is separate from encoder memory."
+  ]
+}

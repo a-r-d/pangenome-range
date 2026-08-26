@@ -173,12 +173,21 @@ and raw request evidence. Browser/library and HTTP cache effects remain
 reported separately.
 
 The archive reader retains the bounded bootstrap/root, uses separate
-byte-bounded LRU caches for directory pages and compressed payloads, fetches
+byte-bounded LRU caches for directory pages, compressed graph payloads, and
+extension descriptors/pages, fetches
 missing pages as contiguous spans, and coalesces selected payloads into one
 parallel dependency round. Optional query traces report exact ranges and layer
 bytes, dependency rounds, cache hits, decode/decompression/merge timings,
 selected counts, and the canonical BLAKE3 result. When tracing is disabled,
 the merge remains required but trace accounting and hashing are skipped.
+
+The default `named-loci-v1---` extension is a sorted fence descriptor plus
+independently compressed leaves. It is empty unless an exact GFF3 input and
+real reference sample binding are supplied. The default `summary-pyr-v1--`
+extension is a fixed-grid, factor-four pyramid built from accepted core-tile
+counters. Both are lazy range APIs and remain optional extension entries so an
+unknown reader can still decode graph regions. Neither introduces sample
+identity or merges anonymous traversals across tiles.
 
 ## Viewer pipeline
 

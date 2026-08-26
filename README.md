@@ -130,6 +130,7 @@ const archive = await openPangenome({
   source: "https://example.test/graph.pngr",
   directoryCacheBytes: 1024 * 1024,
   payloadCacheBytes: 32 * 1024 * 1024,
+  extensionCacheBytes: 8 * 1024 * 1024,
 });
 
 const result = await archive.query({
@@ -143,12 +144,35 @@ const result = await archive.query({
 
 console.log(result.graph.nodes.ids, result.tiles[0]?.haplotypes);
 console.log(result.trace?.requestRanges, result.trace?.canonicalHash);
+
+const genes = await archive.searchLoci({ name: "BRCA", mode: "prefix" });
+const overview = await archive.summary({
+  sample: "GRCh38",
+  contig: "chr6",
+  start: 0,
+  end: 170_000_000,
+  maxBins: 512,
+});
+console.log(genes.hits, overview.bins);
 await archive.close();
 ```
 
 `queryTiles()` is the streaming primitive. It preserves anonymous haplotype
 evidence per source tile; `query()` merges only globally mergeable graph
 topology and keeps those tiles alongside the merged graph.
+
+Every newly encoded archive includes a multiscale summary pyramid and a
+named-locus index. Summaries are populated from exact tile-local counters.
+Named loci are populated only when the encoder receives an explicit GFF3:
+
+```bash
+pangenome-range encode graph.gbz graph.pngr \
+  --annotations genes.gff3 --annotation-sample GRCh38
+```
+
+Without `--annotations`, the named-locus index is present but empty. The
+encoder never downloads or guesses an annotation assembly. Both features are
+skippable by readers that only need regional graph queries.
 
 ```ts
 for await (const tile of archive.queryTiles({

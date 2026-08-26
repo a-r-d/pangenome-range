@@ -4,6 +4,7 @@ mod archive;
 mod binary;
 mod cost;
 mod extensions;
+mod features;
 mod integrity;
 mod regional;
 mod source;
@@ -22,6 +23,17 @@ pub use extensions::{
     EXTENSION_DIRECTORY_HEADER_BYTES, EXTENSION_DIRECTORY_VERSION, EXTENSION_ENTRY_BYTES,
     EXTENSION_MAGIC, ExtensionEntry, MAX_EXTENSION_DIRECTORY_BYTES, decode_extension_directory,
     encode_extension_directory, validate_extension_payload,
+};
+pub use features::{
+    ExtensionPage, FEATURE_EXTENSION_VERSION, LocusPageDescriptor, LocusRecord,
+    MAX_FEATURE_DESCRIPTOR_BYTES, MAX_FEATURE_PAGE_BYTES, MAX_LOCUS_PAGES,
+    MAX_LOCUS_RECORDS_PER_PAGE, MAX_SUMMARY_BINS_PER_PAGE, MAX_SUMMARY_SERIES, NAMED_LOCI_MAGIC,
+    NAMED_LOCI_PAGE_MAGIC, NAMED_LOCI_TYPE_ID, NamedLociDescriptor, SUMMARY_BIN_BYTES,
+    SUMMARY_PAGE_MAGIC, SUMMARY_PYRAMID_MAGIC, SUMMARY_PYRAMID_TYPE_ID, SummaryBin,
+    SummaryPyramidDescriptor, SummarySeriesDescriptor, decode_locus_page,
+    decode_named_loci_descriptor, decode_summary_descriptor, decode_summary_page,
+    encode_locus_page, encode_named_loci_descriptor, encode_summary_descriptor,
+    encode_summary_page, normalize_locus_key, validate_extension_page,
 };
 pub use integrity::{IntegrityEvaluation, IntegrityPlacementEstimate, evaluate_integrity_options};
 pub use regional::{

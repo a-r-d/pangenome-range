@@ -57,6 +57,8 @@ pub struct EncodeOptions {
     pub progress: BuildProgressMode,
     pub progress_interval_ms: u64,
     pub max_chunks: Option<u64>,
+    pub annotations: Option<PathBuf>,
+    pub annotation_sample: Option<String>,
 }
 
 impl EncodeOptions {
@@ -82,6 +84,8 @@ impl EncodeOptions {
             progress: BuildProgressMode::Off,
             progress_interval_ms: DEFAULT_PROGRESS_INTERVAL_MS,
             max_chunks: None,
+            annotations: None,
+            annotation_sample: None,
         }
     }
 }
@@ -125,6 +129,8 @@ pub struct EncodeSummary {
     pub start: Option<u64>,
     pub end: Option<u64>,
     pub max_chunks: Option<u64>,
+    pub annotations: Option<PathBuf>,
+    pub annotation_sample: Option<String>,
     pub window_size: u64,
     pub codec: ChunkCodec,
     pub haplotype_semantics: &'static str,
@@ -204,6 +210,22 @@ pub fn run_encode(options: &EncodeOptions) -> ExperimentResult<EncodeSummary> {
         return Err(io::Error::new(
             io::ErrorKind::NotFound,
             format!("input GBZ does not exist: {}", options.input.display()),
+        )
+        .into());
+    }
+    if let Some(annotations) = &options.annotations
+        && !annotations.is_file()
+    {
+        return Err(io::Error::new(
+            io::ErrorKind::NotFound,
+            format!("annotation GFF3 does not exist: {}", annotations.display()),
+        )
+        .into());
+    }
+    if options.annotation_sample.is_some() && options.annotations.is_none() {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "--annotation-sample requires --annotations",
         )
         .into());
     }
@@ -311,6 +333,8 @@ pub fn run_encode(options: &EncodeOptions) -> ExperimentResult<EncodeSummary> {
         keep_partial: options.keep_partial,
         progress: options.progress,
         progress_interval_ms: options.progress_interval_ms,
+        annotations: options.annotations.clone(),
+        annotation_sample: options.annotation_sample.clone(),
     };
     encode_progress(
         options.progress,
@@ -352,7 +376,7 @@ pub fn run_encode(options: &EncodeOptions) -> ExperimentResult<EncodeSummary> {
         0.0
     };
     let summary = EncodeSummary {
-        schema_version: 4,
+        schema_version: 5,
         archive_version: 1,
         regional_payload_version: 1,
         source_path: options.input.clone(),
@@ -383,6 +407,8 @@ pub fn run_encode(options: &EncodeOptions) -> ExperimentResult<EncodeSummary> {
         start: options.start,
         end: options.end,
         max_chunks: options.max_chunks,
+        annotations: options.annotations.clone(),
+        annotation_sample: options.annotation_sample.clone(),
         window_size: options.window_size,
         codec: options.codec,
         haplotype_semantics: "anonymous-distinct-weighted-tile-paths",

@@ -1,12 +1,33 @@
 import { blake3 } from "@noble/hashes/blake3.js";
 import { decompress as fzstdDecompress } from "fzstd";
 import { assembleCanonicalGraph, canonicalGraphHash } from "./canonical.js";
+import {
+  decodeLocusPage,
+  decodeNamedLociDescriptor,
+  decodeSummaryDescriptor,
+  decodeSummaryPage,
+  FeatureDecodeError,
+  NAMED_LOCI_TYPE_ID,
+  type NamedLociDescriptor,
+  normalizeLocusKey,
+  SUMMARY_PYRAMID_TYPE_ID,
+  type SummaryPyramidDescriptor,
+  type SummarySeriesDescriptor,
+  selectLocusPages,
+} from "./features.js";
 import { decodeRegionalPayload } from "./regional.js";
 import { BlobRangeSource, HttpRangeSource } from "./sources.js";
 import type {
   ArchiveCacheStats,
+  ArchiveCapabilities,
   ChunkDecompressor,
+  FeatureQueryTrace,
+  FeatureRequestRange,
+  LocusHit,
+  LocusSearch,
+  LocusSearchResult,
   OpenPangenomeOptions,
+  OverviewBin,
   PangenomeArchive,
   QueryRequestRange,
   QueryTrace,
@@ -16,6 +37,8 @@ import type {
   RegionQuery,
   RegionResult,
   RegionTile,
+  SummaryQuery,
+  SummaryResult,
 } from "./types.js";
 
 const ARCHIVE_MAGIC = "PNGRNG01";
@@ -27,6 +50,7 @@ const DIRECTORY_ENTRY_BYTES = 56;
 const DIRECTORY_ENTRY_CAPACITY = 72;
 const DEFAULT_DIRECTORY_CACHE_BYTES = 1024 * 1024;
 const DEFAULT_PAYLOAD_CACHE_BYTES = 32 * 1024 * 1024;
+const DEFAULT_EXTENSION_CACHE_BYTES = 8 * 1024 * 1024;
 const DEFAULT_MAX_ROOT_BYTES = 16 * 1024 * 1024;
 const MAX_EXTENSION_DIRECTORY_BYTES = 1024 * 1024;
 const DEFAULT_MAX_CHUNK_BYTES = 64 * 1024 * 1024;
@@ -79,6 +103,16 @@ interface DirectoryEntry {
   offset: bigint;
   compressedLength: bigint;
   uncompressedLength: bigint;
+  integrity: Uint8Array;
+}
+
+interface ExtensionEntry {
+  typeId: Uint8Array;
+  required: boolean;
+  codec: ChunkCodec;
+  offset: bigint;
+  encodedLength: bigint;
+  decodedLength: bigint;
   integrity: Uint8Array;
 }
 
@@ -203,6 +237,43 @@ interface MutableQueryTrace {
   decodeMs: number;
   directoryRoundRecorded: boolean;
   payloadRoundRecorded: boolean;
+}
+
+interface MutableFeatureTrace {
+  requestRanges: FeatureRequestRange[];
+  dependencyRounds: number;
+  requestedLayers: Set<FeatureRequestRange["layer"]>;
+  cacheHits: number;
+  integrityMs: number;
+  decompressionMs: number;
+  decodeMs: number;
+}
+
+function featureTraceState(): MutableFeatureTrace {
+  return {
+    requestRanges: [],
+    dependencyRounds: 0,
+    requestedLayers: new Set(),
+    cacheHits: 0,
+    integrityMs: 0,
+    decompressionMs: 0,
+    decodeMs: 0,
+  };
+}
+
+function finishFeatureTrace(state: MutableFeatureTrace): FeatureQueryTrace {
+  return {
+    dependencyRounds: state.dependencyRounds,
+    requestRanges: state.requestRanges,
+    totalBytes: state.requestRanges.reduce(
+      (total, range) => total + range.length,
+      0,
+    ),
+    cacheHits: state.cacheHits,
+    integrityMs: state.integrityMs,
+    decompressionMs: state.decompressionMs,
+    decodeMs: state.decodeMs,
+  };
 }
 
 function traceState(
@@ -504,7 +575,7 @@ function decodeExtensionDirectory(
   bytes: Uint8Array,
   header: Header,
   sourceSize: bigint,
-): void {
+): ExtensionEntry[] {
   const reader = new BinaryReader(bytes);
   if (
     textDecoder.decode(reader.take(8)) !== "PNGEXT01" ||
@@ -519,15 +590,16 @@ function decodeExtensionDirectory(
     throw corrupt("extension entry count exceeds directory bytes");
   }
   let previousType: Uint8Array | undefined;
+  const entries: ExtensionEntry[] = [];
   for (let index = 0; index < count; index += 1) {
-    const typeId = reader.take(16);
+    const typeId = reader.take(16).slice();
     const flags = reader.u32();
-    decodeCodec(reader.u8());
+    const codec = decodeCodec(reader.u8());
     assertZero(reader.take(3), "extension entry reserved bytes");
     const offset = reader.u64();
     const encodedLength = reader.u64();
     const decodedLength = reader.u64();
-    reader.take(16);
+    const integrity = reader.take(16).slice();
     const end = checkedAdd(offset, encodedLength, "extension payload end");
     if (
       typeId.every((byte) => byte === 0) ||
@@ -540,12 +612,130 @@ function decodeExtensionDirectory(
     ) {
       throw corrupt("invalid extension entry");
     }
-    if ((flags & 1) !== 0) {
+    const known =
+      typeIdText(typeId) === NAMED_LOCI_TYPE_ID ||
+      typeIdText(typeId) === SUMMARY_PYRAMID_TYPE_ID;
+    if ((flags & 1) !== 0 && !known) {
       throw corrupt("archive contains an unknown required extension");
     }
     previousType = typeId;
+    entries.push({
+      typeId,
+      required: (flags & 1) !== 0,
+      codec,
+      offset,
+      encodedLength,
+      decodedLength,
+      integrity,
+    });
   }
   reader.finish();
+  return entries;
+}
+
+function typeIdText(typeId: Uint8Array): string {
+  try {
+    return textDecoder.decode(typeId);
+  } catch {
+    return "";
+  }
+}
+
+function decodeFeature<T>(decode: () => T): T {
+  try {
+    return decode();
+  } catch (error) {
+    if (error instanceof FeatureDecodeError) throw corrupt(error.message);
+    throw error;
+  }
+}
+
+function validateSummaryDescriptor(
+  descriptor: SummaryPyramidDescriptor,
+  manifests: readonly Manifest[],
+): void {
+  const nextLevels = manifests.map(() => 0);
+  const nextSpans = manifests.map(() => descriptor.baseBinSpan);
+  const finalCounts = manifests.map(() => 0n);
+  for (const series of descriptor.series) {
+    const manifest = manifests[series.manifestIndex];
+    const expectedLevel = nextLevels[series.manifestIndex];
+    const expectedSpan = nextSpans[series.manifestIndex];
+    if (
+      manifest === undefined ||
+      expectedLevel === undefined ||
+      expectedSpan === undefined ||
+      series.level !== expectedLevel ||
+      series.binSpan !== expectedSpan
+    ) {
+      throw corrupt("summary series level or manifest is not canonical");
+    }
+    const first = (manifest.start / series.binSpan) * series.binSpan;
+    const last = ((manifest.end - 1n) / series.binSpan) * series.binSpan;
+    const count = (last - first) / series.binSpan + 1n;
+    if (series.firstBinStart !== first || series.binCount !== count) {
+      throw corrupt("summary series dimensions are not canonical");
+    }
+    nextLevels[series.manifestIndex] = expectedLevel + 1;
+    nextSpans[series.manifestIndex] = checkedMultiply(
+      expectedSpan,
+      4n,
+      "summary level span",
+    );
+    finalCounts[series.manifestIndex] = count;
+  }
+  if (
+    nextLevels.some((count) => count === 0) ||
+    finalCounts.some((count) => count !== 1n)
+  ) {
+    throw corrupt(
+      "summary pyramid does not cover every reference through one top bin",
+    );
+  }
+}
+
+function selectedSummaryBinCount(
+  series: SummarySeriesDescriptor,
+  queryStart: bigint,
+  queryEnd: bigint,
+): number {
+  const seriesEnd = checkedAdd(
+    series.firstBinStart,
+    checkedMultiply(series.binCount, series.binSpan, "summary series end"),
+    "summary series end",
+  );
+  const start =
+    queryStart > series.firstBinStart ? queryStart : series.firstBinStart;
+  const end = queryEnd < seriesEnd ? queryEnd : seriesEnd;
+  if (start >= end) return 0;
+  const first = (start - series.firstBinStart) / series.binSpan;
+  const last = (end - 1n - series.firstBinStart) / series.binSpan;
+  return safeNumber(last - first + 1n, "selected summary bin count");
+}
+
+function validateSummaryQuery(query: SummaryQuery): void {
+  if (query.sample.length === 0 || query.contig.length === 0) {
+    throw new TypeError("summary sample and contig must not be empty");
+  }
+  for (const [value, label] of [
+    [query.start, "summary start"],
+    [query.end, "summary end"],
+  ] as const) {
+    if (!Number.isSafeInteger(value) || value < 0) {
+      throw new RangeError(`${label} must be a non-negative safe integer`);
+    }
+  }
+  if (query.end <= query.start) {
+    throw new RangeError("summary end must be greater than start");
+  }
+  const maxBins = query.maxBins ?? 512;
+  if (!Number.isSafeInteger(maxBins) || maxBins < 1 || maxBins > 4096) {
+    throw new RangeError("summary maxBins must be in 1..=4096");
+  }
+}
+
+function hex(bytes: Uint8Array): string {
+  return [...bytes].map((byte) => byte.toString(16).padStart(2, "0")).join("");
 }
 
 function decodeDirectoryPage(
@@ -815,13 +1005,17 @@ class ArchiveReader implements PangenomeArchive {
   readonly #bootstrap: Uint8Array;
   readonly #header: Header;
   readonly #manifests: Manifest[];
+  readonly #extensions: ExtensionEntry[];
   readonly #directoryCache: ByteCache;
   readonly #payloadCache: ByteCache;
+  readonly #extensionCache: ByteCache;
   readonly #decompressor: ChunkDecompressor;
   readonly #maxChunkBytes: number;
   readonly #payloadCoalescingGapBytes: number;
   readonly #openRanges: readonly QueryRequestRange[];
   readonly #openDependencyRounds: number;
+  #namedLociDescriptor: NamedLociDescriptor | undefined;
+  #summaryDescriptor: SummaryPyramidDescriptor | undefined;
   #closed = false;
 
   constructor(
@@ -830,6 +1024,7 @@ class ArchiveReader implements PangenomeArchive {
     bootstrap: Uint8Array,
     header: Header,
     manifests: Manifest[],
+    extensions: ExtensionEntry[],
     options: OpenPangenomeOptions,
     openRanges: readonly QueryRequestRange[],
     openDependencyRounds: number,
@@ -841,11 +1036,15 @@ class ArchiveReader implements PangenomeArchive {
     this.#bootstrap = bootstrap;
     this.#header = header;
     this.#manifests = manifests;
+    this.#extensions = extensions;
     this.#directoryCache = new ByteCache(
       options.directoryCacheBytes ?? DEFAULT_DIRECTORY_CACHE_BYTES,
     );
     this.#payloadCache = new ByteCache(
       options.payloadCacheBytes ?? DEFAULT_PAYLOAD_CACHE_BYTES,
+    );
+    this.#extensionCache = new ByteCache(
+      options.extensionCacheBytes ?? DEFAULT_EXTENSION_CACHE_BYTES,
     );
     this.#decompressor = options.decompressor ?? new FzstdDecompressor();
     this.#maxChunkBytes = options.maxChunkBytes ?? DEFAULT_MAX_CHUNK_BYTES;
@@ -864,6 +1063,242 @@ class ArchiveReader implements PangenomeArchive {
       end: safeNumber(manifest.end, "reference end"),
       orientation: "forward",
     }));
+  }
+
+  capabilities(): ArchiveCapabilities {
+    this.#assertOpen();
+    return {
+      namedLoci: this.#extension(NAMED_LOCI_TYPE_ID) !== undefined,
+      multiscaleSummaries:
+        this.#extension(SUMMARY_PYRAMID_TYPE_ID) !== undefined,
+    };
+  }
+
+  async searchLoci(query: LocusSearch): Promise<LocusSearchResult> {
+    this.#assertOpen();
+    query.signal?.throwIfAborted();
+    const normalizedQuery = normalizeLocusKey(query.name);
+    if (normalizedQuery.length === 0) {
+      throw new TypeError("locus search name must not be empty");
+    }
+    const mode = query.mode ?? "exact";
+    if (mode !== "exact" && mode !== "prefix") {
+      throw new TypeError("locus search mode must be exact or prefix");
+    }
+    const limit = query.limit ?? 50;
+    if (!Number.isSafeInteger(limit) || limit < 1 || limit > 1000) {
+      throw new RangeError("locus search limit must be in 1..=1000");
+    }
+    const instrument = query.trace !== undefined && query.trace !== false;
+    const trace = instrument ? featureTraceState() : undefined;
+    const descriptor = await this.#loadNamedLociDescriptor(query.signal, trace);
+    const candidates = selectLocusPages(descriptor, normalizedQuery, mode);
+    const decoded = await Promise.all(
+      candidates.map(async (page) => {
+        const raw = await this.#readFeatureDecoded(
+          page.storage,
+          "extension-page",
+          query.signal,
+          trace,
+        );
+        const started = performance.now();
+        const records = decodeFeature(() => decodeLocusPage(raw));
+        if (
+          BigInt(records.length) !== page.recordCount ||
+          records.at(0)?.normalizedKey !== page.firstKey ||
+          records.at(-1)?.normalizedKey !== page.lastKey
+        ) {
+          throw corrupt("named-locus page differs from its descriptor");
+        }
+        if (trace !== undefined) trace.decodeMs += performance.now() - started;
+        return records;
+      }),
+    );
+    const hits: LocusHit[] = [];
+    let truncated = false;
+    outer: for (const records of decoded) {
+      for (const record of records) {
+        const nameMatches =
+          mode === "exact"
+            ? record.normalizedKey === normalizedQuery
+            : record.normalizedKey.startsWith(normalizedQuery);
+        if (
+          !nameMatches ||
+          (query.sample !== undefined && record.sample !== query.sample) ||
+          (query.contig !== undefined && record.contig !== query.contig)
+        ) {
+          continue;
+        }
+        if (hits.length === limit) {
+          truncated = true;
+          break outer;
+        }
+        hits.push({
+          matchedName: record.matchedName,
+          displayName: record.displayName,
+          stableId: record.stableId,
+          featureType: record.featureType,
+          reference: {
+            sample: record.sample,
+            contig: record.contig,
+            start: safeNumber(record.start, "locus start"),
+            end: safeNumber(record.end, "locus end"),
+            orientation: "forward",
+          },
+          strand:
+            record.strand === 1
+              ? "forward"
+              : record.strand === 2
+                ? "reverse"
+                : "unknown",
+        });
+      }
+    }
+    const completedTrace = trace && finishFeatureTrace(trace);
+    if (typeof query.trace === "function" && completedTrace !== undefined) {
+      query.trace(completedTrace);
+    }
+    const checksumPresent = descriptor.annotationSha256.some(
+      (value) => value !== 0,
+    );
+    return {
+      query: query.name,
+      normalizedQuery,
+      mode,
+      ...(descriptor.annotationName.length === 0
+        ? {}
+        : { annotationName: descriptor.annotationName }),
+      ...(checksumPresent
+        ? { annotationSha256: hex(descriptor.annotationSha256) }
+        : {}),
+      totalIndexedRecords: descriptor.recordCount,
+      hits,
+      truncated,
+      ...(completedTrace === undefined ? {} : { trace: completedTrace }),
+    };
+  }
+
+  async summary(query: SummaryQuery): Promise<SummaryResult> {
+    this.#assertOpen();
+    validateSummaryQuery(query);
+    query.signal?.throwIfAborted();
+    const maxBins = query.maxBins ?? 512;
+    const trace =
+      query.trace !== undefined && query.trace !== false
+        ? featureTraceState()
+        : undefined;
+    const descriptor = await this.#loadSummaryDescriptor(query.signal, trace);
+    const queryStart = BigInt(query.start);
+    const queryEnd = BigInt(query.end);
+    const manifestIndexes = this.#manifests
+      .map((manifest, index) => ({ manifest, index }))
+      .filter(
+        ({ manifest }) =>
+          manifest.sample === query.sample &&
+          manifest.contig === query.contig &&
+          manifest.start < queryEnd &&
+          manifest.end > queryStart,
+      );
+    if (manifestIndexes.length === 0) {
+      throw new RangeError(
+        `archive has no reference interval for ${query.sample}#${query.contig}:${query.start}-${query.end}`,
+      );
+    }
+    const levelGroups = new Map<number, SummarySeriesDescriptor[]>();
+    for (const series of descriptor.series) {
+      if (manifestIndexes.some(({ index }) => index === series.manifestIndex)) {
+        const group = levelGroups.get(series.level) ?? [];
+        group.push(series);
+        levelGroups.set(series.level, group);
+      }
+    }
+    const levels = [...levelGroups.keys()].sort((left, right) => left - right);
+    let selected = levelGroups.get(levels.at(-1) ?? -1) ?? [];
+    for (const level of levels) {
+      const candidate = levelGroups.get(level) ?? [];
+      const count = candidate.reduce(
+        (total, series) =>
+          total + selectedSummaryBinCount(series, queryStart, queryEnd),
+        0,
+      );
+      if (count <= maxBins) {
+        selected = candidate;
+        break;
+      }
+    }
+    if (selected.length !== manifestIndexes.length) {
+      throw corrupt(
+        "summary descriptor does not cover the selected references",
+      );
+    }
+    const pages = await Promise.all(
+      selected.map(async (series) => {
+        const raw = await this.#readFeatureDecoded(
+          series.storage,
+          "extension-page",
+          query.signal,
+          trace,
+        );
+        const started = performance.now();
+        const bins = decodeFeature(() => decodeSummaryPage(raw, series));
+        if (trace !== undefined) trace.decodeMs += performance.now() - started;
+        return { series, bins };
+      }),
+    );
+    const bins: OverviewBin[] = [];
+    for (const { series, bins: seriesBins } of pages) {
+      const manifest = this.#manifests[series.manifestIndex];
+      if (manifest === undefined) throw corrupt("summary manifest is missing");
+      for (let index = 0; index < seriesBins.length; index += 1) {
+        const binStart = checkedAdd(
+          series.firstBinStart,
+          checkedMultiply(BigInt(index), series.binSpan, "summary bin start"),
+          "summary bin start",
+        );
+        const binEnd = checkedAdd(binStart, series.binSpan, "summary bin end");
+        if (binStart >= queryEnd || binEnd <= queryStart) continue;
+        const value = seriesBins[index];
+        if (value === undefined) throw corrupt("summary bin is missing");
+        bins.push({
+          reference: {
+            sample: manifest.sample,
+            contig: manifest.contig,
+            start: safeNumber(
+              binStart > manifest.start ? binStart : manifest.start,
+              "summary bin start",
+            ),
+            end: safeNumber(
+              binEnd < manifest.end ? binEnd : manifest.end,
+              "summary bin end",
+            ),
+            orientation: "forward",
+          },
+          level: series.level,
+          binSpan: safeNumber(series.binSpan, "summary bin span"),
+          ...value,
+        });
+      }
+    }
+    bins.sort(
+      (left, right) =>
+        left.reference.start - right.reference.start ||
+        left.reference.end - right.reference.end,
+    );
+    const completedTrace = trace && finishFeatureTrace(trace);
+    if (typeof query.trace === "function" && completedTrace !== undefined) {
+      query.trace(completedTrace);
+    }
+    return {
+      query: {
+        sample: query.sample,
+        contig: query.contig,
+        start: query.start,
+        end: query.end,
+        ...(query.maxBins === undefined ? {} : { maxBins: query.maxBins }),
+      },
+      bins,
+      ...(completedTrace === undefined ? {} : { trace: completedTrace }),
+    };
   }
 
   async query(query: RegionQuery): Promise<RegionResult> {
@@ -971,6 +1406,8 @@ class ArchiveReader implements PangenomeArchive {
       directoryEntries: this.#directoryCache.entries,
       payloadBytes: this.#payloadCache.bytes,
       payloadEntries: this.#payloadCache.entries,
+      extensionBytes: this.#extensionCache.bytes,
+      extensionEntries: this.#extensionCache.entries,
     };
   }
 
@@ -978,12 +1415,183 @@ class ArchiveReader implements PangenomeArchive {
     this.#assertOpen();
     this.#directoryCache.clear();
     this.#payloadCache.clear();
+    this.#extensionCache.clear();
+    this.#namedLociDescriptor = undefined;
+    this.#summaryDescriptor = undefined;
   }
 
   async close(): Promise<void> {
     if (!this.#closed) {
       this.#closed = true;
       await this.#source.close?.();
+    }
+  }
+
+  #extension(typeId: string): ExtensionEntry | undefined {
+    return this.#extensions.find(
+      (entry) => typeIdText(entry.typeId) === typeId,
+    );
+  }
+
+  async #loadNamedLociDescriptor(
+    signal?: AbortSignal,
+    trace?: MutableFeatureTrace,
+  ): Promise<NamedLociDescriptor> {
+    if (this.#namedLociDescriptor !== undefined) {
+      return this.#namedLociDescriptor;
+    }
+    const entry = this.#extension(NAMED_LOCI_TYPE_ID);
+    if (entry === undefined) {
+      throw new RangeError("archive does not contain a named-locus index");
+    }
+    const raw = await this.#readFeatureDecoded(
+      entry,
+      "extension-descriptor",
+      signal,
+      trace,
+    );
+    const started = performance.now();
+    const descriptor = decodeFeature(() =>
+      decodeNamedLociDescriptor(raw, this.#header.dataOffset, this.#sourceSize),
+    );
+    if (trace !== undefined) trace.decodeMs += performance.now() - started;
+    this.#namedLociDescriptor = descriptor;
+    return descriptor;
+  }
+
+  async #loadSummaryDescriptor(
+    signal?: AbortSignal,
+    trace?: MutableFeatureTrace,
+  ): Promise<SummaryPyramidDescriptor> {
+    if (this.#summaryDescriptor !== undefined) return this.#summaryDescriptor;
+    const entry = this.#extension(SUMMARY_PYRAMID_TYPE_ID);
+    if (entry === undefined) {
+      throw new RangeError(
+        "archive does not contain a multiscale summary pyramid",
+      );
+    }
+    const raw = await this.#readFeatureDecoded(
+      entry,
+      "extension-descriptor",
+      signal,
+      trace,
+    );
+    const started = performance.now();
+    const descriptor = decodeFeature(() =>
+      decodeSummaryDescriptor(raw, this.#header.dataOffset, this.#sourceSize),
+    );
+    validateSummaryDescriptor(descriptor, this.#manifests);
+    if (trace !== undefined) trace.decodeMs += performance.now() - started;
+    this.#summaryDescriptor = descriptor;
+    return descriptor;
+  }
+
+  async #readFeatureDecoded(
+    storage: {
+      offset: bigint;
+      encodedLength: bigint;
+      decodedLength: bigint;
+      codec: ChunkCodec;
+      integrity: Uint8Array;
+    },
+    layer: FeatureRequestRange["layer"],
+    signal?: AbortSignal,
+    trace?: MutableFeatureTrace,
+  ): Promise<Uint8Array> {
+    const key = `${storage.offset}:${storage.encodedLength}`;
+    let encoded = this.#extensionCache.get(key);
+    if (encoded === undefined) {
+      const length = safeNumber(
+        storage.encodedLength,
+        "extension encoded length",
+      );
+      const end = checkedAdd(
+        storage.offset,
+        storage.encodedLength,
+        "extension range end",
+      );
+      if (end > this.#sourceSize)
+        throw corrupt("extension range is outside the archive");
+      const bootstrapEnd = BigInt(this.#bootstrap.byteLength);
+      if (end <= bootstrapEnd) {
+        encoded = this.#bootstrap.slice(
+          safeNumber(storage.offset, "extension bootstrap offset"),
+          safeNumber(end, "extension bootstrap end"),
+        );
+      } else if (storage.offset >= bootstrapEnd) {
+        this.#recordFeatureRequest(storage.offset, length, layer, trace);
+        encoded = await this.#source.read(
+          storage.offset,
+          length,
+          signalOptions(signal),
+        );
+      } else {
+        const prefix = this.#bootstrap.slice(
+          safeNumber(storage.offset, "extension bootstrap offset"),
+        );
+        const suffixLength = safeNumber(
+          end - bootstrapEnd,
+          "extension suffix length",
+        );
+        this.#recordFeatureRequest(bootstrapEnd, suffixLength, layer, trace);
+        const suffix = await this.#source.read(
+          bootstrapEnd,
+          suffixLength,
+          signalOptions(signal),
+        );
+        encoded = new Uint8Array(length);
+        encoded.set(prefix);
+        encoded.set(suffix, prefix.byteLength);
+      }
+      const integrityStarted = performance.now();
+      const actual = blake3(encoded).subarray(0, 16);
+      if (
+        actual.some(
+          (byte, index) => byte !== (storage.integrity[index] as number),
+        )
+      ) {
+        throw corrupt("extension payload integrity mismatch");
+      }
+      if (trace !== undefined) {
+        trace.integrityMs += performance.now() - integrityStarted;
+      }
+      this.#extensionCache.set(key, encoded);
+    } else if (trace !== undefined) {
+      trace.cacheHits += 1;
+    }
+    const expectedLength = safeNumber(
+      storage.decodedLength,
+      "extension decoded length",
+    );
+    const decompressionStarted = performance.now();
+    const raw =
+      storage.codec === 0
+        ? encoded.slice()
+        : await this.#decompressor.decompress(
+            encoded,
+            expectedLength,
+            signalOptions(signal),
+          );
+    if (trace !== undefined) {
+      trace.decompressionMs += performance.now() - decompressionStarted;
+    }
+    if (raw.byteLength !== expectedLength) {
+      throw corrupt("extension decoded length mismatch");
+    }
+    return raw;
+  }
+
+  #recordFeatureRequest(
+    offset: bigint,
+    length: number,
+    layer: FeatureRequestRange["layer"],
+    trace?: MutableFeatureTrace,
+  ): void {
+    if (trace === undefined) return;
+    trace.requestRanges.push({ offset, length, layer });
+    if (!trace.requestedLayers.has(layer)) {
+      trace.requestedLayers.add(layer);
+      trace.dependencyRounds += 1;
     }
   }
 
@@ -1400,6 +2008,8 @@ export async function openPangenomeArchive(
     options.directoryCacheBytes ?? DEFAULT_DIRECTORY_CACHE_BYTES;
   const payloadCacheBytes =
     options.payloadCacheBytes ?? DEFAULT_PAYLOAD_CACHE_BYTES;
+  const extensionCacheBytes =
+    options.extensionCacheBytes ?? DEFAULT_EXTENSION_CACHE_BYTES;
   const maxRootBytes = options.maxRootBytes ?? DEFAULT_MAX_ROOT_BYTES;
   const maxChunkBytes = options.maxChunkBytes ?? DEFAULT_MAX_CHUNK_BYTES;
   const payloadCoalescingGapBytes =
@@ -1407,6 +2017,7 @@ export async function openPangenomeArchive(
   for (const [value, label] of [
     [directoryCacheBytes, "directoryCacheBytes"],
     [payloadCacheBytes, "payloadCacheBytes"],
+    [extensionCacheBytes, "extensionCacheBytes"],
     [maxRootBytes, "maxRootBytes"],
     [maxChunkBytes, "maxChunkBytes"],
     [payloadCoalescingGapBytes, "payloadCoalescingGapBytes"],
@@ -1480,25 +2091,27 @@ export async function openPangenomeArchive(
       bootstrap.slice(HEADER_BYTES, safeNumber(rootEnd, "root end")),
       header,
     );
-    if (header.extensionDirectoryLength !== 0n) {
-      decodeExtensionDirectory(
-        bootstrap.slice(
-          safeNumber(
-            header.extensionDirectoryOffset,
-            "extension directory offset",
-          ),
-          safeNumber(metadataEnd, "extension directory end"),
-        ),
-        header,
-        sourceSize,
-      );
-    }
+    const extensions =
+      header.extensionDirectoryLength === 0n
+        ? []
+        : decodeExtensionDirectory(
+            bootstrap.slice(
+              safeNumber(
+                header.extensionDirectoryOffset,
+                "extension directory offset",
+              ),
+              safeNumber(metadataEnd, "extension directory end"),
+            ),
+            header,
+            sourceSize,
+          );
     return new ArchiveReader(
       source,
       sourceSize,
       bootstrap,
       header,
       manifests,
+      extensions,
       options,
       openRanges,
       openDependencyRounds,

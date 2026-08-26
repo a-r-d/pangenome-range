@@ -12,9 +12,10 @@ A v1 object is one immutable static `.pngr` file:
 ```text
 64-byte PNGRNG01 header
 variable root manifest
-optional versioned extension directory and payloads
+versioned extension directory with default locus and summary descriptors
 contiguous fixed 4 KiB arithmetic directory pages
 independently compressed PNGRGN01 regional payloads
+independently compressed named-locus and summary pages
 ```
 
 Each reference manifest records its real sample and contig, coordinate span,
@@ -29,6 +30,22 @@ The root and some first directory pages normally fit in the 16 KiB bootstrap.
 After directory lookup, selected compressed payloads are fetched in one parallel
 round. All file offsets and lengths are unsigned 64-bit values; TypeScript keeps
 them as `bigint`.
+
+## Default viewer indexes
+
+The normal encoder emits two optional-in-the-decoder-sense extensions. The
+named-locus descriptor uses sorted key fences so exact or prefix search reads a
+small descriptor and only matching leaves. `--annotations <GFF3>` populates it;
+without external annotations it is a valid empty index. The annotation SHA-256
+and filename are embedded, and coordinates are explicitly bound to a real
+reference sample.
+
+The summary pyramid starts at `window_size * 64` bases and increases by four
+per level until one bin covers a reference fragment. Each requested scale is
+one independently compressed/checksummed series page. Counters are exact sums
+of accepted core tiles: covered bases, tile and byte counts, and tile-local
+node, edge, packed-record, and occurrence totals. They are not sample
+frequencies or globally unique graph counts.
 
 ## Regional representation
 
@@ -71,13 +88,14 @@ scratch bytes, and output size.
 
 Rust and TypeScript both:
 
-1. validate the v1 header and root;
+1. validate the v1 header, root, and registered extension descriptors;
 2. compute fixed directory pages arithmetically;
 3. reject invalid counts, offsets, codecs, padding, or object ranges;
 4. verify encoded payload BLAKE3-128, then decompress to the exact declared length;
 5. decode local records and reconstruct weighted traversal evidence;
 6. assemble selected topology and the real reference traversal;
-7. produce the same domain-separated v1 canonical result hash.
+7. produce the same domain-separated v1 canonical result hash;
+8. validate every known extension child range and checksum before atomic rename.
 
 The Rust verifier independently extracts the same source interval from GBZ and
 compares topology/reference semantics. It also re-extracts every selected tile
@@ -102,7 +120,9 @@ intentionally unsupported and must be regenerated.
 
 ## Current limitations
 
-- The upstream `gbz` source is still fully deserialized before tile work.
+- GFF3 named-locus ingestion currently sorts the selected searchable records in
+  memory; a disk-backed external sort is required before very large annotation
+  corpora should be treated as bounded-memory inputs.
 - The 72-entry dense-bucket limit has exact 72/73 tests; broader
   pathological-locus and retained fuzz campaigns remain release gates.
 - The current regional occurrence safety limit is 16,777,216 per tile; adaptive

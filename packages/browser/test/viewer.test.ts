@@ -181,6 +181,13 @@ function delayedArchive(): PangenomeArchive {
     formatVersion: 1,
     semantics: "anonymous-distinct-weighted-tile-paths",
     references: () => [],
+    capabilities: () => ({ namedLoci: false, multiscaleSummaries: false }),
+    searchLoci: async () => {
+      throw new Error("not implemented by viewer test archive");
+    },
+    summary: async () => {
+      throw new Error("not implemented by viewer test archive");
+    },
     query: async () => {
       throw new Error("not used");
     },
@@ -196,6 +203,8 @@ function delayedArchive(): PangenomeArchive {
       directoryEntries: 0,
       payloadBytes: 0,
       payloadEntries: 0,
+      extensionBytes: 0,
+      extensionEntries: 0,
     }),
     clearCaches: () => undefined,
     close: () => undefined,

@@ -259,6 +259,8 @@ fn print_help() {
     println!("  --max-queued-bytes N       raw+compressed queue cap");
     println!("  --source-access MODE       disk|loaded (default: disk)");
     println!("  --scratch-dir PATH         source-cache and research scratch location");
+    println!("  --annotations PATH         populate the default named-locus index from GFF3");
+    println!("  --annotation-sample NAME   bind GFF3 coordinates to this reference sample");
     println!("  --keep-partial             retain the sibling temp archive on failure");
     println!("  --progress auto|plain|json|off");
     println!("  --progress-interval-seconds N  chunk progress cadence (default: 5)");
@@ -723,6 +725,12 @@ fn encode(args: &mut impl Iterator<Item = String>) -> AppResult<()> {
             }
             "--scratch-dir" => {
                 options.scratch_dir = Some(PathBuf::from(option_value(args, &flag)?));
+            }
+            "--annotations" => {
+                options.annotations = Some(PathBuf::from(option_value(args, &flag)?));
+            }
+            "--annotation-sample" => {
+                options.annotation_sample = Some(option_value(args, &flag)?);
             }
             "--report" => options.report = Some(PathBuf::from(option_value(args, &flag)?)),
             "--keep-partial" => options.keep_partial = true,

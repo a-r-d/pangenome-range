@@ -1,0 +1,2 @@
+##gff-version 3
+chr6	pangenome-range	gene	31350900	31351500	.	+	.	ID=gene%3APNGR1;Name=PNGRTEST;Alias=RANGE1,PRG1

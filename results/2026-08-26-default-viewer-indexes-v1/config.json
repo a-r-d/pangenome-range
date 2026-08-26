@@ -1,0 +1,28 @@
+{
+  "schemaVersion": 1,
+  "runId": "2026-08-26-default-viewer-indexes-v1",
+  "host": "apollo",
+  "kernel": "Linux 6.17.0-41-generic x86_64",
+  "rustc": "1.97.1 (8bab26f4f 2026-07-14)",
+  "node": "v24.16.0",
+  "pnpm": "11.24.0",
+  "baseCommit": "813536e09b55ad9e7c524c5ee095ab8ea4d27f8d",
+  "source": {
+    "path": "test-data/mhc-10.gbz",
+    "bytes": 4511832,
+    "sha256": "a0b44236852d5659202a6855308020df05efd7c2be90645d341d94fb775df685"
+  },
+  "filter": {
+    "sample": "MHC-GRCh38",
+    "contig": "MHC",
+    "windowSize": 16384,
+    "codec": "zstd-3",
+    "sourceAccess": "disk"
+  },
+  "commands": [
+    "cargo run --release -p pangenome-range-cli -- encode test-data/mhc-10.gbz /tmp/pngr-feature-fixture.NS9gdz/mhc-t1.pngr --source-access disk --sample MHC-GRCh38 --contig MHC --threads 1 --progress off --report /tmp/pngr-feature-fixture.NS9gdz/mhc-t1.json",
+    "cargo run --release -p pangenome-range-cli -- encode test-data/mhc-10.gbz /tmp/pngr-feature-fixture.NS9gdz/mhc-t4.pngr --source-access disk --sample MHC-GRCh38 --contig MHC --threads 4 --progress off --report /tmp/pngr-feature-fixture.NS9gdz/mhc-t4.json",
+    "cargo run --release -p pangenome-range-cli -- verify /tmp/pngr-feature-fixture.NS9gdz/mhc-t4.pngr --against test-data/mhc-10.gbz --sample MHC-GRCh38 --contig MHC --start 100000 --end 200000 --report /tmp/pngr-feature-fixture.NS9gdz/mhc-verify.json",
+    "cargo run --release -p pangenome-range-cli -- validate /tmp/pngr-feature-fixture.NS9gdz/mhc-t4.pngr --mode full --workers 4 --progress off"
+  ]
+}

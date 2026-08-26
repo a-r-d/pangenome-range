@@ -31,12 +31,19 @@ export {
 } from "./sources.js";
 export type {
   ArchiveCacheStats,
+  ArchiveCapabilities,
   ChunkDecompressor,
   EdgeTable,
+  FeatureQueryTrace,
+  FeatureRequestRange,
   HaplotypeSemantics,
+  LocusHit,
+  LocusSearch,
+  LocusSearchResult,
   NodeTable,
   OpenPangenomeInput,
   OpenPangenomeOptions,
+  OverviewBin,
   PangenomeArchive,
   QueryCacheHits,
   QueryRequestRange,
@@ -48,6 +55,8 @@ export type {
   RegionQuery,
   RegionResult,
   RegionTile,
+  SummaryQuery,
+  SummaryResult,
   TileProvenance,
   WeightedTraversalTable,
 } from "./types.js";
@@ -145,6 +154,7 @@ export function openPangenome(
   options.signal?.throwIfAborted();
   validateOptionalCacheSize(options.directoryCacheBytes, "directoryCacheBytes");
   validateOptionalCacheSize(options.payloadCacheBytes, "payloadCacheBytes");
+  validateOptionalCacheSize(options.extensionCacheBytes, "extensionCacheBytes");
 
   return openPangenomeArchive(options);
 }

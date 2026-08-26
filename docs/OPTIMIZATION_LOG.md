@@ -594,3 +594,39 @@ and general encoder scratch remained zero.
 The whole HPRC gate is now complete. A 1000GP whole-source run remains
 unauthorized until a representative bounded pilot measures cache expansion,
 compact-index RSS, construction throughput, and required disk headroom.
+
+## 2026-08-26: default viewer indexes accepted at whole-HPRC scale
+
+The named-locus and multiscale-summary extension tranche was rerun on the exact
+retained HPRC source, host, disk-backed source adapter, eight-worker setting,
+256 MiB queue bound, 16 KiB windows, and zstd-3 codec. Source, output, and the
+fresh 11,921,858,427-byte ephemeral source cache were on `/dev/nvme0n1`; the
+repository was on `/dev/nvme1n1`.
+
+| Measurement | Before viewer indexes | With viewer indexes | Delta |
+| --- | ---: | ---: | ---: |
+| Archive | 8,828,788,418 B | 8,829,030,376 B | +241,958 B (+0.00274%) |
+| Bootstrap/index | 47,376,617 B | 47,376,777 B | +160 B |
+| Whole command | 499.340 s | 503.360 s | +4.020 s (+0.81%) |
+| Construction including validation | 369.561 s | 357.660 s | -11.902 s |
+| Pre-rename validation | 32.221 s | 28.743 s | -3.478 s |
+| Peak RSS | 608,060 KiB | 642,220 KiB | +34,160 KiB |
+
+The 160-byte bootstrap growth is exactly two extension-directory entries. The
+extension bodies occupy 241,798 encoded bytes and contain 591 summary series
+with 8,017 bins. The named-locus descriptor is empty because no GFF3 was
+provided. Feature finalization took 188.823 ms. The regional payload version,
+directory population, and 363,105 physical payloads did not change.
+
+This single-run comparison does not support claims from the faster construction
+or validation subphases; prebuild moved in the opposite direction and the
+0.81% whole-wall delta is ordinary system/cache noise. It does show no material
+feature regression. Mandatory validation passed all 11,559 directory pages and
+363,105 payloads before rename. The retained independent source oracle passed
+9/9 graph hashes and 58/58 checked tile-local haplotype sets.
+
+The source oracle is not part of the encoder measurement: its separate process
+fully loaded research/oracle structures, took 81.58 seconds, and peaked at
+12,973,152 KiB. Encoder peak remained 642,220 KiB (627.2 MiB), 92.68% below the
+fully loaded encoder baseline. Exact commands and raw-evidence paths are in
+`results/2026-08-26-default-viewer-indexes-whole-hprc/`.

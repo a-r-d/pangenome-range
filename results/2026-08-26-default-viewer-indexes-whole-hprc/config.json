@@ -1,0 +1,36 @@
+{
+  "schemaVersion": 1,
+  "runId": "2026-08-26-default-viewer-indexes-whole-hprc",
+  "date": "2026-08-26",
+  "host": "apollo",
+  "kernel": "Linux 6.17.0-41-generic x86_64",
+  "cpu": "Intel Core i7-10700, 8 cores / 16 threads",
+  "rustc": "1.97.1 (8bab26f4f 2026-07-14)",
+  "repositoryBaseCommit": "813536e09b55ad9e7c524c5ee095ab8ea4d27f8d",
+  "workingTree": "uncommitted default-viewer-indexes-v1 tranche",
+  "releaseBinarySha256": "73b3a578c5539cc113ddd66989dfc636c0886ec14946aaa69fa2833ef5c0b68a",
+  "source": {
+    "path": "/media/ard/eba76579-d702-4ff0-b5dd-eb503a726a4d/pangenome-range-data/sources/hprc-v2.1-mc-grch38.gbz",
+    "bytes": 5492627216,
+    "sha256": "11d6047f79575ffb83757462484bad134ed20928bd2c8171ec52e35a54976e2b"
+  },
+  "storage": {
+    "repository": "/dev/nvme1n1 xfs",
+    "sourceOutputAndScratch": "/dev/nvme0n1 xfs",
+    "availableBytesBeforeRun": 894402662400
+  },
+  "options": {
+    "sourceAccess": "disk",
+    "threads": 8,
+    "windowSize": 16384,
+    "codec": "zstd-3",
+    "maxQueuedBytes": 268435456,
+    "sourceReadCacheBytes": 67108864,
+    "annotations": null
+  },
+  "commands": [
+    "/usr/bin/time -v -o EXTERNAL_RUN_DIR/time-v.txt target/release/pangenome-range encode SOURCE.gbz EXTERNAL_RUN_DIR/hprc-v1-viewer-indexes-disk-t8.pngr --source-access disk --scratch-dir EXTERNAL_RUN_DIR/scratch --window-size 16384 --codec zstd-3 --threads 8 --max-queued-bytes 268435456 --progress plain --progress-interval-seconds 30 --report EXTERNAL_RUN_DIR/encode-report.json",
+    "/usr/bin/time -v -o EXTERNAL_RUN_DIR/verify-time-v.txt target/release/pangenome-range verify EXTERNAL_RUN_DIR/hprc-v1-viewer-indexes-disk-t8.pngr --against SOURCE.gbz --workload results/2026-08-25-record-preserving-v4/verification-workload.json --report EXTERNAL_RUN_DIR/verify-report.json"
+  ],
+  "rawEvidenceDirectory": "/media/ard/eba76579-d702-4ff0-b5dd-eb503a726a4d/pangenome-range-data/runs/2026-08-26-default-viewer-indexes-whole-hprc"
+}

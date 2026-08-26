@@ -115,6 +115,131 @@ MUST NOT interpret an unknown type by inspecting its payload. Extension types
 and decoded schemas require a normative registry entry before they can be
 emitted as required.
 
+### 3.2 Registered default feature extensions
+
+The reference encoder emits the following two entries for every newly encoded
+archive. Both entries have the required flag clear. "Emitted by default" and
+"required to decode the graph" are deliberately different: readers that do not
+implement these viewer features MUST be able to skip them and continue serving
+regional graph queries.
+
+| Type identifier (exactly 16 bytes) | Purpose |
+| --- | --- |
+| `named-loci-v1---` | binary-searchable names, aliases, and genomic intervals |
+| `summary-pyr-v1--` | arithmetic multiscale overview bins |
+
+Each extension-directory entry addresses a small descriptor. A known
+descriptor MAY own child page ranges elsewhere at or after `data_offset`.
+Every child range declares its own absolute offset, encoded length, decoded
+length, codec, and BLAKE3-128 value using the 56-byte sequence below:
+
+| Order | Type | Field |
+| ---: | --- | --- |
+| 1 | `u64` | absolute child-page offset |
+| 2 | `u64` | encoded length |
+| 3 | `u64` | decoded length, at most 64 MiB |
+| 4 | `u8` | archive codec |
+| 5 | 7 bytes | reserved, all zero |
+| 6 | 16 bytes | first 128 bits of BLAKE3 over encoded page bytes |
+
+Known-extension child pages MUST stay within the object, MUST NOT overlap any
+regional payload, extension descriptor, or other child page, and MUST pass
+their digest before decompression. A parser MUST consume every descriptor and
+page exactly. This is one bounded level of indirection, not a generic recursive
+extension graph.
+
+#### 3.2.1 Named loci
+
+The descriptor begins with:
+
+| Order | Type | Field |
+| ---: | --- | --- |
+| 1 | 8 bytes | magic `PNGLOC01` |
+| 2 | `u32` | version, exactly `1` |
+| 3 | `u32` | leaf-page count, at most 65,536 |
+| 4 | `u64` | total indexed-record count |
+| 5 | 32 bytes | SHA-256 of the exact annotation input, or all zero for an empty index |
+| 6 | byte string | annotation filename, or empty for an empty index |
+
+Each leaf descriptor then contains `first_key` and `last_key` byte strings,
+`u64 record_count`, and the 56-byte child-page sequence above. Leaf key ranges
+MUST be nonempty, strictly disjoint, and strictly increasing. Equal keys MUST
+NOT be split across leaves. Leaf counts MUST sum to the descriptor total. Zero
+records requires zero leaves; otherwise both counts are nonzero.
+
+A decoded leaf starts with magic `PNGLPG01`, `u32 version = 1`, and a nonzero
+`u32 record_count` no greater than 65,536. Each record contains, in order:
+
+1. normalized search key, matched input name, display name, stable identifier,
+   feature type, reference sample, and reference contig as seven byte strings;
+2. zero-based half-open `u64 start` and `u64 end`;
+3. strand byte (`0` unknown, `1` forward, `2` reverse) and seven zero bytes.
+
+Records are ordered by `(normalized_key, sample, contig, start, end,
+stable_id)`. The normalized key is formed by removing ASCII whitespace at both
+ends and mapping only ASCII `A` through `Z` to lowercase. No locale-sensitive
+or Unicode case folding is allowed. Exact search compares the full normalized
+key. Prefix search begins at the first leaf whose last key is not less than the
+normalized prefix and proceeds only while the leaf range can contain that
+prefix. Results MAY be capped by a caller limit, but truncation MUST be exposed.
+
+GFF3 input coordinates are converted from one-based inclusive to zero-based
+half-open. The input is explicitly bound to a real archive reference sample;
+an encoder MUST NOT infer a sample when more than one reference sample is
+present. The reference contig must match exactly. `Name`, `Alias`, `ID`,
+`gene_name`, `gene_id`, and `gene_synonym` values are searchable when present.
+An encoder MUST NOT download annotations implicitly or invent assembly,
+sample, or locus identity. Without explicit annotation input, the default
+entry is a valid empty descriptor.
+
+#### 3.2.2 Multiscale summaries
+
+The summary descriptor is a 32-byte header followed by fixed 88-byte series
+descriptors:
+
+| Offset | Size | Type | Field |
+| ---: | ---: | --- | --- |
+| 0 | 8 | bytes | magic `PNGSUM01` |
+| 8 | 4 | `u32` | version, exactly `1` |
+| 12 | 4 | `u32` | series count, 1 through 65,536 |
+| 16 | 8 | `u64` | base bin span |
+| 24 | 8 | bytes | reserved, all zero |
+
+Each series descriptor contains `u32 manifest_index`, `u32 level`, `u64
+bin_span`, `u64 first_bin_start`, `u64 bin_count`, then the 56-byte child-page
+sequence. Series are strictly ordered by `(manifest_index, level)`. Every
+manifest has contiguous levels starting at zero. The canonical encoder uses:
+
+```text
+base_bin_span = regional_window_size * 64
+bin_span(level) = base_bin_span * 4^level
+first_bin_start = floor(manifest.start / bin_span) * bin_span
+bin_count = floor((manifest.end - 1) / bin_span)
+            - floor(manifest.start / bin_span) + 1
+```
+
+Levels continue until the series has one bin. A summary page has a 48-byte
+header: magic `PNGSMP01`, `u32 version = 1`, `u32 record_size = 64`, its
+manifest index and level as two `u32` values, its bin span, first bin start, and
+bin count as three `u64` values. It is followed by exactly `bin_count`
+fixed-width records containing eight `u64` values:
+
+1. covered core reference bases;
+2. accepted regional tile count;
+3. encoded regional bytes;
+4. decoded regional bytes;
+5. tile-local node records;
+6. tile-local edge records;
+7. packed local GBWT records;
+8. packed-record occurrence count.
+
+Every accepted tile contributes exactly once, according to its core interval;
+halo context never creates another contribution. Higher levels are exact sums
+of base-bin values. Node, edge, GBWT-record, and occurrence fields are
+tile-record totals, not globally unique graph elements, individuals, allele
+frequencies, or globally stitchable haplotypes. Readers and viewers MUST label
+them accordingly.
+
 ## 4. Root index and reference manifests
 
 The root index begins with `u64 manifest_count`. Its current hard limit is
@@ -550,12 +675,26 @@ open(source, limits):
   require header.magic == "PNGRNG01" and header.version == 1
   require header.root_offset == 64 and header.root_length <= limits.root_bytes
   root_end = checked_add(64, header.root_length)
-  require root_end <= header.data_offset <= object_size
+  if header.extension_directory_length == 0:
+    require header.extension_directory_offset == 0
+    directory_start = root_end
+    extensions = []
+  else:
+    require header.extension_directory_offset == root_end
+    require header.extension_directory_length <= limits.extension_directory_bytes
+    directory_start = checked_add(root_end, header.extension_directory_length)
+    extension_bytes = reuse_bootstrap_or_read_exact(root_end,
+                                                    header.extension_directory_length,
+                                                    identity)
+    extensions = decode_extension_directory_exact(extension_bytes)
+    reject any unknown required extension
+  require root_end <= directory_start <= header.data_offset <= object_size
   root_bytes = reuse_bootstrap_or_read_exact(64, header.root_length, identity)
   manifests = decode_root_exact(root_bytes, header)
   require unique(manifest.sample, manifest.contig, manifest.start, manifest.end)
-  require contiguous_manifest_pages(manifests, root_end, header.data_offset)
-  return Archive(source, object_size, identity, header, manifests, bounded_caches)
+  require contiguous_manifest_pages(manifests, directory_start, header.data_offset)
+  return Archive(source, object_size, identity, header, manifests, extensions,
+                 bounded_caches)
 ```
 
 ### 16.2 Manifest selection
@@ -567,8 +706,9 @@ select_manifest(archive, sample, contig):
   return all matches in deterministic interval order
 ```
 
-Aliases and named loci are not implicit manifest matching rules. They require a
-separately specified, identity-bound metadata mechanism.
+Aliases and named loci are not implicit manifest matching rules. They are
+resolved only through the registered named-locus extension and return an exact
+manifest sample/contig/interval for a subsequent coordinate query.
 
 ### 16.3 Coordinate-to-directory lookup
 
@@ -665,6 +805,38 @@ tile_hash(tile):
          length-prefixed reference sample and contig || core_start || core_end ||
          u64_count + weighted traversals sorted by (weight, oriented visits),
          each encoded as weight || visit_count || oriented visits)
+```
+
+### 16.9 Named-locus search
+
+```text
+search_loci(archive, input, mode, filters, limit):
+  entry = archive.extension("named-loci-v1---") or report unsupported
+  descriptor_bytes = read_verify_decompress_exact(entry)
+  descriptor = decode_named_loci_descriptor_exact(descriptor_bytes)
+  key = ascii_trim_and_lowercase_A_through_Z(input)
+  require key is nonempty and 1 <= limit <= implementation_limit
+  leaves = binary-search descriptor fences for key or prefix range
+  records = parallel read_verify_decompress_decode_exact(leaves)
+  require every leaf count and first/last key agrees with its descriptor
+  matches = stable records satisfying exact-or-prefix key and exact filters
+  return first limit matches plus whether additional matches existed
+```
+
+### 16.10 Multiscale summary selection
+
+```text
+summary(archive, sample, contig, start, end, max_bins):
+  require a nonempty safe interval and bounded positive max_bins
+  manifests = exact overlapping manifest selection
+  entry = archive.extension("summary-pyr-v1--") or report unsupported
+  descriptor_bytes = read_verify_decompress_exact(entry)
+  descriptor = decode_summary_descriptor_exact(descriptor_bytes)
+  validate contiguous canonical levels for every manifest
+  choose the finest common level whose overlapping bin total <= max_bins,
+    or the coarsest available level if none qualifies
+  pages = parallel read_verify_decompress_decode_exact(selected series)
+  return arithmetic bins overlapping [start, end), retaining tile-total labels
 ```
 
 Every integer above is encoded as little-endian `u64`; every byte string is

@@ -4,6 +4,17 @@
 
 ### Changed
 
+- Added default `named-loci-v1---` and `summary-pyr-v1--` archive extensions.
+  The encoder always emits both descriptors, populates summaries from exact
+  core-tile counters, and accepts `--annotations <GFF3>` plus an explicit
+  reference-sample binding for names and aliases. The TypeScript reader exposes
+  lazy `searchLoci()` and `summary()` range APIs with a separate bounded cache.
+- Registered both binary schemas in the normative v1 specification. They use
+  independently compressed, BLAKE3-128-protected pages and remain skippable so
+  regional graph decoding never depends on viewer metadata.
+- Advanced encoder reports to schema 5 with feature page/count/byte metrics and
+  annotation input settings.
+
 - Made the project-owned disk-backed GBZ source the default production encoder
   path. Reference indexing, local context extraction, and exact packed-record
   handling no longer call `gbz-base`; the loaded adapter and `gbz-base` remain
@@ -21,8 +32,15 @@
   608,060 KiB (93.07%) while producing the identical 8,828,788,418-byte archive
   and SHA-256. Whole wall increased from 438.72 to 499.34 seconds (13.82%), with
   11,921,858,427 bytes of ephemeral source-cache disk.
+- After enabling both viewer indexes, the same source/options/host produced an
+  8,829,030,376-byte archive in 503.36 seconds at 642,220 KiB peak RSS. Relative
+  to the preceding disk-backed run this is +241,958 bytes (+0.00274%), +4.02
+  seconds (+0.81%), and +34,160 KiB RSS; all nine source-oracle queries passed.
 
 ### Compatibility
 
-- No `.pngr` format bytes changed. Rust/TypeScript conformance fixtures and
-  deterministic archives remain unchanged.
+- Newly encoded `.pngr` bytes change because the two standard extension
+  descriptors are now present by default. The archive magic and v1 regional
+  payload remain unchanged; pre-release research archives without these
+  optional entries still decode, and should be regenerated for the new viewer
+  capabilities.

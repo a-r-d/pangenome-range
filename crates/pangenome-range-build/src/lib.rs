@@ -9,6 +9,7 @@ use std::path::Path;
 
 mod disk_source;
 mod experiment;
+mod features;
 mod fixed;
 mod local_subgraph;
 mod scale;

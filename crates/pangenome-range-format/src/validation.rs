@@ -1,8 +1,10 @@
 use crate::binary::{invalid_data, u64_to_usize, usize_to_u64};
 use crate::{
     ArchiveEntry, DIRECTORY_PAGE_BYTES, FileRangeSource, MAX_DECODED_OCCURRENCES_PER_TILE,
-    RangeSource, RecordRegionalPayload, bootstrap, decode_directory_page, decompress,
-    directory_page_offset, validate_extension_payload,
+    NAMED_LOCI_TYPE_ID, RangeSource, RecordRegionalPayload, SUMMARY_PYRAMID_TYPE_ID, bootstrap,
+    decode_directory_page, decode_locus_page, decode_named_loci_descriptor,
+    decode_summary_descriptor, decode_summary_page, decompress, directory_page_offset,
+    validate_extension_page, validate_extension_payload,
 };
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
@@ -223,16 +225,113 @@ pub fn validate_archive_with_options(
 
     let mut extension_encoded_bytes = 0_u64;
     let mut extension_decoded_bytes = 0_u64;
+    let mut stored_ranges = entries
+        .iter()
+        .map(|entry| (entry.offset, entry.compressed_len, "regional payload"))
+        .collect::<Vec<_>>();
     for extension in &bootstrap.extensions {
         let encoded = source.read_range(extension.offset, u64_to_usize(extension.encoded_len)?)?;
         let decoded = validate_extension_payload(extension, &encoded)?;
+        stored_ranges.push((
+            extension.offset,
+            extension.encoded_len,
+            "extension descriptor",
+        ));
         extension_encoded_bytes = extension_encoded_bytes
             .checked_add(extension.encoded_len)
             .ok_or_else(|| invalid_data("extension encoded byte count overflow"))?;
         extension_decoded_bytes = extension_decoded_bytes
             .checked_add(usize_to_u64(decoded.len())?)
             .ok_or_else(|| invalid_data("extension decoded byte count overflow"))?;
+        if extension.type_id == NAMED_LOCI_TYPE_ID {
+            let descriptor =
+                decode_named_loci_descriptor(&decoded, header.data_offset, source_len)?;
+            let mut records = 0_u64;
+            for page in &descriptor.pages {
+                let encoded = source
+                    .read_range(page.storage.offset, u64_to_usize(page.storage.encoded_len)?)?;
+                let decoded = validate_extension_page(&page.storage, &encoded)?;
+                let loci = decode_locus_page(&decoded)?;
+                if usize_to_u64(loci.len())? != page.record_count
+                    || loci.first().map(|record| record.normalized_key.as_str())
+                        != Some(page.first_key.as_str())
+                    || loci.last().map(|record| record.normalized_key.as_str())
+                        != Some(page.last_key.as_str())
+                {
+                    return Err(invalid_data("named-locus page differs from its descriptor"));
+                }
+                records = records
+                    .checked_add(page.record_count)
+                    .ok_or_else(|| invalid_data("named-locus record count overflow"))?;
+                add_extension_page_metrics(
+                    &page.storage,
+                    decoded.len(),
+                    &mut extension_encoded_bytes,
+                    &mut extension_decoded_bytes,
+                    &mut stored_ranges,
+                    "named-locus page",
+                )?;
+            }
+            if records != descriptor.record_count {
+                return Err(invalid_data("named-locus descriptor count mismatch"));
+            }
+        } else if extension.type_id == SUMMARY_PYRAMID_TYPE_ID {
+            let descriptor = decode_summary_descriptor(&decoded, header.data_offset, source_len)?;
+            let mut next_level = vec![0_u32; bootstrap.root.manifests.len()];
+            for series in &descriptor.series {
+                let manifest_index = usize::try_from(series.manifest_index)
+                    .map_err(|_| invalid_data("summary manifest index does not fit usize"))?;
+                let manifest = bootstrap
+                    .root
+                    .manifests
+                    .get(manifest_index)
+                    .ok_or_else(|| invalid_data("summary manifest index is out of range"))?;
+                if series.level != next_level[manifest_index] {
+                    return Err(invalid_data("summary levels are not contiguous"));
+                }
+                next_level[manifest_index] = next_level[manifest_index]
+                    .checked_add(1)
+                    .ok_or_else(|| invalid_data("summary level overflow"))?;
+                let expected_span = descriptor
+                    .base_bin_span
+                    .checked_mul(
+                        4_u64
+                            .checked_pow(series.level)
+                            .ok_or_else(|| invalid_data("summary level span overflow"))?,
+                    )
+                    .ok_or_else(|| invalid_data("summary level span overflow"))?;
+                let expected_first = (manifest.start / series.bin_span) * series.bin_span;
+                let expected_last = ((manifest.end - 1) / series.bin_span) * series.bin_span;
+                let expected_count = ((expected_last - expected_first) / series.bin_span) + 1;
+                if series.bin_span != expected_span
+                    || series.first_bin_start != expected_first
+                    || series.bin_count != expected_count
+                {
+                    return Err(invalid_data("summary series dimensions are not canonical"));
+                }
+                let encoded = source.read_range(
+                    series.storage.offset,
+                    u64_to_usize(series.storage.encoded_len)?,
+                )?;
+                let decoded = validate_extension_page(&series.storage, &encoded)?;
+                decode_summary_page(&decoded, series)?;
+                add_extension_page_metrics(
+                    &series.storage,
+                    decoded.len(),
+                    &mut extension_encoded_bytes,
+                    &mut extension_decoded_bytes,
+                    &mut stored_ranges,
+                    "summary page",
+                )?;
+            }
+            if next_level.contains(&0) {
+                return Err(invalid_data(
+                    "summary descriptor does not cover every reference manifest",
+                ));
+            }
+        }
     }
+    validate_stored_ranges(&mut stored_ranges)?;
 
     let max_job_bytes = entries.iter().try_fold(0_u64, |maximum, entry| {
         estimated_worker_bytes(entry, options.mode).map(|bytes| maximum.max(bytes))
@@ -348,6 +447,43 @@ pub fn validate_archive_with_options(
         reconstruction_worker_ms: aggregate.reconstruction_ms,
         validation_wall_ms: started.elapsed().as_secs_f64() * 1_000.0,
     })
+}
+
+fn add_extension_page_metrics(
+    page: &crate::ExtensionPage,
+    decoded_len: usize,
+    encoded_total: &mut u64,
+    decoded_total: &mut u64,
+    ranges: &mut Vec<(u64, u64, &'static str)>,
+    label: &'static str,
+) -> io::Result<()> {
+    *encoded_total = encoded_total
+        .checked_add(page.encoded_len)
+        .ok_or_else(|| invalid_data("extension encoded byte count overflow"))?;
+    *decoded_total = decoded_total
+        .checked_add(usize_to_u64(decoded_len)?)
+        .ok_or_else(|| invalid_data("extension decoded byte count overflow"))?;
+    ranges.push((page.offset, page.encoded_len, label));
+    Ok(())
+}
+
+fn validate_stored_ranges(ranges: &mut [(u64, u64, &'static str)]) -> io::Result<()> {
+    ranges.sort_unstable_by_key(|(offset, length, _)| (*offset, *length));
+    let mut previous_end = None;
+    let mut previous_label = "";
+    for (offset, length, label) in ranges {
+        let end = offset
+            .checked_add(*length)
+            .ok_or_else(|| invalid_data("stored range overflow"))?;
+        if previous_end.is_some_and(|previous| *offset < previous) {
+            return Err(invalid_data(format!(
+                "stored {label} overlaps the preceding {previous_label}"
+            )));
+        }
+        previous_end = Some(end);
+        previous_label = label;
+    }
+    Ok(())
 }
 
 /// Registers one physical payload and returns `true` only for its first
