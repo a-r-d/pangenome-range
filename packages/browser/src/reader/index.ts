@@ -27,11 +27,9 @@ export {
 } from "./sources.js";
 export type {
   ArchiveCacheStats,
-  CanonicalPathTable,
   ChunkDecompressor,
   EdgeTable,
   HaplotypeSemantics,
-  NamedPathTable,
   NodeTable,
   OpenPangenomeInput,
   OpenPangenomeOptions,
@@ -67,7 +65,7 @@ const CONSTRUCTION_CONTEXT = 100;
 const textDecoder = new TextDecoder();
 
 /** Dispatches the versioned archive header without truncating any offsets. */
-export function detectArchiveVersion(header: Uint8Array): 3 | 4 {
+export function detectArchiveVersion(header: Uint8Array): 1 {
   if (header.byteLength < 12) {
     throw new RangeError("archive header is shorter than 12 bytes");
   }
@@ -77,11 +75,8 @@ export function detectArchiveVersion(header: Uint8Array): 3 | 4 {
     header.byteOffset,
     header.byteLength,
   ).getUint32(8, true);
-  if (magic === "PNGRNG04" && version === 4) {
-    return 4;
-  }
-  if (magic === "PNGRNG03" && version === 3) {
-    return 3;
+  if (magic === "PNGRNG01" && version === 1) {
+    return 1;
   }
   throw new UnsupportedArchiveVersionError(
     `unsupported pangenome-range archive magic ${JSON.stringify(magic)} version ${version}`,

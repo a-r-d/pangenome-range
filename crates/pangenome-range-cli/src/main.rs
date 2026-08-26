@@ -436,7 +436,7 @@ fn encode(args: &mut impl Iterator<Item = String>) -> AppResult<()> {
                     "anonymous-distinct-weighted-tile-paths" | "distinct"
                 ) {
                     return Err(format!(
-                        "unsupported haplotype mode '{value}'; scalable v4 encode requires anonymous-distinct-weighted-tile-paths"
+                        "unsupported haplotype mode '{value}'; scalable v1 encode requires anonymous-distinct-weighted-tile-paths"
                     )
                     .into());
                 }
@@ -495,7 +495,7 @@ fn benchmark_encoder_scale(args: &mut impl Iterator<Item = String>) -> AppResult
     if let Some(extra) = args.next() {
         return Err(format!("unexpected argument '{extra}'").into());
     }
-    let archive = work_root.join(&run_id).join("fixed-v4-16k-zstd3.pngr");
+    let archive = work_root.join(&run_id).join("fixed-v1-16k-zstd3.pngr");
     let options = EncoderScaleOptions {
         input,
         archive,

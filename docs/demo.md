@@ -7,7 +7,7 @@ import PackageVersion from './components/PackageVersion.vue'
 <PackageVersion />
 
 The interactive range-query UI is intentionally a placeholder. The public
-package now includes the archive-v4 reader, strict HTTP range source, zstd
+package now includes the v1-only reader, strict HTTP range source, zstd
 decompression, and regional decoder; the viewer has not been implemented. No
 production archive URL is hardcoded here.
 

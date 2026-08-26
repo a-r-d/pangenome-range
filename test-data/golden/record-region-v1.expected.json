@@ -1,8 +1,8 @@
 {
-  "payloadMagic": "PNGRGN04",
-  "payloadVersion": 4,
-  "payloadBlake3": "46dbb25184ffadfb063a41665f6350b9b47f42a0021d46cf747ae72271db7dc6",
-  "tileCanonicalBlake3": "4802ea7b9f9821318089c07c4647702218f6076ea7d987be904eca7c4bde3b7b",
+  "payloadMagic": "PNGRGN01",
+  "payloadVersion": 1,
+  "payloadBlake3": "3cb0198e12e5cbaccb81131b9d93094ecfe9b03fc6dd13cc88c44210b1a282e7",
+  "tileCanonicalBlake3": "283a80ba58d2841b5dc39b91b6623698f84aeec100938793db7bb39f65f6aabb",
   "core": [100, 102],
   "semantics": "anonymous-distinct-weighted-tile-paths",
   "reference": {

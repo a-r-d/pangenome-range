@@ -17,9 +17,8 @@ import type {
   RegionTile,
 } from "./types.js";
 
-const ARCHIVE_MAGIC = "PNGRNG04";
-const ARCHIVE_MAGIC_V3 = "PNGRNG03";
-const ARCHIVE_VERSION = 4;
+const ARCHIVE_MAGIC = "PNGRNG01";
+const ARCHIVE_VERSION = 1;
 const HEADER_BYTES = 64;
 const BOOTSTRAP_BYTES = 16 * 1024;
 const DIRECTORY_PAGE_BYTES = 4 * 1024;
@@ -284,11 +283,7 @@ function finishTrace(
     selectedChunks: tiles.length,
     selectedNodes,
     selectedTraversals: tiles.reduce(
-      (total, tile) =>
-        total +
-        (tile.haplotypes.kind === "named-paths"
-          ? tile.haplotypes.pathIds.length
-          : tile.haplotypes.weights.length),
+      (total, tile) => total + tile.haplotypes.weights.length,
       0,
     ),
     canonicalHash,
@@ -341,11 +336,9 @@ function decodeHeader(bytes: Uint8Array): Header {
   const entryCount = reader.u64();
   const dataOffset = reader.u64();
   assertZero(reader.take(16), "archive header reserved bytes");
-  const supportedVersion =
-    (magic === ARCHIVE_MAGIC && version === ARCHIVE_VERSION) ||
-    (magic === ARCHIVE_MAGIC_V3 && version === 3);
   if (
-    !supportedVersion ||
+    magic !== ARCHIVE_MAGIC ||
+    version !== ARCHIVE_VERSION ||
     headerLength !== HEADER_BYTES ||
     rootOffset !== BigInt(HEADER_BYTES)
   ) {
@@ -649,9 +642,7 @@ function zstdFrameContentSize(compressed: Uint8Array): bigint {
 
 class ArchiveReader implements PangenomeArchive {
   readonly formatVersion: number;
-  readonly semantics:
-    | "named-paths-v3"
-    | "anonymous-distinct-weighted-tile-paths";
+  readonly semantics: "anonymous-distinct-weighted-tile-paths";
   readonly #source: RangeSource;
   readonly #sourceSize: bigint;
   readonly #bootstrap: Uint8Array;
@@ -677,10 +668,7 @@ class ArchiveReader implements PangenomeArchive {
     openDependencyRounds: number,
   ) {
     this.formatVersion = header.version;
-    this.semantics =
-      header.version === 3
-        ? "named-paths-v3"
-        : "anonymous-distinct-weighted-tile-paths";
+    this.semantics = "anonymous-distinct-weighted-tile-paths";
     this.#source = source;
     this.#sourceSize = sourceSize;
     this.#bootstrap = bootstrap;

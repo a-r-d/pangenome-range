@@ -88,8 +88,8 @@ function buildSyntheticArchive(compressedPayload, rawPayloadLength) {
   assert.equal(root.length, provisionalRoot.length);
   const dataOffset = rootEnd + (dummy.pageCount + target.pageCount) * pageBytes;
   const header = Buffer.alloc(64);
-  header.write("PNGRNG04", 0, "ascii");
-  header.writeUInt32LE(4, 8);
+  header.write("PNGRNG01", 0, "ascii");
+  header.writeUInt32LE(1, 8);
   header.writeUInt32LE(64, 12);
   header.writeBigUInt64LE(64n, 16);
   header.writeBigUInt64LE(BigInt(root.length), 24);
@@ -228,13 +228,13 @@ if (isFullArchive) {
 } else {
   const compressed = decodeHex(
     await readFile(
-      resolve(workspace, "test-data/golden/record-region-v4.zstd3.hex"),
+      resolve(workspace, "test-data/golden/record-region-v1.zstd3.hex"),
       "utf8",
     ),
   );
   const raw = decodeHex(
     await readFile(
-      resolve(workspace, "test-data/golden/record-region-v4.hex"),
+      resolve(workspace, "test-data/golden/record-region-v1.hex"),
       "utf8",
     ),
   );
@@ -250,7 +250,7 @@ if (isFullArchive) {
 
 const rangeOrigin = await createRangeOrigin({
   ...(archivePath === undefined ? { archiveBytes } : { archivePath }),
-  etag: `"${args.etag ?? "synthetic-record-v4"}"`,
+  etag: `"${args.etag ?? "synthetic-record-v1"}"`,
 });
 const moduleOrigin = await createModuleOrigin();
 const measurements = [];
@@ -264,7 +264,7 @@ try {
       rangeOrigin,
       query,
     );
-    assert.equal(measurement.formatVersion, 4);
+    assert.equal(measurement.formatVersion, 1);
     assert.equal(
       measurement.semantics,
       "anonymous-distinct-weighted-tile-paths",

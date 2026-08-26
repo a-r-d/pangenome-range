@@ -71,10 +71,7 @@ export interface ReferenceDescriptor {
   readonly orientation?: "forward" | "reverse";
 }
 
-export type HaplotypeSemantics =
-  | "named-paths-v3"
-  | "anonymous-all-tile-paths"
-  | "anonymous-distinct-weighted-tile-paths";
+export type HaplotypeSemantics = "anonymous-distinct-weighted-tile-paths";
 
 export interface NodeTable {
   readonly ids: BigUint64Array;
@@ -92,26 +89,6 @@ export interface WeightedTraversalTable {
   readonly traversalOffsets: Uint32Array;
   readonly orientedNodes: BigUint64Array;
   readonly weights: BigUint64Array;
-}
-
-export interface NamedPathTable {
-  readonly kind: "named-paths";
-  readonly samples: readonly string[];
-  readonly contigs: readonly string[];
-  readonly pathIds: BigUint64Array;
-  readonly sampleIds: Uint32Array;
-  readonly contigIds: Uint32Array;
-  readonly haplotypes: BigUint64Array;
-  readonly fragments: BigUint64Array;
-  readonly referenceFlags: Uint8Array;
-  readonly visitOffsets: Uint32Array;
-  readonly visitIndices: BigUint64Array;
-  readonly orientedNodes: BigUint64Array;
-  readonly referenceVisitPathIds: BigUint64Array;
-  readonly referenceVisitIndices: BigUint64Array;
-  readonly referenceVisitStarts: BigUint64Array;
-  readonly referenceVisitEnds: BigUint64Array;
-  readonly referenceVisitNodes: BigUint64Array;
 }
 
 export interface TileProvenance {
@@ -132,7 +109,7 @@ export interface RegionTile {
   readonly semantics: HaplotypeSemantics;
   readonly nodes: NodeTable;
   readonly topology: EdgeTable;
-  readonly haplotypes: NamedPathTable | WeightedTraversalTable;
+  readonly haplotypes: WeightedTraversalTable;
   readonly provenance: TileProvenance;
   /** Flat table aliases retained for the initial private reader API. */
   readonly archiveOffset: bigint;
@@ -152,17 +129,6 @@ export interface RegionGraph {
   readonly nodes: NodeTable;
   readonly edges: EdgeTable;
   readonly referenceTraversal: BigUint64Array;
-  readonly paths?: CanonicalPathTable;
-}
-
-export interface CanonicalPathTable {
-  readonly samples: readonly string[];
-  readonly contigs: readonly string[];
-  readonly haplotypes: BigUint64Array;
-  readonly fragments: BigUint64Array;
-  readonly referenceFlags: Uint8Array;
-  readonly traversalOffsets: Uint32Array;
-  readonly orientedNodes: BigUint64Array;
 }
 
 export interface QueryRequestRange {

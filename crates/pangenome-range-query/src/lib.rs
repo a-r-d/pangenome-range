@@ -45,8 +45,6 @@ pub struct CanonicalPath {
 /// Declared identity and multiplicity semantics for haplotypes in an archive.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub enum HaplotypeSemantics {
-    /// Legacy v3 research payloads with globally named paths.
-    NamedPathsV3,
     /// Every anonymous local traversal is stored separately with weight one.
     AnonymousAllTilePaths,
     /// Exact anonymous local traversals are collapsed with integer weights.
@@ -58,7 +56,6 @@ impl HaplotypeSemantics {
     #[must_use]
     pub const fn label(self) -> &'static str {
         match self {
-            Self::NamedPathsV3 => "named-paths-v3",
             Self::AnonymousAllTilePaths => "anonymous-all-tile-paths",
             Self::AnonymousDistinctWeightedTilePaths => "anonymous-distinct-weighted-tile-paths",
         }
@@ -100,12 +97,12 @@ impl CanonicalHaplotypeTile {
             .try_fold(0_u64, |total, item| total.checked_add(item.weight))
     }
 
-    /// Stable v4 digest of tile provenance and weighted traversals.
+    /// Stable v1 digest of tile provenance and weighted traversals.
     #[must_use]
     pub fn canonical_hash(&self) -> blake3::Hash {
         let normalized = self.normalized();
         let mut hasher = blake3::Hasher::new();
-        hasher.update(b"pangenome-range canonical haplotype tile v4\0");
+        hasher.update(b"pangenome-range canonical haplotype tile v1\0");
         put_bytes(&mut hasher, normalized.reference_sample.as_bytes());
         put_bytes(&mut hasher, normalized.reference_contig.as_bytes());
         put_u64(&mut hasher, normalized.core_start);
@@ -155,7 +152,7 @@ impl CanonicalSubgraph {
     pub fn canonical_hash(&self) -> blake3::Hash {
         let normalized = self.normalized();
         let mut hasher = blake3::Hasher::new();
-        hasher.update(b"pangenome-range canonical query graph v4\0");
+        hasher.update(b"pangenome-range canonical query graph v1\0");
 
         put_u64(&mut hasher, normalized.nodes.len() as u64);
         for (id, sequence) in &normalized.nodes {

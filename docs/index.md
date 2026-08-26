@@ -19,7 +19,7 @@ features:
   - title: Native construction
     details: The Rust CLI owns encoding, verification, and reproducible research measurements.
   - title: Portable access
-    details: The private TypeScript package opens local or remote archive-v4 objects, performs strict range reads, and decodes regional tiles.
+    details: The private TypeScript package opens local or remote file-format-v1 objects, performs strict range reads, and decodes regional tiles.
 ---
 
 <script setup>
@@ -28,7 +28,8 @@ import PackageVersion from './components/PackageVersion.vue'
 
 <PackageVersion />
 
-The current archive v4 is a research prototype, not a stable interchange format.
+The current file-format v1 is a pre-release research prototype, not a stable
+interchange format. Older research objects are intentionally unsupported.
 It removes the rejected global occurrence index and exposes anonymous weighted
 tile-local haplotypes explicitly; see the
 [semantics decision](./HAPLOTYPE_SEMANTICS.md) and
@@ -36,6 +37,7 @@ tile-local haplotypes explicitly; see the
 implemented and exercised through real cross-origin range responses; the
 interactive viewer remains future work.
 
-Start with the [architecture](./ARCHITECTURE.md), the
+Start with the [normative file-format v1](./FILE_FORMAT_V1.md), the
+[architecture](./ARCHITECTURE.md), the
 [fixed-window archive description](./FIXED_WINDOW_ARCHIVE.md), and the
 [benchmark definitions](./BENCHMARKS.md).

@@ -47,21 +47,19 @@ reintroduced under another name.
 
 ## Current status and known failure
 
-The current archive v3 work already demonstrates useful ideas:
+The current pre-release file-format v1 implementation demonstrates:
 
 - a 64-byte header;
 - a small bootstrap/root;
 - arithmetic lookup into fixed 4 KiB leaf pages;
 - independently compressed regional payloads;
 - adaptive splitting;
-- packed numeric regional data;
+- exact packed local GBWT records reconstructed on read;
 - a reusable range reader and directory cache.
 
-The current large-input encoder path is unacceptable because it builds a global
-SQLite occurrence table with one row for every path/node visit before writing a
-single payload. On the recorded HPRC v2.1 run, that temporary table had already
-reached roughly 157 GB after 47 minutes while the final payload spool was still
-empty. This is a rejected architecture.
+The former global SQLite occurrence table is a rejected architecture. On the
+recorded HPRC v2.1 run it reached roughly 157 GB after 47 minutes before the
+first payload. It is not part of the current encoder and must not return.
 
 The upstream `gbz`/`simple-sds` path also currently deserializes the complete GBZ
 into memory. That is a separate problem. Remove the global occurrence table
@@ -122,9 +120,9 @@ first; investigate lazy/memory-mapped source access independently.
 
 This is the most important modeling boundary in the project.
 
-The current v3 canonical model uses globally named paths. The scalable upstream
-local extractor can preserve local traversal multiplicity but cannot efficiently
-identify arbitrary non-reference GBWT paths by their true sample/path ID.
+The current v1 model preserves a real reference path and reconstructs exact
+anonymous tile-local traversal multiplicity from packed local GBWT records. It
+does not identify arbitrary non-reference paths by a true global sample/path ID.
 
 Therefore:
 
@@ -142,12 +140,9 @@ Therefore:
   or sidecar with its own byte cost, construction cost, query cost, and format
   version. Do not reintroduce a row-per-visit index.
 
-Recommended semantic labels:
-
-- `named-paths-v3` — legacy/research compatibility only;
-- `anonymous-all-tile-paths` — every local traversal, no global identity;
-- `anonymous-distinct-weighted-tile-paths` — distinct local traversals plus
-  multiplicity; preferred scalable default if validated.
+The only serialized semantic label is
+`anonymous-distinct-weighted-tile-paths`. `anonymous-all-tile-paths` may exist
+only as an internal source-oracle mode; it is not a second file-format payload.
 
 A reader must expose the semantic label to callers.
 
@@ -256,22 +251,24 @@ one as part of ordinary tests or CI.
 
 Current research objects use `.pngr`.
 
-Any incompatible change requires all of the following in the same tranche:
+While the project is unreleased and pre-v1, an incompatible change replaces
+file-format v1 in place. It requires all of the following in the same tranche:
 
-1. a new archive and/or regional payload version;
+1. updated v1 magic/layout implementation without a compatibility decoder;
 2. updated normative format documentation;
 3. a Rust encoder and reader;
-4. TypeScript version dispatch or a clear unsupported-version error;
+4. TypeScript v1 decoding and clear unsupported-version errors;
 5. golden binary fixtures;
 6. expected decoded JSON/canonical hashes;
 7. malformed/truncated/corrupt fixture tests;
-8. migration/compatibility notes.
+8. explicit notes that old research archives must be regenerated.
 
-Never reinterpret old magic/version bytes with new semantics.
+Package semantic versions are independent of file-format v1. Do not introduce a
+v2 compatibility stack before a deliberate stable-format release.
 
 Keep index and payload parsing bounds-checked. Validate counts before allocating.
 Reject integer overflow, out-of-file offsets, overlapping invalid sections,
-unknown codecs, impossible dictionary indices, and decompressed-length mismatch.
+unknown codecs, impossible record offsets, and decompressed-length mismatch.
 
 ---
 

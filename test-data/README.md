@@ -67,21 +67,21 @@ small-fixture decision recorded here; re-check the source record's license and
 the applicable HPRC Data Use Protocol before redistributing the GBZ or derived
 data outside this research repository.
 
-## Cross-language v4 golden fixtures
+## Current v1 golden fixtures
 
-`golden/record-region-v4.hex` is the normative uncompressed `PNGRGN04`
-regional payload. `record-region-v4.zstd3.hex` is its zstd level-3 archive
-representation, and `record-region-v4.expected.json` records the decoded
-reference, topology, sequences, weighted traversal, and BLAKE3 digest. Rust and
+`golden/record-region-v1.hex` is the normative uncompressed `PNGRGN01`
+regional payload. `record-region-v1.zstd3.hex` is its zstd level-3 stored
+representation, and `record-region-v1.expected.json` records the decoded
+reference, topology, sequences, weighted traversal, and BLAKE3 digests. Rust and
 TypeScript decode the same bytes.
 
-`golden/record-archive-v4.pngr` is a 7,354-byte deterministic archive containing
+`golden/record-archive-v1.pngr` is a 7,354-byte deterministic archive containing
 one 1,024 bp CHM13 chr6 tile derived from the tiny MICB/KIR3DL1 source. Its
-source checksum, archive checksum, exact command, interval, codec, and versions
-are retained in `record-archive-v4.json`. The Rust test suite rebuilds it and
-checks the decoded query against the source oracle.
+source checksum, archive checksum, exact command, interval, codec, and format
+identifiers are retained in `record-archive-v1.json`. The Rust test suite
+rebuilds it and checks the decoded query against the source oracle.
 
-## Complete retained-version conformance matrix
+## Cross-language conformance fixture
 
 `conformance/manifest.json` is generated deterministically by:
 
@@ -89,22 +89,23 @@ checks the decoded query against the source oracle.
 cargo run --release -p pangenome-range-cli -- fixtures export test-data/conformance
 ```
 
-It describes three synthetic two-node fixtures with no external source data:
+It describes exactly one synthetic two-node fixture:
 
 | Fixture | Archive | Regional payload | Semantics |
 |---|---:|---:|---|
-| `archive-v3-named-v2` | `PNGRNG03` / 3 | `PNGRGN02` / 2 | `named-paths-v3` |
-| `archive-v4-weighted-v3` | `PNGRNG04` / 4 | `PNGRGN03` / 3 | distinct weighted anonymous tile paths |
-| `archive-v4-record-v4` | `PNGRNG04` / 4 | `PNGRGN04` / 4 | reconstructed distinct weighted anonymous tile paths |
+| `format-v1` | `PNGRNG01` / 1 | `PNGRGN01` / 1 | reconstructed distinct weighted anonymous tile paths |
 
-Each row includes a complete `.pngr`, isolated header/root/directory/raw
+The fixture includes a complete `.pngr`, isolated header/root/directory/raw
 payload bytes, Rust zstd frames at levels 1/3/6, SHA-256 checksums, expected
-references/tile data, and the Rust canonical hash. Rust exports and rereads the
-matrix; TypeScript decodes every artifact and matches those expectations.
+references/tile data, and the Rust canonical hash. Rust exports and rereads it;
+TypeScript decodes every artifact and matches the same expectations.
 
-`conformance/micb-kir3dl1-reader-v4.pngr` is the 164,266-byte Node integration
-archive derived from the pinned Tier 1 source. Its sidecar records the source
-and archive checksums, exact deterministic encode command, versions, query
+`conformance/micb-kir3dl1-reader-v1.pngr` is the 164,259-byte Node integration
+archive derived from the pinned Tier 1 source. Its sidecar records source and
+archive checksums, the deterministic encode command, format identifiers, query
 coordinates, canonical hashes, and exact expected HTTP ranges. It contains
-eight record-preserving v4 chunks and is retained only as compact integration
-evidence; the source GBZ remains ignored and fetched with explicit provenance.
+eight record-preserving v1 chunks and is retained only as compact integration
+evidence; the source GBZ remains fetched with explicit provenance.
+
+Older research fixtures are intentionally absent. They are not compatibility
+test cases and their archives must be regenerated.

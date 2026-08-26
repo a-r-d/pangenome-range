@@ -1,9 +1,9 @@
 {
   "fixtures": [
     {
-      "archiveVersion": 3,
+      "archiveVersion": 1,
       "expected": {
-        "canonicalHash": "c56f5442a8a29da7de49c70135e168c863187712a366684f972429d48c360528",
+        "canonicalHash": "bf984cbc5b106306ab848fdb3c00e8b4124370006d3601c9d4873ae3a6fa1724",
         "query": {
           "context": 100,
           "contig": "chr1",
@@ -26,91 +26,6 @@
             "2",
             "4"
           ],
-          "namedPathIds": [
-            "7",
-            "8"
-          ],
-          "nodeIds": [
-            "1",
-            "2"
-          ],
-          "nodeSequences": [
-            "A",
-            "C"
-          ],
-          "referenceTraversal": [
-            "2",
-            "4"
-          ],
-          "semantics": "named-paths-v3",
-          "weightedTraversals": []
-        }
-      },
-      "files": {
-        "archive-v3-named-v2.directory.bin": {
-          "bytes": 4096,
-          "sha256": "6564e9bfa2470403b45c0ace876d50e70b11088c1cc9064110bbb9d43b843226"
-        },
-        "archive-v3-named-v2.header.bin": {
-          "bytes": 64,
-          "sha256": "1ab7a09f5350335f439320ca95d840a528c9f7ee9d3858501ad576c7d9c51694"
-        },
-        "archive-v3-named-v2.payload.raw": {
-          "bytes": 388,
-          "sha256": "9d754dc929cb6917aee3d4f50528215f44ce4e6a4675fd1e15bd69158a977295"
-        },
-        "archive-v3-named-v2.payload.zstd1": {
-          "bytes": 149,
-          "sha256": "2194e390a981b455e9bd5210ceb9113e4b3c088b2e96f10162d03de039d23e8c"
-        },
-        "archive-v3-named-v2.payload.zstd3": {
-          "bytes": 147,
-          "sha256": "5c6b8dac0e6baac8d0b1db2688a757fd3d693113937e9f8b8bed65972d5d649a"
-        },
-        "archive-v3-named-v2.payload.zstd6": {
-          "bytes": 125,
-          "sha256": "1b07c2593440491b3dcc76df2a879766d158c2e7e1bad123c0ae9c76b3248ab7"
-        },
-        "archive-v3-named-v2.pngr": {
-          "bytes": 4413,
-          "sha256": "4ac43fee72b9ab9f392f91d30257d4dfab5273ec9fbd707f0a9477004ed38684"
-        },
-        "archive-v3-named-v2.root.bin": {
-          "bytes": 106,
-          "sha256": "5af6d7dd6ec6999d5a992ab5c28dbaa1500114fcbe17026f1d9fead3a87f80b8"
-        }
-      },
-      "id": "archive-v3-named-v2",
-      "regionalVersion": 2,
-      "semantics": "named-paths-v3"
-    },
-    {
-      "archiveVersion": 4,
-      "expected": {
-        "canonicalHash": "ef21ce8eabdbf20afb09493ec887015ddba049bf815ebc1a37cb361569e1fab1",
-        "query": {
-          "context": 100,
-          "contig": "chr1",
-          "end": 102,
-          "sample": "GRCh38",
-          "start": 100
-        },
-        "references": [
-          {
-            "contig": "chr1",
-            "end": 102,
-            "sample": "GRCh38",
-            "start": 100
-          }
-        ],
-        "tile": {
-          "coreEnd": 102,
-          "coreStart": 100,
-          "edges": [
-            "2",
-            "4"
-          ],
-          "namedPathIds": [],
           "nodeIds": [
             "1",
             "2"
@@ -136,142 +51,50 @@
         }
       },
       "files": {
-        "archive-v4-weighted-v3.directory.bin": {
+        "format-v1.directory.bin": {
           "bytes": 4096,
-          "sha256": "442766902137b29a98a4d9b2bce17971c8a187b3f5e76848be78aa4ea7482dfa"
+          "sha256": "1322088a47781bb56dd5297b7b557c769f71ead3558ee20dab3ae7636ee70d8a"
         },
-        "archive-v4-weighted-v3.header.bin": {
+        "format-v1.header.bin": {
           "bytes": 64,
-          "sha256": "70aee223fe44277407f2a7f1643e1df093740a924f381ec65ca7629f998044b9"
+          "sha256": "e928b3d215c3c46539a6745a005b0b830941aca4c64bb1f6cd158e127b93c67a"
         },
-        "archive-v4-weighted-v3.payload.raw": {
-          "bytes": 228,
-          "sha256": "59f99306818ca4eadc011f1fe471090a4cbb57838e44fe591cb75e514a7e3182"
-        },
-        "archive-v4-weighted-v3.payload.zstd1": {
-          "bytes": 113,
-          "sha256": "68c7ba2236ae2ca5b71c67e2e680438ee04812342cb1382b913929f8cd89a48b"
-        },
-        "archive-v4-weighted-v3.payload.zstd3": {
-          "bytes": 108,
-          "sha256": "fc5c605a4b6e9937502178a9de92414bf8828bb18066506c4ac7cd49d902fda9"
-        },
-        "archive-v4-weighted-v3.payload.zstd6": {
-          "bytes": 89,
-          "sha256": "8d004231f0b6c94bfcac7e5b840a0c114acf4634c6efb4ed565efbc38dcbe63a"
-        },
-        "archive-v4-weighted-v3.pngr": {
-          "bytes": 4374,
-          "sha256": "53e72c689f60cd3db3c7cacb64bc2aef07ca8510edf5a9ffa92423ee5482109e"
-        },
-        "archive-v4-weighted-v3.root.bin": {
-          "bytes": 106,
-          "sha256": "5af6d7dd6ec6999d5a992ab5c28dbaa1500114fcbe17026f1d9fead3a87f80b8"
-        }
-      },
-      "id": "archive-v4-weighted-v3",
-      "regionalVersion": 3,
-      "semantics": "anonymous-distinct-weighted-tile-paths"
-    },
-    {
-      "archiveVersion": 4,
-      "expected": {
-        "canonicalHash": "ef21ce8eabdbf20afb09493ec887015ddba049bf815ebc1a37cb361569e1fab1",
-        "query": {
-          "context": 100,
-          "contig": "chr1",
-          "end": 102,
-          "sample": "GRCh38",
-          "start": 100
-        },
-        "references": [
-          {
-            "contig": "chr1",
-            "end": 102,
-            "sample": "GRCh38",
-            "start": 100
-          }
-        ],
-        "tile": {
-          "coreEnd": 102,
-          "coreStart": 100,
-          "edges": [
-            "2",
-            "4"
-          ],
-          "namedPathIds": [],
-          "nodeIds": [
-            "1",
-            "2"
-          ],
-          "nodeSequences": [
-            "A",
-            "C"
-          ],
-          "referenceTraversal": [
-            "2",
-            "4"
-          ],
-          "semantics": "anonymous-distinct-weighted-tile-paths",
-          "weightedTraversals": [
-            {
-              "nodes": [
-                "2",
-                "4"
-              ],
-              "weight": "1"
-            }
-          ]
-        }
-      },
-      "files": {
-        "archive-v4-record-v4.directory.bin": {
-          "bytes": 4096,
-          "sha256": "4b24686820e3f1f088d10f4ac1a28af65aacb61f2d9d692b67c60cb436c6c49a"
-        },
-        "archive-v4-record-v4.header.bin": {
-          "bytes": 64,
-          "sha256": "70aee223fe44277407f2a7f1643e1df093740a924f381ec65ca7629f998044b9"
-        },
-        "archive-v4-record-v4.payload.raw": {
+        "format-v1.payload.raw": {
           "bytes": 316,
-          "sha256": "6974a0ff0fdfb69508e704a8a3891cf5829cf13619a86aae7034ec3c916e05d6"
+          "sha256": "c871d4535efecff714dcf31acaed1789d6ecd72771191d0868e72f225afe77ff"
         },
-        "archive-v4-record-v4.payload.zstd1": {
-          "bytes": 127,
-          "sha256": "ca62e788e7255f7a2ec5e8138ec7fdc739cd6e87c141ceac7750843581ab70fe"
+        "format-v1.payload.zstd1": {
+          "bytes": 126,
+          "sha256": "9a838f4df3b51092b0e7b60c854978af6fb1dd732609c4a88e6dcd8375927d6f"
         },
-        "archive-v4-record-v4.payload.zstd3": {
-          "bytes": 124,
-          "sha256": "ed199d819aa5b3bcb10ac4a25d0b952f9b762086ef1091748f2de300e5725e71"
+        "format-v1.payload.zstd3": {
+          "bytes": 122,
+          "sha256": "fd35f5785898316cb4641d2b7b0a875cf1dceeb4104fbc52094353ba9b7fd022"
         },
-        "archive-v4-record-v4.payload.zstd6": {
-          "bytes": 108,
-          "sha256": "9ed941c4540efd6ee024e95884d02a1ed86686014cb7c524dcf666243f9bf870"
+        "format-v1.payload.zstd6": {
+          "bytes": 106,
+          "sha256": "665dbc676efc482b38a3a6958e6c88c885484a20dd61a3f94971f3e0c0723d60"
         },
-        "archive-v4-record-v4.pngr": {
-          "bytes": 4390,
-          "sha256": "bc0f5d0557120961d72c28e1129e131ab2e98d0dd1cd012b8025750b6624f352"
+        "format-v1.pngr": {
+          "bytes": 4388,
+          "sha256": "b952efedc2274d91f0ff3e8979203a9221ef5f4d81d7eb3465afd90e7fbb0984"
         },
-        "archive-v4-record-v4.root.bin": {
+        "format-v1.root.bin": {
           "bytes": 106,
           "sha256": "5af6d7dd6ec6999d5a992ab5c28dbaa1500114fcbe17026f1d9fead3a87f80b8"
         }
       },
-      "id": "archive-v4-record-v4",
-      "regionalVersion": 4,
+      "id": "format-v1",
+      "regionalVersion": 1,
       "semantics": "anonymous-distinct-weighted-tile-paths"
     }
   ],
   "provenance": "deterministic synthetic two-node graph generated by the Rust reference encoder; no external source data",
   "schemaVersion": 1,
   "supportedArchiveVersions": [
-    3,
-    4
+    1
   ],
   "supportedRegionalVersions": [
-    2,
-    3,
-    4
+    1
   ]
 }

@@ -65,7 +65,7 @@ A performance result is invalid unless both gates pass:
    exact core/halo, oriented traversals, integer weights, total weight, and
    provenance.
 
-Record domain-separated v4 hashes and a useful semantic diff on mismatch.
+Record domain-separated v1 hashes and a useful semantic diff on mismatch.
 
 ## Baselines
 
@@ -83,7 +83,7 @@ cargo run --release -p pangenome-range-cli -- \
   benchmark-encoder-scale <graph.gbz> <run-id> <external-work-root>
 ```
 
-It builds exactly one archive with the v4 16 KiB/zstd-3 configuration. The
+It builds exactly one archive with the v1 16 KiB/zstd-3 configuration. The
 direct-written archive is placed below the supplied work root; there is no
 payload spool. Only `config.json`, `summary.json`, and `REPORT.md` are retained
 under `results/<run-id>`. This mode deliberately skips GBZ-base and the
@@ -93,7 +93,7 @@ The upstream `gbz` crate still deserializes the source in full; encoder-only
 mode bounds archive-construction scratch, not the source graph itself.
 
 The first HPRC whole-genome attempt exposed an unacceptable global occurrence
-index. Archive v4 removed it; encoder-scale metrics must report zero occurrence
+index. The current archive removed it; encoder-scale metrics must report zero occurrence
 bytes/time and a nonzero time to first payload before another whole-genome run.
 See the [optimization log](OPTIMIZATION_LOG.md) before repeating that run.
 
@@ -162,7 +162,7 @@ not a prediction of the current request plan.
 
 ## TypeScript reader conformance result
 
-The current Node integration serves a deterministic 164,266-byte archive made
+The current Node integration serves a deterministic 164,259-byte v1 archive made
 from the pinned 73,920-byte MICB/KIR3DL1 fixture through a real loopback range
 origin. It validates one usable `HEAD`, stable `ETag`/`If-Range`, every exact
 `206`, the raw origin ranges, the optional query trace, and matching canonical
@@ -170,13 +170,13 @@ results from HTTP, Blob, and positioned file sources.
 
 | Query | Selected tiles | Nodes | Weighted traversals | GETs | Fetched bytes | Canonical hash |
 |---|---:|---:|---:|---:|---:|---|
-| MICB, `GRCh38#chr6:31498145-31511124` | 2 | 659 | 94 | 2 | 37,797 | `afb9deec...8c3d2` |
-| KIR3DL1, `GRCh38#chr19:54816468-54830778` | 2 | 2,231 | 67 | 3 | 68,619 | `62868752...c2411` |
+| MICB, `GRCh38#chr6:31498145-31511124` | 2 | 659 | 94 | 2 | 37,797 | `8e081a9b...f8adc` |
+| KIR3DL1, `GRCh38#chr19:54816468-54830778` | 2 | 2,231 | 67 | 3 | 68,615 | `4cb74bc4...f1cbb` |
 
-The hermetic browser gate opens a separate 70,024-byte synthetic archive in
+The hermetic browser gate opens a separate 70,022-byte synthetic v1 archive in
 Chromium, Firefox, and WebKit. Each engine performs one `HEAD`, then exactly
-three `206` GETs totaling 20,604 bytes: a 16 KiB bootstrap, one 4 KiB directory
-page, and one 124-byte zstd payload. These loopback results establish transport,
+three `206` GETs totaling 20,602 bytes: a 16 KiB bootstrap, one 4 KiB directory
+page, and one 122-byte zstd payload. These loopback results establish transport,
 CORS, version dispatch, decompression, and decode behavior; the timings are not
 a browser performance claim. Exact commands and raw range lists are retained in
 `results/2026-08-25-typescript-reader-conformance/`.
@@ -189,7 +189,7 @@ cargo run --release -p pangenome-range-cli -- \
 ```
 
 Before paying for all 20 window/compression builds on a new input, run the
-current small-query candidate alone: 16 KiB base windows, zstd-3, the v4
+current small-query candidate alone: 16 KiB base windows, zstd-3, the v1
 arithmetic manifest, an 8 MiB raw-payload cap, and no deduplication:
 
 ```bash

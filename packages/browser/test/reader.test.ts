@@ -13,6 +13,7 @@ import {
   RemoteObjectChangedError,
   TracingRangeSource,
   UnsupportedArchiveVersionError,
+  UnsupportedRegionalPayloadVersionError,
   validateArchiveRange,
   validateRegionQuery,
 } from "../src/reader/index.js";
@@ -24,11 +25,17 @@ const conformanceDirectory = new URL(
 
 interface ConformanceFixture {
   id: string;
-  archiveVersion: 3 | 4;
-  regionalVersion: 2 | 3 | 4;
+  archiveVersion: 1;
+  regionalVersion: 1;
   semantics: string;
   expected: {
     canonicalHash: string;
+    references: Array<{
+      sample: string;
+      contig: string;
+      start: number;
+      end: number;
+    }>;
     query: {
       sample: string;
       contig: string;
@@ -40,10 +47,10 @@ interface ConformanceFixture {
       coreStart: number;
       coreEnd: number;
       nodeIds: string[];
+      nodeSequences: string[];
       edges: string[];
       referenceTraversal: string[];
       semantics: string;
-      namedPathIds: string[];
       weightedTraversals: Array<{ weight: string; nodes: string[] }>;
     };
   };
@@ -63,7 +70,7 @@ function decodeHex(value: string): Uint8Array {
 
 const recordRegionalFixture = decodeHex(
   readFileSync(
-    new URL("../../../test-data/golden/record-region-v4.hex", import.meta.url),
+    new URL("../../../test-data/golden/record-region-v1.hex", import.meta.url),
     "utf8",
   ),
 );
@@ -71,7 +78,7 @@ const recordRegionalFixture = decodeHex(
 const recordArchiveFixture = new Uint8Array(
   readFileSync(
     new URL(
-      "../../../test-data/golden/record-archive-v4.pngr",
+      "../../../test-data/golden/record-archive-v1.pngr",
       import.meta.url,
     ),
   ),
@@ -80,7 +87,7 @@ const recordArchiveFixture = new Uint8Array(
 const recordRegionalExpected = JSON.parse(
   readFileSync(
     new URL(
-      "../../../test-data/golden/record-region-v4.expected.json",
+      "../../../test-data/golden/record-region-v1.expected.json",
       import.meta.url,
     ),
     "utf8",
@@ -135,16 +142,20 @@ describe("reader contract validation", () => {
     ).toThrow("construction halo 100");
   });
 
-  it("dispatches every Rust-supported archive version", () => {
-    const v4 = new Uint8Array(12);
-    v4.set(new TextEncoder().encode("PNGRNG04"));
-    new DataView(v4.buffer).setUint32(8, 4, true);
-    expect(detectArchiveVersion(v4)).toBe(4);
+  it("accepts only the current Rust archive version", () => {
+    const current = new Uint8Array(12);
+    current.set(new TextEncoder().encode("PNGRNG01"));
+    new DataView(current.buffer).setUint32(8, 1, true);
+    expect(detectArchiveVersion(current)).toBe(1);
 
-    const v3 = v4.slice();
-    v3.set(new TextEncoder().encode("PNGRNG03"));
-    new DataView(v3.buffer).setUint32(8, 3, true);
-    expect(detectArchiveVersion(v3)).toBe(3);
+    for (const version of [3, 4]) {
+      const obsolete = current.slice();
+      obsolete.set(new TextEncoder().encode(`PNGRNG0${version}`));
+      new DataView(obsolete.buffer).setUint32(8, version, true);
+      expect(() => detectArchiveVersion(obsolete)).toThrow(
+        UnsupportedArchiveVersionError,
+      );
+    }
   });
 
   it("matches the complete Rust conformance fixture matrix", async () => {
@@ -155,9 +166,7 @@ describe("reader contract validation", () => {
       const archive = await openPangenome(new MemoryRangeSource(archiveBytes));
       expect(archive.formatVersion).toBe(fixture.archiveVersion);
       expect(archive.semantics).toBe(fixture.semantics);
-      expect(archive.references()).toMatchObject([
-        { sample: "GRCh38", contig: "chr1", start: 100, end: 102 },
-      ]);
+      expect(archive.references()).toMatchObject(fixture.expected.references);
       const result = await archive.query({
         ...fixture.expected.query,
         trace: true,
@@ -173,21 +182,49 @@ describe("reader contract validation", () => {
       expect(Array.from(tile.nodeIds, String)).toEqual(
         fixture.expected.tile.nodeIds,
       );
+      expect(
+        Array.from({ length: tile.nodeIds.length }, (_, index) =>
+          new TextDecoder().decode(
+            tile.nodeSequences.subarray(
+              tile.nodeSequenceOffsets[index],
+              tile.nodeSequenceOffsets[index + 1],
+            ),
+          ),
+        ),
+      ).toEqual(fixture.expected.tile.nodeSequences);
       expect(Array.from(tile.edges, String)).toEqual(
         fixture.expected.tile.edges,
       );
       expect(Array.from(tile.referenceTraversal, String)).toEqual(
         fixture.expected.tile.referenceTraversal,
       );
-      if (tile.haplotypes.kind === "named-paths") {
-        expect(Array.from(tile.haplotypes.pathIds, String)).toEqual(
-          fixture.expected.tile.namedPathIds,
-        );
-      } else {
-        expect(Array.from(tile.haplotypes.weights, String)).toEqual(
-          fixture.expected.tile.weightedTraversals.map(({ weight }) => weight),
-        );
-      }
+      expect(Array.from(tile.haplotypes.weights, String)).toEqual(
+        fixture.expected.tile.weightedTraversals.map(({ weight }) => weight),
+      );
+      expect(
+        Array.from({ length: tile.haplotypes.weights.length }, (_, index) => ({
+          weight: String(tile.haplotypes.weights[index]),
+          nodes: Array.from(
+            tile.haplotypes.orientedNodes.subarray(
+              tile.haplotypes.traversalOffsets[index],
+              tile.haplotypes.traversalOffsets[index + 1],
+            ),
+            String,
+          ),
+        })),
+      ).toEqual(fixture.expected.tile.weightedTraversals);
+      expect(Array.from(result.graph.nodes.ids, String)).toEqual(
+        fixture.expected.tile.nodeIds,
+      );
+      expect(Array.from(result.graph.edges.from, String)).toEqual(
+        fixture.expected.tile.edges.filter((_, index) => index % 2 === 0),
+      );
+      expect(Array.from(result.graph.edges.to, String)).toEqual(
+        fixture.expected.tile.edges.filter((_, index) => index % 2 === 1),
+      );
+      expect(Array.from(result.graph.referenceTraversal, String)).toEqual(
+        fixture.expected.tile.referenceTraversal,
+      );
       await archive.close();
     }
   });
@@ -218,7 +255,7 @@ describe("reader contract validation", () => {
 
   it("fails closed for malformed archive and regional fixture classes", async () => {
     const fixture = conformanceManifest.fixtures.find(
-      ({ id }) => id === "archive-v4-record-v4",
+      ({ id }) => id === "format-v1",
     ) as ConformanceFixture;
     const archiveBytes = new Uint8Array(
       readFileSync(new URL(`${fixture.id}.pngr`, conformanceDirectory)),
@@ -281,17 +318,6 @@ describe("reader contract validation", () => {
       outOfFileArchive.query(fixture.expected.query),
     ).rejects.toThrow();
 
-    const namedRaw = new Uint8Array(
-      readFileSync(
-        new URL("archive-v3-named-v2.payload.raw", conformanceDirectory),
-      ),
-    );
-    const badDictionary = namedRaw.slice();
-    new DataView(badDictionary.buffer).setUint32(173, 99, true);
-    expect(() => decodeRegionalPayload(badDictionary)).toThrow(
-      "dictionary index",
-    );
-
     for (const current of conformanceManifest.fixtures) {
       const raw = new Uint8Array(
         readFileSync(
@@ -320,7 +346,7 @@ describe("reader contract validation", () => {
       return state >>> 0;
     };
     const encoder = new TextEncoder();
-    for (const version of [2, 3, 4] as const) {
+    for (const version of [1] as const) {
       for (let sample = 0; sample < 200; sample += 1) {
         const bytes = new Uint8Array(24 + (next() % 489));
         for (let index = 0; index < bytes.length; index += 1) {
@@ -339,12 +365,12 @@ describe("reader contract validation", () => {
     }
   });
 
-  it("opens and queries the deterministic Rust v4 archive", async () => {
+  it("opens and queries the deterministic Rust v1 archive", async () => {
     const source = new TracingRangeSource(
       new MemoryRangeSource(recordArchiveFixture),
     );
     const archive = await openPangenome({ source });
-    expect(archive.formatVersion).toBe(4);
+    expect(archive.formatVersion).toBe(1);
     expect(archive.references()).toEqual([
       expect.objectContaining({
         sample: "CHM13",
@@ -399,7 +425,7 @@ describe("reader contract validation", () => {
           trace: true,
         })
       ).trace?.canonicalHash,
-    ).toBe("1a04302d90bc504962c8961792797f3a148f4e8cb6c48af0d4e04937224835e3");
+    ).toBe("3674cc04aea1d17ab4440075089d437cb642702661a454ea764f46866a41e251");
     await blobArchive.close();
   });
 
@@ -579,7 +605,7 @@ describe("reader contract validation", () => {
   });
 
   it("decodes the Rust record-preserving regional golden fixture", () => {
-    expect(detectRegionalPayloadVersion(recordRegionalFixture)).toBe(4);
+    expect(detectRegionalPayloadVersion(recordRegionalFixture)).toBe(1);
     const tile = decodeRegionalPayload(recordRegionalFixture, {
       archiveOffset: 2n ** 60n,
     });
@@ -629,7 +655,7 @@ describe("reader contract validation", () => {
     expect(traversals).toEqual(recordRegionalExpected.traversals);
   });
 
-  it("rejects corrupt record payloads and dispatches retained payload versions", () => {
+  it("rejects corrupt record payloads and obsolete payload versions", () => {
     expect(() =>
       decodeRegionalPayload(
         recordRegionalFixture.subarray(0, recordRegionalFixture.length - 1),
@@ -646,11 +672,10 @@ describe("reader contract validation", () => {
       CorruptRegionalPayloadError,
     );
 
-    const legacy = recordRegionalFixture.slice();
-    legacy.set(new TextEncoder().encode("PNGRGN03"));
-    expect(detectRegionalPayloadVersion(legacy)).toBe(3);
-    expect(() => decodeRegionalPayload(legacy)).toThrow(
-      CorruptRegionalPayloadError,
+    const obsolete = recordRegionalFixture.slice();
+    obsolete.set(new TextEncoder().encode("PNGRGN03"));
+    expect(() => detectRegionalPayloadVersion(obsolete)).toThrow(
+      UnsupportedRegionalPayloadVersionError,
     );
   });
 });

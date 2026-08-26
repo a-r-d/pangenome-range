@@ -224,7 +224,7 @@ pub fn run_fixed_window_experiment(options: &ExperimentOptions) -> ExperimentRes
             "deduplication": "disabled because the MHC sweep found no exact duplicate payloads",
             "max_uncompressed_chunk_bytes": DEFAULT_MAX_UNCOMPRESSED_CHUNK_BYTES,
             "minimum_adaptive_window_size": DEFAULT_MIN_WINDOW_SIZE,
-            "purpose": "focused correctness, encoder-scaling, and small-query smoke test of archive v4 tile-local haplotype semantics; not a layout comparison",
+            "purpose": "focused correctness, encoder-scaling, and small-query smoke test of archive v1 tile-local haplotype semantics; not a layout comparison",
         }),
     };
     write_json(
@@ -241,7 +241,7 @@ pub fn run_fixed_window_experiment(options: &ExperimentOptions) -> ExperimentRes
                 ExperimentMode::FullSweep => "benchmark-fixed-windows",
                 ExperimentMode::SingleConfigSmoke => "benchmark-fixed-window-smoke",
             }, options.input.display(), options.run_id, options.random_queries_per_size),
-            "archive_format": "fixed-window-v4-weighted-tile-haplotypes",
+            "archive_format": "fixed-window-v1-record-preserving-tile-haplotypes",
             "execution_environment": {
                 "os": std::env::consts::OS,
                 "architecture": std::env::consts::ARCH,
@@ -274,7 +274,7 @@ pub fn run_fixed_window_experiment(options: &ExperimentOptions) -> ExperimentRes
             "local_timing_scope": "storage lookup, decompression/decode, and subgraph reconstruction; correctness serialization/hash/comparison instrumentation excluded",
             "improvement_policy": match options.mode {
                 ExperimentMode::FullSweep => "after the baseline sweep, apply exact content-addressed chunk deduplication to the latency-first Pareto point that contains measured repeated payloads",
-                ExperimentMode::SingleConfigSmoke => "no improvement search; measure the 16 KiB zstd-3 archive-v4 candidate only",
+                ExperimentMode::SingleConfigSmoke => "no improvement search; measure the 16 KiB zstd-3 archive-v1 candidate only",
             },
         }),
     )?;
@@ -1224,7 +1224,7 @@ fn write_report(
     )?;
     writeln!(
         output,
-        "This is a measured fixed-window archive v4 result for `{}` in `{}` mode, not a stable-format recommendation. Candidate rows independently passed query-graph comparison and exact weighted tile-local haplotype comparison.\n",
+        "This is a measured fixed-window archive v1 result for `{}` in `{}` mode, not a stable-format recommendation. Candidate rows independently passed query-graph comparison and exact weighted tile-local haplotype comparison.\n",
         options.input.display(),
         match options.mode {
             ExperimentMode::FullSweep => "full-sweep",
@@ -1387,7 +1387,7 @@ fn write_report(
     writeln!(output, "\n## Encoder construction\n")?;
     writeln!(
         output,
-        "The v4 direct writer completed in {:.3} ms with bounded directory metadata and raw/compressed queues. The first payload was written after {:.3} ms. It wrote a {}-byte payload spool and exactly {} occurrence-index bytes. Peak raw/compressed payload buffers were {} / {} bytes; {} adaptive splits were required.\n",
+        "The v1 direct writer completed in {:.3} ms with bounded directory metadata and raw/compressed queues. The first payload was written after {:.3} ms. It wrote a {}-byte payload spool and exactly {} occurrence-index bytes. Peak raw/compressed payload buffers were {} / {} bytes; {} adaptive splits were required.\n",
         selected_run.build.construction_wall_ms,
         selected_run.build.first_payload_wall_ms,
         selected_run.build.payload_spool_bytes,
@@ -1704,7 +1704,7 @@ fn write_report(
     } else if options.mode == ExperimentMode::SingleConfigSmoke {
         writeln!(
             output,
-            "Smoke mode isolates correctness and scale behavior of the 16 KiB/zstd-3 archive-v4 candidate; it does not establish a cross-layout winner.\n"
+            "Smoke mode isolates correctness and scale behavior of the 16 KiB/zstd-3 archive-v1 candidate; it does not establish a cross-layout winner.\n"
         )?;
     } else {
         writeln!(

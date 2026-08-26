@@ -13,12 +13,12 @@ pangenome-range-cli ──> pangenome-range-build ──> pangenome-range-query
 graph semantics. `pangenome-range-query` contains the canonical semantic result
 types. `pangenome-range-build` contains the GBZ/GBZ-base source adapters and the
 first concrete candidate layout and its external-memory encoder. The current
-Candidate 1 object is specified in
-[Fixed-window archive v4](FIXED_WINDOW_ARCHIVE.md).
+object is normatively specified in [File Format v1](FILE_FORMAT_V1.md) and
+summarized in [Fixed-window archive v1](FIXED_WINDOW_ARCHIVE.md).
 
 ## Direct archive construction
 
-The normal v4 encoder writes a temporary sibling of the requested `.pngr`
+The normal v1 encoder writes a temporary sibling of the requested `.pngr`
 object. It emits the provisional 64-byte header and root, reserves the exact
 fixed directory-page span, and then appends accepted payloads in deterministic
 reference/coordinate order. Compact per-reference/per-bucket descriptors are
@@ -60,14 +60,14 @@ DOM or Node built-ins; `/viewer` owns the framework-neutral rendering contract,
 and `/node` owns Node-only range sources. `packages/benchmark` is private and
 will own Node and real-browser measurements.
 
-The public contracts, strict HTTP/Blob/memory/file range sources, archive-v3/v4
+The public contracts, strict HTTP/Blob/memory/file range sources, v1
 bootstrap/root and arithmetic directory reader, byte-bounded caches,
-pure-JavaScript zstd decompressor, canonical graph assembly, and all
-Rust-retained regional payload decoders exist. Rust and TypeScript decode a
-deterministic fixture matrix into typed-array-oriented nodes, sequences,
-topology, reference traversal, named paths, and weighted local paths, then
-produce identical canonical hashes. Rendering and a public-network browser
-benchmark corpus remain explicitly unimplemented.
+pure-JavaScript zstd decompressor, record-preserving regional decoder, and
+canonical graph assembly exist. Rust and TypeScript decode the same current
+fixture into typed-array-oriented nodes, sequences, topology, real reference
+traversal, and weighted tile-local paths, then produce identical canonical
+hashes. Rendering and a public-network browser benchmark corpus remain
+explicitly unimplemented.
 
 ## Range sources and traces
 
@@ -140,7 +140,7 @@ The experiment now emits `CanonicalSubgraph` from:
 1. an upstream GBZ/GBZ-base reference query, and
 2. the fixed-window candidate reader over `RangeSource`.
 
-Every retained v4 query has two gates. The assembled graph is compared with an
+Every current-format query has two gates. The assembled graph is compared with an
 independent local source extraction for node sequences, oriented edges, the
 reference traversal, and coordinates. Every selected tile is then freshly
 extracted from the source with the exact core interval and construction halo and

@@ -212,7 +212,8 @@ anchor. The reader reconstructs and weights paths only for queried tiles. An
 eight-worker full-source record-copy kernel covered 5,944,255,022 reference
 bases in 156.733 seconds before archive compression/writing was implemented.
 
-The completed product run used regional magic `PNGRGN04`, 16 KiB base windows,
+The completed product run used the then-current record-preserving regional
+payload, 16 KiB base windows,
 zstd-3, eight bounded workers, and a 256 MiB queue cap. It wrote and validated
 an 8,828,856,533-byte archive in 475.810 seconds; the whole command including
 source and output SHA-256 passes took 557.55 seconds. Payload processing reached
@@ -240,9 +241,10 @@ The 100x change came from changing the unit of work, not from a faster sort.
 The rejected writer repeatedly expanded every selected GBWT occurrence into
 explicit local paths and then sorted/deduplicated those materialized paths for
 each tile. Population-scale occurrence count and path length made that work
-explode, and larger supertiles made it worse. `PNGRGN04` instead copies the
-source's already compressed GBWT record bytes, forward sequences, and canonical
-topology, plus one real reference occurrence anchor. Path reconstruction and
+explode, and larger supertiles made it worse. The accepted record-preserving
+design instead copies the source's already compressed GBWT record bytes,
+forward sequences, and canonical topology, plus one real reference occurrence
+anchor. Path reconstruction and
 weight aggregation move to the few tiles selected by a query. Eight bounded
 workers construct deterministic ordered tile batches and compress them while
 the direct writer appends to the atomic temporary archive. No global visit
@@ -259,7 +261,7 @@ seconds. A retained nine-query source-oracle workload then passed 9/9 canonical
 graph comparisons and 58/58 exact weighted tile comparisons across CHM13,
 GRCh38, chromosomes 1/6/19/X, and fragment/terminal boundaries.
 
-The TypeScript product path now includes strict `HttpRangeSource`, archive-v4
+The TypeScript product path at that stage included strict `HttpRangeSource`,
 bootstrap/root parsing, arithmetic fixed-page lookup, byte-bounded caches,
 pure-JavaScript zstd decompression, and regional-v4 decoding. A synthetic
 cross-origin origin passed in Chromium, Firefox, and WebKit. Chromium then
@@ -272,11 +274,10 @@ public-network latency benchmark.
 
 ## 2026-08-25: TypeScript range reader and conformance matrix accepted
 
-The public reader now implements archive-v3/v4 dispatch, all Rust-retained
-regional versions, typed-array decoding, exact canonical merge/hash behavior,
+That historical public-reader tranche implemented the complete then-retained
+format matrix, typed-array decoding, exact canonical merge/hash behavior,
 byte-bounded directory and compressed-payload caches, and one parallel
-coalesced payload round. Anonymous traversals remain tile-local; the named-v3
-compatibility decoder uses only real retained path/visit identities.
+coalesced payload round. Anonymous traversals remained tile-local.
 
 The Node MICB/KIR3DL1 integration records exact request plans. MICB requires two
 GETs and 37,797 bytes; KIR3DL1 requires three GETs and 68,619 bytes. Both match
@@ -292,3 +293,20 @@ all engines; a receiver-sensitive unit test retains the regression. Incorrect
 `200` responses are still rejected by default, with whole-object acceptance
 available only below an explicit caller-provided byte cap. This tranche is
 functional and conformance evidence, not a public-network latency result.
+
+## 2026-08-25: pre-release format identity reset to v1
+
+The project remained unreleased, so the active record-preserving layout was
+reset to the single public identity `PNGRNG01` / `PNGRGN01`. Named-path and
+materialized-weighted compatibility encoders, decoders, public types, fixtures,
+and dispatch branches were deleted. Rust and TypeScript now accept only the
+current v1 bytes and fail closed for other magic/version pairs.
+
+This was a format/specification cleanup, not a performance optimization. The
+record-preserving field order, bounded direct writer, arithmetic directory,
+and tile-local reconstruction algorithm did not change. Existing benchmark
+sections above retain the identifiers used when those measurements were
+captured. Their objects are historical and must be regenerated before use with
+the current readers. The authoritative current contract is
+[`FILE_FORMAT_V1.md`](FILE_FORMAT_V1.md), and the conformance directory now
+contains only current v1 fixtures.

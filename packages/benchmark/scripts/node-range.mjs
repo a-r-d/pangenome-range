@@ -15,7 +15,7 @@ const scriptDirectory = dirname(fileURLToPath(import.meta.url));
 const workspace = resolve(scriptDirectory, "../../..");
 const metadataPath = resolve(
   workspace,
-  "test-data/conformance/micb-kir3dl1-reader-v4.json",
+  "test-data/conformance/micb-kir3dl1-reader-v1.json",
 );
 const metadata = JSON.parse(await readFile(metadataPath, "utf8"));
 const archivePath = resolve(workspace, metadata.archive.path);

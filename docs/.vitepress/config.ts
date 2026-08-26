@@ -10,6 +10,7 @@ export default defineConfig({
     nav: [
       { text: "Guide", link: "/" },
       { text: "Demo", link: "/demo" },
+      { text: "File Format v1", link: "/FILE_FORMAT_V1" },
       { text: "Architecture", link: "/ARCHITECTURE" },
       { text: "Benchmarks", link: "/BENCHMARKS" },
     ],
@@ -26,6 +27,7 @@ export default defineConfig({
       {
         text: "Format and research",
         items: [
+          { text: "File Format v1", link: "/FILE_FORMAT_V1" },
           { text: "Fixed-window archive", link: "/FIXED_WINDOW_ARCHIVE" },
           { text: "Format goals", link: "/FORMAT_GOALS" },
           { text: "Research", link: "/RESEARCH" },

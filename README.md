@@ -16,6 +16,12 @@ The repository contains two separately distributed products under one name:
 The Rust binary is not shipped through npm. See
 [`docs/DISTRIBUTION.md`](docs/DISTRIBUTION.md) for the intended release boundary.
 
+The only current on-disk format is pre-release file-format v1: archive magic
+`PNGRNG01` and regional magic `PNGRGN01`. Its complete normative contract is
+[`docs/FILE_FORMAT_V1.md`](docs/FILE_FORMAT_V1.md). Historical research objects
+are intentionally unsupported and must be regenerated with the current
+encoder; npm/Cargo package versions are independent of the file-format number.
+
 
 ## Quick start
 
@@ -120,11 +126,11 @@ opt-in; the default test suite uses synthetic bytes and stays fast.
 - `pangenome-range-build`: an interface for replaceable candidate-layout experiments.
 - `pangenome-range-query`: storage-independent query/correctness types and a canonical
   BLAKE3 comparison hash for local graph semantics.
-- `pangenome-range-cli`: the direct-write v4 encoder, GBZ inspection, source
+- `pangenome-range-cli`: the direct-write v1 encoder, GBZ inspection, source
   tracing, and retained research benchmarks.
 - `packages/browser`: private ESM package with isolated reader, viewer, and Node
-  exports, strict HTTP/Blob/memory/file range sources, archive-v3/v4 opening,
-  all Rust-retained regional decoders, canonical graph assembly, and optional
+  exports, strict HTTP/Blob/memory/file range sources, v1-only archive and
+  record-preserving regional decoding, canonical graph assembly, and optional
   query traces. Rendering is not implemented in this tranche.
 - `packages/benchmark`: private browser/Node benchmark tools with a real
   cross-origin range-origin smoke test; a full latency corpus remains future
@@ -158,6 +164,7 @@ is a real experiment behind each one.
 5. Tier 4: the 5,008-haplotype 1000GP graph from the GBZ paper (future stress
    target, not a routine development input).
 
-See [`docs/RESEARCH.md`](docs/RESEARCH.md),
+See [`docs/FILE_FORMAT_V1.md`](docs/FILE_FORMAT_V1.md),
+[`docs/RESEARCH.md`](docs/RESEARCH.md),
 [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md), and
 [`docs/BENCHMARKS.md`](docs/BENCHMARKS.md) before adding a layout experiment.

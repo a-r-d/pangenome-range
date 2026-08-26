@@ -177,7 +177,7 @@ pub fn run_encode(options: &EncodeOptions) -> ExperimentResult<EncodeSummary> {
     let path_index_wall_ms = elapsed_ms(index_started);
     let rss_after_path_index_kib = process_current_rss_kib();
     let config = FixedArchiveConfig {
-        experiment_id: "fixed-v4-record".into(),
+        experiment_id: "fixed-v1-record".into(),
         window_size: options.window_size,
         codec: options.codec,
         deduplicate_chunks: false,
@@ -224,8 +224,8 @@ pub fn run_encode(options: &EncodeOptions) -> ExperimentResult<EncodeSummary> {
     };
     let summary = EncodeSummary {
         schema_version: 2,
-        archive_version: 4,
-        regional_payload_version: 4,
+        archive_version: 1,
+        regional_payload_version: 1,
         source_path: options.input.clone(),
         source_gbz_bytes,
         source_sha256,
@@ -287,7 +287,7 @@ pub fn run_encoder_scale_experiment(options: &EncoderScaleOptions) -> Experiment
 
     let source_sha256 = file_sha256(&options.input)?;
     let config = FixedArchiveConfig {
-        experiment_id: "fixed-v4-16k-zstd3".into(),
+        experiment_id: "fixed-v1-16k-zstd3".into(),
         window_size: WINDOW_SIZE,
         codec: ChunkCodec::Zstd3,
         deduplicate_chunks: false,
