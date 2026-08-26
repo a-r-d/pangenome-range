@@ -15,6 +15,7 @@ export type {
   HttpRangeRequest,
   HttpRangeSourceOptions,
   TracedRangeRead,
+  TracedRangeSummary,
 } from "./sources.js";
 export {
   BlobRangeSource,
@@ -25,16 +26,28 @@ export {
   TracingRangeSource,
 } from "./sources.js";
 export type {
+  ArchiveCacheStats,
+  CanonicalPathTable,
   ChunkDecompressor,
+  EdgeTable,
   HaplotypeSemantics,
+  NamedPathTable,
+  NodeTable,
+  OpenPangenomeInput,
   OpenPangenomeOptions,
   PangenomeArchive,
+  QueryCacheHits,
+  QueryRequestRange,
+  QueryTrace,
   RangeReadOptions,
   RangeSource,
   ReferenceDescriptor,
+  RegionGraph,
   RegionQuery,
   RegionResult,
   RegionTile,
+  TileProvenance,
+  WeightedTraversalTable,
 } from "./types.js";
 
 import {
@@ -42,17 +55,19 @@ import {
   UnsupportedArchiveVersionError,
 } from "./archive.js";
 import type {
+  OpenPangenomeInput,
   OpenPangenomeOptions,
   PangenomeArchive,
   RegionQuery,
 } from "./types.js";
 
 export const PANGENOME_RANGE_API_VERSION = "0.1.0" as const;
+const CONSTRUCTION_CONTEXT = 100;
 
 const textDecoder = new TextDecoder();
 
 /** Dispatches the versioned archive header without truncating any offsets. */
-export function detectArchiveVersion(header: Uint8Array): 4 {
+export function detectArchiveVersion(header: Uint8Array): 3 | 4 {
   if (header.byteLength < 12) {
     throw new RangeError("archive header is shorter than 12 bytes");
   }
@@ -66,9 +81,7 @@ export function detectArchiveVersion(header: Uint8Array): 4 {
     return 4;
   }
   if (magic === "PNGRNG03" && version === 3) {
-    throw new UnsupportedArchiveVersionError(
-      "archive v3 uses legacy named-path semantics and is not supported by the TypeScript reader",
-    );
+    return 3;
   }
   throw new UnsupportedArchiveVersionError(
     `unsupported pangenome-range archive magic ${JSON.stringify(magic)} version ${version}`,
@@ -95,6 +108,11 @@ export function validateRegionQuery(query: RegionQuery): void {
   }
   if (query.context !== undefined) {
     assertSafeNonNegativeInteger(query.context, "query.context");
+    if (query.context > CONSTRUCTION_CONTEXT) {
+      throw new RangeError(
+        `query.context exceeds the construction halo ${CONSTRUCTION_CONTEXT}`,
+      );
+    }
   }
 }
 
@@ -115,8 +133,16 @@ function validateOptionalCacheSize(
 }
 
 export function openPangenome(
-  options: OpenPangenomeOptions,
+  input: OpenPangenomeInput,
 ): Promise<PangenomeArchive> {
+  const options: OpenPangenomeOptions =
+    typeof input === "object" &&
+    input !== null &&
+    "source" in input &&
+    !("read" in input && typeof input.read === "function") &&
+    !(input instanceof Blob)
+      ? (input as OpenPangenomeOptions)
+      : { source: input as string | Blob | OpenPangenomeOptions["source"] };
   options.signal?.throwIfAborted();
   validateOptionalCacheSize(options.directoryCacheBytes, "directoryCacheBytes");
   validateOptionalCacheSize(options.payloadCacheBytes, "payloadCacheBytes");

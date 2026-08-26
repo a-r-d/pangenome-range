@@ -80,3 +80,31 @@ one 1,024 bp CHM13 chr6 tile derived from the tiny MICB/KIR3DL1 source. Its
 source checksum, archive checksum, exact command, interval, codec, and versions
 are retained in `record-archive-v4.json`. The Rust test suite rebuilds it and
 checks the decoded query against the source oracle.
+
+## Complete retained-version conformance matrix
+
+`conformance/manifest.json` is generated deterministically by:
+
+```bash
+cargo run --release -p pangenome-range-cli -- fixtures export test-data/conformance
+```
+
+It describes three synthetic two-node fixtures with no external source data:
+
+| Fixture | Archive | Regional payload | Semantics |
+|---|---:|---:|---|
+| `archive-v3-named-v2` | `PNGRNG03` / 3 | `PNGRGN02` / 2 | `named-paths-v3` |
+| `archive-v4-weighted-v3` | `PNGRNG04` / 4 | `PNGRGN03` / 3 | distinct weighted anonymous tile paths |
+| `archive-v4-record-v4` | `PNGRNG04` / 4 | `PNGRGN04` / 4 | reconstructed distinct weighted anonymous tile paths |
+
+Each row includes a complete `.pngr`, isolated header/root/directory/raw
+payload bytes, Rust zstd frames at levels 1/3/6, SHA-256 checksums, expected
+references/tile data, and the Rust canonical hash. Rust exports and rereads the
+matrix; TypeScript decodes every artifact and matches those expectations.
+
+`conformance/micb-kir3dl1-reader-v4.pngr` is the 164,266-byte Node integration
+archive derived from the pinned Tier 1 source. Its sidecar records the source
+and archive checksums, exact deterministic encode command, versions, query
+coordinates, canonical hashes, and exact expected HTTP ranges. It contains
+eight record-preserving v4 chunks and is retained only as compact integration
+evidence; the source GBZ remains ignored and fetched with explicit provenance.

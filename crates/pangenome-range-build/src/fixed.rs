@@ -8,6 +8,7 @@ use pangenome_range_query::{
     OrientedNode, ReferenceInterval, WeightedTraversal,
 };
 use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
 use std::cmp::Reverse;
 use std::collections::{BTreeMap, BTreeSet, BinaryHeap, HashMap, VecDeque};
 use std::error::Error;
@@ -3937,7 +3938,6 @@ impl RegionalGraph {
         Ok(result)
     }
 
-    #[cfg(test)]
     fn encode(&self) -> ExperimentResult<Vec<u8>> {
         if self.reference_paths.is_empty() {
             return self.encode_v3();
@@ -4005,7 +4005,6 @@ impl RegionalGraph {
         Ok(output)
     }
 
-    #[cfg(test)]
     fn encode_v3(&self) -> ExperimentResult<Vec<u8>> {
         let samples = self
             .paths
@@ -4883,10 +4882,12 @@ pub fn validate_fixed_archive(path: &Path) -> ExperimentResult<ArchiveValidation
                     (payload.core_start, payload.core_end)
                 } else {
                     let regional = RegionalGraph::decode(&raw)?;
-                    let tile = regional.haplotype_tiles.first().ok_or_else(|| {
-                        invalid_data("validated compatibility payload has no tile provenance")
-                    })?;
-                    (tile.core_start, tile.core_end)
+                    regional
+                        .haplotype_tiles
+                        .first()
+                        .map_or((entry.start, entry.end), |tile| {
+                            (tile.core_start, tile.core_end)
+                        })
                 };
                 if core_start != entry.start || core_end != entry.end {
                     return Err(invalid_data(
@@ -5192,6 +5193,399 @@ pub fn internal_gbz_base_query(
     let mut subgraph = Subgraph::new();
     subgraph.from_db(&mut graph, &query)?;
     std::hint::black_box(subgraph.nodes());
+    Ok(())
+}
+
+#[derive(Debug)]
+struct ConformanceArchiveParts {
+    archive: Vec<u8>,
+    header: Vec<u8>,
+    root: Vec<u8>,
+    directory: Vec<u8>,
+    compressed: Vec<u8>,
+}
+
+fn conformance_record_payload() -> RecordRegionalPayload {
+    let forward_1 = OrientedNode {
+        id: 1,
+        reverse: false,
+    };
+    let forward_2 = OrientedNode {
+        id: 2,
+        reverse: false,
+    };
+    RecordRegionalPayload {
+        semantics: HaplotypeSemantics::AnonymousDistinctWeightedTilePaths,
+        core_start: 100,
+        core_end: 102,
+        context: CONSTRUCTION_CONTEXT,
+        reference_sample: "GRCh38".into(),
+        reference_contig: "chr1".into(),
+        reference_haplotype: 0,
+        reference_fragment_start: 100,
+        reference_query_offset: 0,
+        reference_node_offset: 0,
+        reference_position: (2, 0),
+        nodes: BTreeMap::from([(1, b"A".to_vec()), (2, b"C".to_vec())]),
+        edges: BTreeSet::from([Edge {
+            from: forward_1,
+            to: forward_2,
+        }]),
+        records: vec![
+            PackedGbwtRecord {
+                handle: 2,
+                occurrence_count: 2,
+                bytes: vec![1, 4, 0, 1],
+            },
+            PackedGbwtRecord {
+                handle: 3,
+                occurrence_count: 2,
+                bytes: vec![1, 0, 0, 1],
+            },
+            PackedGbwtRecord {
+                handle: 4,
+                occurrence_count: 2,
+                bytes: vec![1, 0, 0, 1],
+            },
+            PackedGbwtRecord {
+                handle: 5,
+                occurrence_count: 2,
+                bytes: vec![1, 3, 0, 1],
+            },
+        ],
+        total_occurrences: 8,
+    }
+}
+
+fn conformance_weighted_graph() -> RegionalGraph {
+    let forward_1 = OrientedNode {
+        id: 1,
+        reverse: false,
+    };
+    let forward_2 = OrientedNode {
+        id: 2,
+        reverse: false,
+    };
+    RegionalGraph {
+        nodes: BTreeMap::from([(1, b"A".to_vec()), (2, b"C".to_vec())]),
+        edges: BTreeSet::from([Edge {
+            from: forward_1,
+            to: forward_2,
+        }]),
+        semantics: HaplotypeSemantics::AnonymousDistinctWeightedTilePaths,
+        reference_paths: vec![RegionalReferencePath {
+            sample: "GRCh38".into(),
+            contig: "chr1".into(),
+            haplotype: 0,
+            start: 100,
+            end: 102,
+            traversal: vec![forward_1, forward_2],
+        }],
+        haplotype_tiles: vec![CanonicalHaplotypeTile {
+            reference_sample: "GRCh38".into(),
+            reference_contig: "chr1".into(),
+            core_start: 100,
+            core_end: 102,
+            traversals: vec![WeightedTraversal {
+                weight: 1,
+                traversal: vec![forward_1, forward_2],
+            }],
+        }],
+        ..RegionalGraph::default()
+    }
+}
+
+fn conformance_named_graph() -> RegionalGraph {
+    let forward_1 = OrientedNode {
+        id: 1,
+        reverse: false,
+    };
+    let forward_2 = OrientedNode {
+        id: 2,
+        reverse: false,
+    };
+    RegionalGraph {
+        nodes: BTreeMap::from([(1, b"A".to_vec()), (2, b"C".to_vec())]),
+        edges: BTreeSet::from([Edge {
+            from: forward_1,
+            to: forward_2,
+        }]),
+        semantics: HaplotypeSemantics::NamedPathsV3,
+        paths: BTreeMap::from([
+            (
+                7,
+                RegionalPath {
+                    path_id: 7,
+                    sample: "GRCh38".into(),
+                    contig: "chr1".into(),
+                    haplotype: 0,
+                    fragment: 100,
+                    is_reference: true,
+                    visits: BTreeMap::from([(0, forward_1), (1, forward_2)]),
+                },
+            ),
+            (
+                8,
+                RegionalPath {
+                    path_id: 8,
+                    sample: "sample-1".into(),
+                    contig: "chr1".into(),
+                    haplotype: 1,
+                    fragment: 100,
+                    is_reference: false,
+                    visits: BTreeMap::from([(0, forward_1), (1, forward_2)]),
+                },
+            ),
+        ]),
+        reference_visits: BTreeSet::from([
+            ReferenceVisit {
+                path_id: 7,
+                visit_index: 0,
+                start: 100,
+                end: 101,
+                node: forward_1,
+            },
+            ReferenceVisit {
+                path_id: 7,
+                visit_index: 1,
+                start: 101,
+                end: 102,
+                node: forward_2,
+            },
+        ]),
+        ..RegionalGraph::default()
+    }
+}
+
+fn conformance_archive(
+    archive_version: u32,
+    raw: &[u8],
+) -> ExperimentResult<ConformanceArchiveParts> {
+    let codec = ChunkCodec::Zstd3;
+    let compressed = compress(codec, raw)?;
+    let mut manifest = ReferenceManifest {
+        sample: "GRCh38".into(),
+        contig: "chr1".into(),
+        start: 100,
+        end: 102,
+        grid_start: 0,
+        window_size: 16_384,
+        bucket_span: 16_384 * DIRECTORY_BUCKET_WINDOWS,
+        first_page_offset: 0,
+        page_count: 1,
+        entry_count: 1,
+        codec,
+    };
+    let provisional_root = encode_root_index(std::slice::from_ref(&manifest))?;
+    manifest.first_page_offset = usize_to_u64(HEADER_LEN + provisional_root.len())?;
+    let root = encode_root_index(std::slice::from_ref(&manifest))?;
+    if root.len() != provisional_root.len() {
+        return Err(invalid_data("conformance root length changed after offset assignment").into());
+    }
+    let data_offset = manifest
+        .first_page_offset
+        .checked_add(usize_to_u64(DIRECTORY_PAGE_BYTES)?)
+        .ok_or_else(|| invalid_data("conformance data offset overflow"))?;
+    let entry = ArchiveEntry {
+        start: 100,
+        end: 102,
+        offset: data_offset,
+        compressed_len: usize_to_u64(compressed.len())?,
+        uncompressed_len: usize_to_u64(raw.len())?,
+        codec,
+    };
+    let directory = encode_directory_page(&[entry], 0)?.to_vec();
+    let mut header = encode_header(usize_to_u64(root.len())?, 1, data_offset).to_vec();
+    if archive_version == 3 {
+        header[..8].copy_from_slice(ARCHIVE_MAGIC_V3);
+        header[8..12].copy_from_slice(&3_u32.to_le_bytes());
+    } else if archive_version != ARCHIVE_VERSION {
+        return Err(invalid_input(format!(
+            "unsupported conformance archive version {archive_version}"
+        ))
+        .into());
+    }
+    let mut archive =
+        Vec::with_capacity(header.len() + root.len() + directory.len() + compressed.len());
+    archive.extend_from_slice(&header);
+    archive.extend_from_slice(&root);
+    archive.extend_from_slice(&directory);
+    archive.extend_from_slice(&compressed);
+    Ok(ConformanceArchiveParts {
+        archive,
+        header,
+        root,
+        directory,
+        compressed,
+    })
+}
+
+fn sha256_hex(bytes: &[u8]) -> String {
+    format!("{:x}", Sha256::digest(bytes))
+}
+
+fn conformance_expected(
+    graph: &RegionalGraph,
+    query: &QuerySpec,
+) -> ExperimentResult<serde_json::Value> {
+    let selected = graph.select_nodes(query)?;
+    let canonical = graph.canonical(&selected, query)?;
+    let reference_traversal = if let Some(reference) = graph.reference_paths.first() {
+        reference
+            .traversal
+            .iter()
+            .map(|&node| pack_oriented(node).map(|value| value.to_string()))
+            .collect::<io::Result<Vec<_>>>()?
+    } else {
+        graph
+            .paths
+            .values()
+            .find(|path| path.is_reference)
+            .map_or(Ok(Vec::new()), |path| {
+                path.visits
+                    .values()
+                    .map(|&node| pack_oriented(node).map(|value| value.to_string()))
+                    .collect::<io::Result<Vec<_>>>()
+            })?
+    };
+    let mut traversals = Vec::new();
+    if let Some(tile) = graph.haplotype_tiles.first() {
+        for item in &tile.traversals {
+            let nodes = item
+                .traversal
+                .iter()
+                .map(|&node| pack_oriented(node).map(|value| value.to_string()))
+                .collect::<io::Result<Vec<_>>>()?;
+            traversals.push(serde_json::json!({
+                "weight": item.weight.to_string(),
+                "nodes": nodes
+            }));
+        }
+    }
+    Ok(serde_json::json!({
+        "references": [{"sample": "GRCh38", "contig": "chr1", "start": 100, "end": 102}],
+        "query": {"sample": query.sample, "contig": query.contig, "start": query.start, "end": query.end, "context": query.context},
+        "canonicalHash": canonical.canonical_hash().to_hex().to_string(),
+        "tile": {
+            "semantics": graph.semantics.label(),
+            "coreStart": 100,
+            "coreEnd": 102,
+            "nodeIds": graph.nodes.keys().map(ToString::to_string).collect::<Vec<_>>(),
+            "nodeSequences": graph.nodes.values().map(|value| String::from_utf8_lossy(value)).collect::<Vec<_>>(),
+            "edges": graph.edges.iter().flat_map(|edge| [pack_oriented(edge.from), pack_oriented(edge.to)]).collect::<io::Result<Vec<_>>>()?.into_iter().map(|value| value.to_string()).collect::<Vec<_>>(),
+            "referenceTraversal": reference_traversal,
+            "weightedTraversals": traversals,
+            "namedPathIds": graph.paths.keys().map(ToString::to_string).collect::<Vec<_>>()
+        }
+    }))
+}
+
+fn write_conformance_fixture(
+    directory: &Path,
+    id: &str,
+    archive_version: u32,
+    regional_version: u32,
+    graph: &RegionalGraph,
+    raw: &[u8],
+    query: &QuerySpec,
+) -> ExperimentResult<serde_json::Value> {
+    let parts = conformance_archive(archive_version, raw)?;
+    let files = [
+        (format!("{id}.pngr"), parts.archive),
+        (format!("{id}.header.bin"), parts.header),
+        (format!("{id}.root.bin"), parts.root),
+        (format!("{id}.directory.bin"), parts.directory),
+        (format!("{id}.payload.raw"), raw.to_vec()),
+        (
+            format!("{id}.payload.zstd1"),
+            compress(ChunkCodec::Zstd1, raw)?,
+        ),
+        (format!("{id}.payload.zstd3"), parts.compressed),
+        (
+            format!("{id}.payload.zstd6"),
+            compress(ChunkCodec::Zstd6, raw)?,
+        ),
+    ];
+    let mut file_metadata = serde_json::Map::new();
+    for (name, bytes) in files {
+        std::fs::write(directory.join(&name), &bytes)?;
+        file_metadata.insert(
+            name,
+            serde_json::json!({"bytes": bytes.len(), "sha256": sha256_hex(&bytes)}),
+        );
+    }
+    Ok(serde_json::json!({
+        "id": id,
+        "archiveVersion": archive_version,
+        "regionalVersion": regional_version,
+        "semantics": graph.semantics.label(),
+        "files": file_metadata,
+        "expected": conformance_expected(graph, query)?
+    }))
+}
+
+/// Deterministically exports the tiny cross-language conformance matrix.
+///
+/// # Errors
+///
+/// Returns an error when fixture encoding, compression, hashing, or output
+/// fails. The generated two-node graphs contain no third-party source data.
+pub fn export_conformance_fixtures(directory: impl AsRef<Path>) -> ExperimentResult<()> {
+    let directory = directory.as_ref();
+    std::fs::create_dir_all(directory)?;
+    let query = QuerySpec {
+        id: "conformance-100-102".into(),
+        class: "cross-language-conformance".into(),
+        sample: "GRCh38".into(),
+        contig: "chr1".into(),
+        start: 100,
+        end: 102,
+        context: CONSTRUCTION_CONTEXT,
+    };
+    let named = conformance_named_graph();
+    let weighted = conformance_weighted_graph();
+    let record_payload = conformance_record_payload();
+    let record = record_payload.clone().into_regional_graph()?;
+    let fixtures = vec![
+        write_conformance_fixture(
+            directory,
+            "archive-v3-named-v2",
+            3,
+            2,
+            &named,
+            &named.encode()?,
+            &query,
+        )?,
+        write_conformance_fixture(
+            directory,
+            "archive-v4-weighted-v3",
+            4,
+            3,
+            &weighted,
+            &weighted.encode()?,
+            &query,
+        )?,
+        write_conformance_fixture(
+            directory,
+            "archive-v4-record-v4",
+            4,
+            4,
+            &record,
+            &record_payload.encode()?,
+            &query,
+        )?,
+    ];
+    let manifest = serde_json::json!({
+        "schemaVersion": 1,
+        "provenance": "deterministic synthetic two-node graph generated by the Rust reference encoder; no external source data",
+        "supportedArchiveVersions": [3, 4],
+        "supportedRegionalVersions": [2, 3, 4],
+        "fixtures": fixtures
+    });
+    std::fs::write(
+        directory.join("manifest.json"),
+        serde_json::to_vec_pretty(&manifest)?,
+    )?;
     Ok(())
 }
 
@@ -5559,6 +5953,42 @@ mod tests {
         assert!(validate_fixed_archive(&corrupt).is_err());
         std::fs::remove_file(corrupt).unwrap();
         std::fs::remove_file(output).unwrap();
+    }
+
+    #[test]
+    fn conformance_fixture_export_is_deterministic_and_rust_readable() {
+        let directory =
+            simple_sds::serialize::temp_file_name("pangenome-range-cross-language-conformance");
+        export_conformance_fixtures(&directory).unwrap();
+        let manifest_path = directory.join("manifest.json");
+        let first_manifest = std::fs::read(&manifest_path).unwrap();
+        let document: serde_json::Value = serde_json::from_slice(&first_manifest).unwrap();
+        assert_eq!(
+            document["supportedArchiveVersions"],
+            serde_json::json!([3, 4])
+        );
+        assert_eq!(
+            document["supportedRegionalVersions"],
+            serde_json::json!([2, 3, 4])
+        );
+        for fixture in document["fixtures"].as_array().unwrap() {
+            let archive_name = fixture["files"]
+                .as_object()
+                .unwrap()
+                .keys()
+                .find(|name| {
+                    Path::new(name)
+                        .extension()
+                        .is_some_and(|extension| extension.eq_ignore_ascii_case("pngr"))
+                })
+                .unwrap();
+            let summary = validate_fixed_archive(&directory.join(archive_name)).unwrap();
+            assert_eq!(summary.physical_payloads, 1);
+            assert_eq!(summary.directory_entries, 1);
+        }
+        export_conformance_fixtures(&directory).unwrap();
+        assert_eq!(std::fs::read(&manifest_path).unwrap(), first_manifest);
+        std::fs::remove_dir_all(directory).unwrap();
     }
 
     #[test]

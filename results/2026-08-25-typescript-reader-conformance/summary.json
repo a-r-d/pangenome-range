@@ -1,0 +1,107 @@
+{
+  "schemaVersion": 1,
+  "date": "2026-08-25",
+  "baselineCommit": "6c77634",
+  "environment": {
+    "os": "Linux 6.17.0-41-generic x86_64",
+    "cpu": "Intel Core i7-10700, 8 cores / 16 threads",
+    "node": "v24.16.0",
+    "pnpm": "11.24.0",
+    "rustc": "1.97.1",
+    "cargo": "1.97.1"
+  },
+  "supportedVersions": {
+    "archives": [3, 4],
+    "regionalPayloads": [2, 3, 4]
+  },
+  "fixtures": [
+    {
+      "id": "archive-v3-named-v2",
+      "archiveVersion": 3,
+      "regionalVersion": 2,
+      "semantics": "named-paths-v3",
+      "canonicalHash": "c56f5442a8a29da7de49c70135e168c863187712a366684f972429d48c360528"
+    },
+    {
+      "id": "archive-v4-weighted-v3",
+      "archiveVersion": 4,
+      "regionalVersion": 3,
+      "semantics": "anonymous-distinct-weighted-tile-paths",
+      "canonicalHash": "ef21ce8eabdbf20afb09493ec887015ddba049bf815ebc1a37cb361569e1fab1"
+    },
+    {
+      "id": "archive-v4-record-v4",
+      "archiveVersion": 4,
+      "regionalVersion": 4,
+      "semantics": "anonymous-distinct-weighted-tile-paths",
+      "canonicalHash": "ef21ce8eabdbf20afb09493ec887015ddba049bf815ebc1a37cb361569e1fab1"
+    }
+  ],
+  "nodeIntegration": {
+    "archiveBytes": 164266,
+    "archiveSha256": "2c229cdea3d9a27686f08a4e1ceaf36790dff462ec8867191bc77cb0499526e6",
+    "sourceBytes": 73920,
+    "sourceSha256": "1d574ede7533150eb87f6837a7763d4eac120aa03f34877392ecdd53b0410788",
+    "queries": [
+      {
+        "id": "MICB",
+        "tiles": 2,
+        "nodes": 659,
+        "weightedTraversals": 94,
+        "getRequests": 2,
+        "fetchedBytes": 37797,
+        "ranges": ["bytes=0-16383", "bytes=38299-59711"],
+        "canonicalHash": "afb9deec892bac5a2d5451152f4e056b03db0aaf84b3584f12ec6840a588c3d2",
+        "matchingSources": ["HttpRangeSource", "BlobRangeSource", "FileRangeSource"]
+      },
+      {
+        "id": "KIR3DL1",
+        "tiles": 2,
+        "nodes": 2231,
+        "weightedTraversals": 67,
+        "getRequests": 3,
+        "fetchedBytes": 68619,
+        "ranges": [
+          "bytes=0-16383",
+          "bytes=16384-16847",
+          "bytes=112495-164265"
+        ],
+        "canonicalHash": "6286875290ab18d9f7fcfe4e481d79990cfda6004672f9fa09736def5d0c2411",
+        "matchingSources": ["HttpRangeSource", "BlobRangeSource", "FileRangeSource"]
+      }
+    ]
+  },
+  "browserIntegration": {
+    "archiveBytes": 70024,
+    "archiveSha256": "3dc585b876d4230beda51b238d21f5fe301fcfc54c897ea588fe1af9da20c4ef",
+    "engines": ["chromium", "firefox", "webkit"],
+    "headRequestsPerEngine": 1,
+    "getRequestsPerEngine": 3,
+    "fetchedBytesPerEngine": 20604,
+    "ranges": [
+      "bytes=0-16383",
+      "bytes=65804-69899",
+      "bytes=69900-70023"
+    ],
+    "tiles": 1,
+    "nodes": 2,
+    "weightedTraversals": 1,
+    "timingQualification": "loopback functional evidence only"
+  },
+  "bundleBytes": {
+    "reader": { "raw": 138924, "gzip": 31195, "rawBudget": 163840, "gzipBudget": 51200 },
+    "node": { "raw": 1634, "gzip": 638, "rawBudget": 8192 },
+    "viewer": { "raw": 273, "gzip": 192 }
+  },
+  "commands": [
+    "cargo run --release -p pangenome-range-cli -- fixtures export test-data/conformance",
+    "pnpm --filter @pangenome-range/benchmark test",
+    "pnpm test:browser",
+    "pnpm --filter pangenome-range test:bundle",
+    "pnpm lint",
+    "pnpm typecheck",
+    "pnpm test",
+    "pnpm build",
+    "cargo test --workspace"
+  ]
+}

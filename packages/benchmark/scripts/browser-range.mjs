@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { createServer } from "node:http";
 import { dirname, resolve } from "node:path";
@@ -164,7 +165,8 @@ async function runBrowser(browserType, name, moduleOrigin, rangeOrigin, query) {
       async ({ archiveUrl, query }) => {
         const reader = await import("/reader.js");
         const started = performance.now();
-        const archive = await reader.openPangenome({ source: archiveUrl });
+        const source = new reader.HttpRangeSource(archiveUrl);
+        const archive = await reader.openPangenome(source);
         const openedMs = performance.now() - started;
         const queried = await archive.query(query);
         const totalMs = performance.now() - started;
@@ -185,6 +187,12 @@ async function runBrowser(browserType, name, moduleOrigin, rangeOrigin, query) {
             (total, tile) => total + tile.encodedLength,
             0,
           ),
+          sourceRequests: source.requests.map((request) => ({
+            ...request,
+            ...(request.offset === undefined
+              ? {}
+              : { offset: String(request.offset) }),
+          })),
           openedMs,
           totalMs,
         };
@@ -263,18 +271,35 @@ try {
     );
     assert.equal(measurement.tiles, expectedTiles);
     assert(measurement.nodes > 0);
-    assert(rangeOrigin.requests.length >= 4);
-    assert(rangeOrigin.requests.every((request) => request.status === 206));
-    const fetchedBytes = rangeOrigin.requests.reduce(
+    const headRequests = rangeOrigin.requests.filter(
+      ({ method }) => method === "HEAD",
+    );
+    const rangeRequests = rangeOrigin.requests.filter(
+      ({ method }) => method === "GET",
+    );
+    assert.equal(
+      headRequests.length,
+      1,
+      JSON.stringify(
+        { originRequests: rangeOrigin.requests, measurement },
+        (_key, value) => (typeof value === "bigint" ? String(value) : value),
+      ),
+    );
+    assert.equal(headRequests[0].status, 200);
+    assert(rangeRequests.length >= 3);
+    assert(rangeRequests.every((request) => request.status === 206));
+    assert(rangeRequests.slice(1).every((request) => request.ifRange !== null));
+    const fetchedBytes = rangeRequests.reduce(
       (total, request) => total + request.bytes,
       0,
     );
     assert(fetchedBytes < rangeOrigin.size);
     measurements.push({
       ...measurement,
-      requests: rangeOrigin.requests.length,
+      headRequests: headRequests.length,
+      requests: rangeRequests.length,
       fetchedBytes,
-      ranges: rangeOrigin.requests.map((request) => request.range),
+      ranges: rangeRequests.map((request) => request.range),
     });
   }
 } finally {
@@ -286,6 +311,13 @@ console.log(
   JSON.stringify(
     {
       archiveBytes: rangeOrigin.size,
+      ...(archiveBytes === undefined
+        ? {}
+        : {
+            archiveSha256: createHash("sha256")
+              .update(archiveBytes)
+              .digest("hex"),
+          }),
       query,
       measurements,
     },

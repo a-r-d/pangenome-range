@@ -28,6 +28,7 @@
   },
   "scripts": {
     "build": "tsup",
+    "test:bundle": "node test/bundle-size.mjs",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run"
   },
@@ -38,6 +39,7 @@
     "vitest": "^4.1.11"
   },
   "dependencies": {
+    "@noble/hashes": "2.3.0",
     "fzstd": "0.1.1"
   }
 }

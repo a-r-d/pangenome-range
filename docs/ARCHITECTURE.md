@@ -60,13 +60,14 @@ DOM or Node built-ins; `/viewer` owns the framework-neutral rendering contract,
 and `/node` owns Node-only range sources. `packages/benchmark` is private and
 will own Node and real-browser measurements.
 
-The public contracts, strict HTTP/Blob/memory/file range sources, archive-v4
+The public contracts, strict HTTP/Blob/memory/file range sources, archive-v3/v4
 bootstrap/root and arithmetic directory reader, byte-bounded caches,
-pure-JavaScript zstd decompressor, and record-preserving regional payload
-decoder exist. Rust and TypeScript decode the same raw golden payload into
-typed-array-oriented nodes, sequences, topology, reference traversal, and
-weighted local paths. Rendering and a public-network browser benchmark corpus
-remain explicitly unimplemented.
+pure-JavaScript zstd decompressor, canonical graph assembly, and all
+Rust-retained regional payload decoders exist. Rust and TypeScript decode a
+deterministic fixture matrix into typed-array-oriented nodes, sequences,
+topology, reference traversal, named paths, and weighted local paths, then
+produce identical canonical hashes. Rendering and a public-network browser
+benchmark corpus remain explicitly unimplemented.
 
 ## Range sources and traces
 
@@ -88,11 +89,24 @@ Unique-byte accounting is the union of half-open requested intervals. Failed
 reads are still requests and remain in the trace. Zero-length reads count as
 operations but cover no bytes.
 
-`HttpRangeSource` requires exact `206`, matching exposed `Content-Range` and
-`Content-Length`, `Accept-Ranges: bytes`, and a stable exposed `ETag`. It never
-accepts `200` fallback. The integration origin also supplies CORS, immutable
-`no-transform` cache policy, and raw request evidence. Browser/library and HTTP
-cache effects remain reported separately.
+`HttpRangeSource` lazily discovers size with usable `HEAD` metadata and falls
+back to `GET Range: bytes=0-0`. Exact reads require `206`, matching exposed
+`Content-Range` and `Content-Length`, `Accept-Ranges: bytes`, and a stable
+exposed `ETag`; later reads use `If-Range` by default. A `200` whole-object body
+is rejected without reading it unless a caller explicitly configures a small
+`maxFullResponseBytes` cap. Normal reads leave the browser HTTP cache enabled;
+benchmarks opt into `cache: "no-store"` when measuring cold transport. The
+integration origin also supplies CORS, immutable `no-transform` cache policy,
+and raw request evidence. Browser/library and HTTP cache effects remain
+reported separately.
+
+The archive reader retains the bounded bootstrap/root, uses separate
+byte-bounded LRU caches for directory pages and compressed payloads, fetches
+missing pages as contiguous spans, and coalesces selected payloads into one
+parallel dependency round. Optional query traces report exact ranges and layer
+bytes, dependency rounds, cache hits, decode/decompression/merge timings,
+selected counts, and the canonical BLAKE3 result. When tracing is disabled,
+the merge remains required but trace accounting and hashing are skipped.
 
 ## Cost simulation
 

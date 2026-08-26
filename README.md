@@ -29,6 +29,7 @@ cargo run --release -- verify /tmp/mhc.pngr \
   --against test-data/mhc-10.gbz --sample MHC-GRCh38 --contig MHC \
   --start 100000 --end 200000
 cargo run --release -- validate /tmp/mhc.pngr
+cargo run --release -- fixtures export test-data/conformance
 ```
 
 Development checks:
@@ -56,6 +57,59 @@ TypeScript checking and tests. `pnpm format` applies Biome formatting.
 HTTP `206` bootstrap, directory, zstd payload, and decode paths in Chromium,
 Firefox, and WebKit against a deterministic transport fixture.
 
+## TypeScript reader
+
+The package is private while naming, ownership, and release policy remain under
+review. Browser code can open a URL or a local `File`/`Blob` directly:
+
+```ts
+import { openPangenome } from "pangenome-range";
+
+const archive = await openPangenome({
+  source: "https://example.test/graph.pngr",
+  directoryCacheBytes: 1024 * 1024,
+  payloadCacheBytes: 32 * 1024 * 1024,
+});
+
+const result = await archive.query({
+  sample: "GRCh38",
+  contig: "chr6",
+  start: 31_498_145,
+  end: 31_511_124,
+  context: 100,
+  trace: true,
+});
+
+console.log(result.graph.nodes.ids, result.tiles[0]?.haplotypes);
+console.log(result.trace?.requestRanges, result.trace?.canonicalHash);
+await archive.close();
+```
+
+`queryTiles()` is the streaming primitive. It preserves anonymous haplotype
+evidence per source tile; `query()` merges only globally mergeable graph
+topology and keeps those tiles alongside the merged graph.
+
+```ts
+for await (const tile of archive.queryTiles({
+  sample: "GRCh38",
+  contig: "chr19",
+  start: 54_816_468,
+  end: 54_830_778,
+})) {
+  renderProgressively(tile);
+}
+```
+
+Use the isolated Node subpath for positioned file reads:
+
+```ts
+import { openPangenome } from "pangenome-range/reader";
+import { FileRangeSource } from "pangenome-range/node";
+
+const source = await FileRangeSource.open("graph.pngr");
+const archive = await openPangenome(source);
+```
+
 Run measurements with `--release`. Large data and benchmarks will remain
 opt-in; the default test suite uses synthetic bytes and stays fast.
 
@@ -69,9 +123,9 @@ opt-in; the default test suite uses synthetic bytes and stays fast.
 - `pangenome-range-cli`: the direct-write v4 encoder, GBZ inspection, source
   tracing, and retained research benchmarks.
 - `packages/browser`: private ESM package with isolated reader, viewer, and Node
-  exports, strict HTTP/Blob/memory/file range sources, archive-v4 opening, and
-  the cross-language record-preserving regional decoder. Rendering is not
-  implemented.
+  exports, strict HTTP/Blob/memory/file range sources, archive-v3/v4 opening,
+  all Rust-retained regional decoders, canonical graph assembly, and optional
+  query traces. Rendering is not implemented in this tranche.
 - `packages/benchmark`: private browser/Node benchmark tools with a real
   cross-origin range-origin smoke test; a full latency corpus remains future
   work.

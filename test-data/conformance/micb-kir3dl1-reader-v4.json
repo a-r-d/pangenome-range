@@ -1,0 +1,49 @@
+{
+  "schemaVersion": 1,
+  "source": {
+    "path": "test-data/micb-kir3dl1.gbz",
+    "bytes": 73920,
+    "sha256": "1d574ede7533150eb87f6837a7763d4eac120aa03f34877392ecdd53b0410788",
+    "provenance": "GBZ-base a5ed1ff3ddc402e230d1187afa438e05c8b3654e MICB/KIR3DL1 fixture; see docs/UPSTREAM.md"
+  },
+  "archive": {
+    "path": "test-data/conformance/micb-kir3dl1-reader-v4.pngr",
+    "bytes": 164266,
+    "sha256": "2c229cdea3d9a27686f08a4e1ceaf36790dff462ec8867191bc77cb0499526e6",
+    "archiveVersion": 4,
+    "regionalVersion": 4,
+    "codec": "zstd-3",
+    "chunks": 8,
+    "command": "pangenome-range encode test-data/micb-kir3dl1.gbz test-data/conformance/micb-kir3dl1-reader-v4.pngr --threads 1 --codec zstd-3 --progress off"
+  },
+  "queries": [
+    {
+      "id": "MICB",
+      "sample": "GRCh38",
+      "contig": "chr6",
+      "start": 31498145,
+      "end": 31511124,
+      "context": 100,
+      "canonicalHash": "afb9deec892bac5a2d5451152f4e056b03db0aaf84b3584f12ec6840a588c3d2",
+      "http": {
+        "requests": 2,
+        "fetchedBytes": 37797,
+        "ranges": ["bytes=0-16383", "bytes=38299-59711"]
+      }
+    },
+    {
+      "id": "KIR3DL1",
+      "sample": "GRCh38",
+      "contig": "chr19",
+      "start": 54816468,
+      "end": 54830778,
+      "context": 100,
+      "canonicalHash": "6286875290ab18d9f7fcfe4e481d79990cfda6004672f9fa09736def5d0c2411",
+      "http": {
+        "requests": 3,
+        "fetchedBytes": 68619,
+        "ranges": ["bytes=0-16383", "bytes=16384-16847", "bytes=112495-164265"]
+      }
+    }
+  ]
+}

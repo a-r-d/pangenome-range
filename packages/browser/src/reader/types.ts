@@ -1,6 +1,8 @@
 /** Options shared by exact byte-range reads. */
 export interface RangeReadOptions {
   signal?: AbortSignal;
+  /** Override the source's normal HTTP cache mode for an explicit benchmark. */
+  cache?: RequestCache;
 }
 
 /**
@@ -38,13 +40,21 @@ export interface RegionQuery {
   end: number;
   context?: number;
   signal?: AbortSignal;
+  /** Enable optional query instrumentation or receive it when streaming ends. */
+  trace?: boolean | ((trace: QueryTrace) => void);
 }
 
 export interface OpenPangenomeOptions {
   source: string | Blob | RangeSource;
   fetch?: typeof globalThis.fetch;
+  httpHeaders?: HeadersInit;
+  httpCache?: RequestCache;
+  httpUseHead?: boolean;
+  httpUseIfRange?: boolean;
+  maxFullResponseBytes?: number;
   directoryCacheBytes?: number;
   payloadCacheBytes?: number;
+  payloadCoalescingGapBytes?: number;
   maxRootBytes?: number;
   maxChunkBytes?: number;
   decompressor?: ChunkDecompressor;
@@ -57,6 +67,7 @@ export interface ReferenceDescriptor {
   readonly start: number;
   readonly end: number;
   readonly fragment?: number;
+  readonly haplotype?: number;
   readonly orientation?: "forward" | "reverse";
 }
 
@@ -65,12 +76,65 @@ export type HaplotypeSemantics =
   | "anonymous-all-tile-paths"
   | "anonymous-distinct-weighted-tile-paths";
 
+export interface NodeTable {
+  readonly ids: BigUint64Array;
+  readonly sequenceOffsets: Uint32Array;
+  readonly sequenceBytes: Uint8Array;
+}
+
+export interface EdgeTable {
+  readonly from: BigUint64Array;
+  readonly to: BigUint64Array;
+}
+
+export interface WeightedTraversalTable {
+  readonly kind: "weighted-traversals";
+  readonly traversalOffsets: Uint32Array;
+  readonly orientedNodes: BigUint64Array;
+  readonly weights: BigUint64Array;
+}
+
+export interface NamedPathTable {
+  readonly kind: "named-paths";
+  readonly samples: readonly string[];
+  readonly contigs: readonly string[];
+  readonly pathIds: BigUint64Array;
+  readonly sampleIds: Uint32Array;
+  readonly contigIds: Uint32Array;
+  readonly haplotypes: BigUint64Array;
+  readonly fragments: BigUint64Array;
+  readonly referenceFlags: Uint8Array;
+  readonly visitOffsets: Uint32Array;
+  readonly visitIndices: BigUint64Array;
+  readonly orientedNodes: BigUint64Array;
+  readonly referenceVisitPathIds: BigUint64Array;
+  readonly referenceVisitIndices: BigUint64Array;
+  readonly referenceVisitStarts: BigUint64Array;
+  readonly referenceVisitEnds: BigUint64Array;
+  readonly referenceVisitNodes: BigUint64Array;
+}
+
+export interface TileProvenance {
+  readonly archiveOffset: bigint;
+  readonly compressedBytes: number;
+  readonly uncompressedBytes: number;
+  readonly codec: "none" | "zstd-1" | "zstd-3" | "zstd-6";
+}
+
 /** A decoded tile. Numeric graph fields are typed-array-oriented. */
 export interface RegionTile {
   readonly reference: ReferenceDescriptor;
+  readonly coreStart: number;
+  readonly coreEnd: number;
+  /** Compatibility aliases for the initial private reader API. */
   readonly start: number;
   readonly end: number;
   readonly semantics: HaplotypeSemantics;
+  readonly nodes: NodeTable;
+  readonly topology: EdgeTable;
+  readonly haplotypes: NamedPathTable | WeightedTraversalTable;
+  readonly provenance: TileProvenance;
+  /** Flat table aliases retained for the initial private reader API. */
   readonly archiveOffset: bigint;
   readonly encodedLength: number;
   readonly nodeIds: BigUint64Array;
@@ -83,16 +147,83 @@ export interface RegionTile {
   readonly traversalWeights: BigUint64Array;
 }
 
+export interface RegionGraph {
+  readonly reference: ReferenceDescriptor;
+  readonly nodes: NodeTable;
+  readonly edges: EdgeTable;
+  readonly referenceTraversal: BigUint64Array;
+  readonly paths?: CanonicalPathTable;
+}
+
+export interface CanonicalPathTable {
+  readonly samples: readonly string[];
+  readonly contigs: readonly string[];
+  readonly haplotypes: BigUint64Array;
+  readonly fragments: BigUint64Array;
+  readonly referenceFlags: Uint8Array;
+  readonly traversalOffsets: Uint32Array;
+  readonly orientedNodes: BigUint64Array;
+}
+
+export interface QueryRequestRange {
+  readonly offset: bigint;
+  readonly length: number;
+  readonly layer: "bootstrap" | "directory" | "payload";
+}
+
+export interface QueryCacheHits {
+  readonly bootstrap: number;
+  readonly directory: number;
+  readonly payload: number;
+}
+
+export interface QueryTrace {
+  readonly dependencyRounds: number;
+  readonly requestRanges: readonly QueryRequestRange[];
+  readonly totalBytes: number;
+  readonly uniqueBytes: number;
+  readonly duplicateBytes: number;
+  readonly bootstrapBytes: number;
+  readonly directoryBytes: number;
+  readonly payloadBytes: number;
+  readonly cacheHits: QueryCacheHits;
+  readonly decompressionMs: number;
+  readonly decodeMs: number;
+  readonly mergeMs: number;
+  readonly selectedChunks: number;
+  readonly selectedNodes: number;
+  readonly selectedTraversals: number;
+  readonly canonicalHash: string;
+}
+
 export interface RegionResult {
   readonly query: Readonly<RegionQuery>;
   readonly semantics: HaplotypeSemantics;
+  readonly graph: RegionGraph;
   readonly tiles: readonly RegionTile[];
+  readonly trace?: QueryTrace;
+}
+
+export interface ArchiveCacheStats {
+  readonly directoryBytes: number;
+  readonly directoryEntries: number;
+  readonly payloadBytes: number;
+  readonly payloadEntries: number;
 }
 
 export interface PangenomeArchive {
   readonly formatVersion: number;
+  readonly semantics: HaplotypeSemantics;
   references(): readonly ReferenceDescriptor[];
   query(query: RegionQuery): Promise<RegionResult>;
   queryTiles(query: RegionQuery): AsyncIterable<RegionTile>;
+  cacheStats(): ArchiveCacheStats;
+  clearCaches(): void;
   close(): void | Promise<void>;
 }
+
+export type OpenPangenomeInput =
+  | string
+  | Blob
+  | RangeSource
+  | OpenPangenomeOptions;

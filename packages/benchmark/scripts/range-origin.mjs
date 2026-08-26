@@ -38,6 +38,8 @@ export async function createRangeOrigin({
     const started = performance.now();
     const common = {
       "Accept-Ranges": "bytes",
+      "Access-Control-Allow-Headers": "Range, If-Range",
+      "Access-Control-Allow-Methods": "GET, HEAD, OPTIONS",
       "Access-Control-Allow-Origin": "*",
       "Access-Control-Expose-Headers":
         "Accept-Ranges, Content-Range, Content-Length, ETag",
@@ -48,8 +50,6 @@ export async function createRangeOrigin({
     if (request.method === "OPTIONS") {
       response.writeHead(204, {
         ...common,
-        "Access-Control-Allow-Headers": "Range, If-Range",
-        "Access-Control-Allow-Methods": "GET, HEAD, OPTIONS",
       });
       response.end();
       return;
@@ -62,6 +62,14 @@ export async function createRangeOrigin({
     if (request.method === "HEAD") {
       response.writeHead(200, { ...common, "Content-Length": String(size) });
       response.end();
+      requests.push({
+        method: "HEAD",
+        range: null,
+        ifRange: request.headers["if-range"] ?? null,
+        status: 200,
+        bytes: 0,
+        elapsedMs: performance.now() - started,
+      });
       return;
     }
     if (request.method !== "GET") {
@@ -78,7 +86,9 @@ export async function createRangeOrigin({
       });
       response.end();
       requests.push({
+        method: "GET",
         range: rangeValue ?? null,
+        ifRange: request.headers["if-range"] ?? null,
         status: 416,
         bytes: 0,
         elapsedMs: performance.now() - started,
@@ -103,7 +113,9 @@ export async function createRangeOrigin({
     }
     response.on("finish", () => {
       requests.push({
+        method: "GET",
         range: rangeValue,
+        ifRange: request.headers["if-range"] ?? null,
         status: 206,
         bytes: length,
         elapsedMs: performance.now() - started,

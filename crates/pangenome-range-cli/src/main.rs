@@ -2,9 +2,9 @@ use gbz::GBZ;
 use gbz_base::PathIndex;
 use pangenome_range_build::{
     BuildProgressMode, ChunkCodec, EncodeOptions, EncoderScaleOptions, ExperimentMode,
-    ExperimentOptions, FixedArchiveConfig, FixedArchiveReader, QuerySpec, internal_gbz_base_query,
-    run_encode, run_encoder_scale_experiment, run_fixed_window_experiment, source_oracle,
-    validate_fixed_archive,
+    ExperimentOptions, FixedArchiveConfig, FixedArchiveReader, QuerySpec,
+    export_conformance_fixtures, internal_gbz_base_query, run_encode, run_encoder_scale_experiment,
+    run_fixed_window_experiment, source_oracle, validate_fixed_archive,
 };
 use pangenome_range_format::{FileRangeSource, NetworkProfile, RangeSource, TracingRangeSource};
 use simple_sds::serialize;
@@ -35,6 +35,7 @@ fn run(mut args: impl Iterator<Item = String>) -> AppResult<()> {
             let path = one_path_argument(&mut args, "validate")?;
             validate_archive(&path)
         }
+        "fixtures" => fixtures(&mut args),
         "inspect" => {
             let path = one_path_argument(&mut args, "inspect")?;
             inspect_gbz(&path)
@@ -218,6 +219,7 @@ fn print_help() {
     println!("Usage:");
     println!("  pangenome-range encode <input.gbz> <output.pngr> [options]");
     println!("  pangenome-range validate <input.pngr>");
+    println!("  pangenome-range fixtures export <directory>");
     println!(
         "  pangenome-range verify <input.pngr> --against <input.gbz> --sample NAME --contig NAME --start BP --end BP [options]"
     );
@@ -261,6 +263,28 @@ fn print_help() {
     println!("  --coalescing-gap BYTES     archive read coalescing gap");
     println!();
     println!("Reserved experiment commands: build, query, benchmark");
+}
+
+fn fixtures(args: &mut impl Iterator<Item = String>) -> AppResult<()> {
+    let action = args
+        .next()
+        .ok_or("usage: pangenome-range fixtures export <directory>")?;
+    if action != "export" {
+        return Err(format!("unknown fixtures action '{action}' (expected 'export')").into());
+    }
+    let directory = PathBuf::from(
+        args.next()
+            .ok_or("usage: pangenome-range fixtures export <directory>")?,
+    );
+    if let Some(extra) = args.next() {
+        return Err(format!("unexpected argument '{extra}'").into());
+    }
+    export_conformance_fixtures(&directory)?;
+    println!(
+        "exported deterministic conformance fixtures to {}",
+        directory.display()
+    );
+    Ok(())
 }
 
 fn verify(args: &mut impl Iterator<Item = String>) -> AppResult<()> {

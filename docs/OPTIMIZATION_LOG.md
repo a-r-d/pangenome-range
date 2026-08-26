@@ -265,6 +265,30 @@ pure-JavaScript zstd decompression, and regional-v4 decoding. A synthetic
 cross-origin origin passed in Chromium, Firefox, and WebKit. Chromium then
 queried the unchanged 8.23 GiB archive over real HTTP `206` responses: 11
 requests, 294,190 fetched bytes, seven tiles, 8,592 tile nodes, and 2,196
-weighted traversals in 1.238 seconds on loopback. Every response carried exact
-range headers and a stable ETag; the reader rejects `200` fallback. This is
-accepted functional range evidence, not a public-network latency benchmark.
+weighted traversals in 1.238 seconds on loopback. At that stage every response
+carried exact range headers and a stable ETag, and the reader rejected every
+`200` fallback. This was accepted functional range evidence, not a
+public-network latency benchmark.
+
+## 2026-08-25: TypeScript range reader and conformance matrix accepted
+
+The public reader now implements archive-v3/v4 dispatch, all Rust-retained
+regional versions, typed-array decoding, exact canonical merge/hash behavior,
+byte-bounded directory and compressed-payload caches, and one parallel
+coalesced payload round. Anonymous traversals remain tile-local; the named-v3
+compatibility decoder uses only real retained path/visit identities.
+
+The Node MICB/KIR3DL1 integration records exact request plans. MICB requires two
+GETs and 37,797 bytes; KIR3DL1 requires three GETs and 68,619 bytes. Both match
+the Rust oracle hashes through HTTP, Blob, and positioned file sources. A
+synthetic archive requires one `HEAD` plus three GETs / 20,604 bytes in each of
+Chromium, Firefox, and WebKit. The reader bundle is 138,924 bytes raw and 31,195
+bytes gzip in the final gate, below the explicit 160 KiB / 50 KiB budgets.
+
+During the three-engine gate, native browser `fetch` exposed a receiver-binding
+bug in the optional `HEAD` path that Node did not reproduce. Calling the stored
+fetch implementation as an unbound function restored `HEAD` and `If-Range` in
+all engines; a receiver-sensitive unit test retains the regression. Incorrect
+`200` responses are still rejected by default, with whole-object acceptance
+available only below an explicit caller-provided byte cap. This tranche is
+functional and conformance evidence, not a public-network latency result.

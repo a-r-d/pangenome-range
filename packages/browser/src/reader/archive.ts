@@ -1,10 +1,14 @@
 import { decompress as fzstdDecompress } from "fzstd";
+import { assembleCanonicalGraph, canonicalGraphHash } from "./canonical.js";
 import { decodeRegionalPayload } from "./regional.js";
 import { BlobRangeSource, HttpRangeSource } from "./sources.js";
 import type {
+  ArchiveCacheStats,
   ChunkDecompressor,
   OpenPangenomeOptions,
   PangenomeArchive,
+  QueryRequestRange,
+  QueryTrace,
   RangeReadOptions,
   RangeSource,
   ReferenceDescriptor,
@@ -14,6 +18,7 @@ import type {
 } from "./types.js";
 
 const ARCHIVE_MAGIC = "PNGRNG04";
+const ARCHIVE_MAGIC_V3 = "PNGRNG03";
 const ARCHIVE_VERSION = 4;
 const HEADER_BYTES = 64;
 const BOOTSTRAP_BYTES = 16 * 1024;
@@ -24,6 +29,8 @@ const DEFAULT_DIRECTORY_CACHE_BYTES = 1024 * 1024;
 const DEFAULT_PAYLOAD_CACHE_BYTES = 32 * 1024 * 1024;
 const DEFAULT_MAX_ROOT_BYTES = 16 * 1024 * 1024;
 const DEFAULT_MAX_CHUNK_BYTES = 64 * 1024 * 1024;
+const DEFAULT_PAYLOAD_COALESCING_GAP_BYTES = 64 * 1024;
+const CONSTRUCTION_CONTEXT = 100;
 const MAX_SAFE_BIGINT = BigInt(Number.MAX_SAFE_INTEGER);
 const textDecoder = new TextDecoder("utf-8", { fatal: true });
 
@@ -42,6 +49,7 @@ export class UnsupportedChunkCodecError extends Error {
 type ChunkCodec = 0 | 1 | 3 | 6;
 
 interface Header {
+  version: number;
   rootLength: bigint;
   entryCount: bigint;
   dataOffset: bigint;
@@ -147,6 +155,19 @@ class ByteCache {
     return value;
   }
 
+  get bytes(): number {
+    return this.#bytes;
+  }
+
+  get entries(): number {
+    return this.#values.size;
+  }
+
+  clear(): void {
+    this.#values.clear();
+    this.#bytes = 0;
+  }
+
   set(key: string, value: Uint8Array): void {
     if (this.#limit === 0 || value.byteLength > this.#limit) return;
     const existing = this.#values.get(key);
@@ -165,6 +186,113 @@ class ByteCache {
     this.#values.set(key, value);
     this.#bytes += value.byteLength;
   }
+}
+
+interface MutableQueryTrace {
+  requestRanges: QueryRequestRange[];
+  dependencyRounds: number;
+  bootstrapHits: number;
+  directoryHits: number;
+  payloadHits: number;
+  decompressionMs: number;
+  decodeMs: number;
+  directoryRoundRecorded: boolean;
+  payloadRoundRecorded: boolean;
+}
+
+function traceState(
+  openRanges: readonly QueryRequestRange[],
+  openDependencyRounds: number,
+): MutableQueryTrace {
+  return {
+    requestRanges: [...openRanges],
+    dependencyRounds: openDependencyRounds,
+    bootstrapHits: 1,
+    directoryHits: 0,
+    payloadHits: 0,
+    decompressionMs: 0,
+    decodeMs: 0,
+    directoryRoundRecorded: false,
+    payloadRoundRecorded: false,
+  };
+}
+
+function traceBytes(ranges: readonly QueryRequestRange[]): {
+  total: number;
+  unique: number;
+} {
+  const total = ranges.reduce((sum, range) => sum + range.length, 0);
+  const intervals = ranges
+    .filter(({ length }) => length > 0)
+    .map(({ offset, length }) => ({
+      start: offset,
+      end: offset + BigInt(length),
+    }))
+    .sort((left, right) =>
+      left.start < right.start ? -1 : left.start > right.start ? 1 : 0,
+    );
+  let unique = 0n;
+  let currentStart: bigint | undefined;
+  let currentEnd: bigint | undefined;
+  for (const interval of intervals) {
+    if (currentStart === undefined || currentEnd === undefined) {
+      currentStart = interval.start;
+      currentEnd = interval.end;
+    } else if (interval.start <= currentEnd) {
+      if (interval.end > currentEnd) currentEnd = interval.end;
+    } else {
+      unique += currentEnd - currentStart;
+      currentStart = interval.start;
+      currentEnd = interval.end;
+    }
+  }
+  if (currentStart !== undefined && currentEnd !== undefined) {
+    unique += currentEnd - currentStart;
+  }
+  return { total, unique: safeNumber(unique, "query trace unique bytes") };
+}
+
+function finishTrace(
+  state: MutableQueryTrace,
+  mergeMs: number,
+  canonicalHash: string,
+  tiles: readonly RegionTile[],
+  selectedNodes: number,
+): QueryTrace {
+  const bytes = traceBytes(state.requestRanges);
+  const layerBytes = (layer: QueryRequestRange["layer"]): number =>
+    state.requestRanges
+      .filter((range) => range.layer === layer)
+      .reduce((total, range) => total + range.length, 0);
+  return {
+    dependencyRounds: state.dependencyRounds,
+    requestRanges: state.requestRanges,
+    totalBytes: bytes.total,
+    uniqueBytes: bytes.unique,
+    duplicateBytes: bytes.total - bytes.unique,
+    bootstrapBytes: layerBytes("bootstrap"),
+    directoryBytes: layerBytes("directory"),
+    payloadBytes: layerBytes("payload"),
+    cacheHits: {
+      bootstrap: state.bootstrapHits,
+      directory: state.directoryHits,
+      payload: state.payloadHits,
+    },
+    decompressionMs: state.decompressionMs,
+    decodeMs: state.decodeMs,
+    mergeMs,
+    selectedChunks: tiles.length,
+    selectedNodes,
+    selectedTraversals: tiles.reduce(
+      (total, tile) =>
+        total +
+        (tile.haplotypes.kind === "named-paths"
+          ? tile.haplotypes.pathIds.length
+          : tile.haplotypes.weights.length),
+      0,
+    ),
+    canonicalHash,
+  };
 }
 
 function corrupt(message: string): CorruptArchiveError {
@@ -213,9 +341,11 @@ function decodeHeader(bytes: Uint8Array): Header {
   const entryCount = reader.u64();
   const dataOffset = reader.u64();
   assertZero(reader.take(16), "archive header reserved bytes");
+  const supportedVersion =
+    (magic === ARCHIVE_MAGIC && version === ARCHIVE_VERSION) ||
+    (magic === ARCHIVE_MAGIC_V3 && version === 3);
   if (
-    magic !== ARCHIVE_MAGIC ||
-    version !== ARCHIVE_VERSION ||
+    !supportedVersion ||
     headerLength !== HEADER_BYTES ||
     rootOffset !== BigInt(HEADER_BYTES)
   ) {
@@ -223,7 +353,22 @@ function decodeHeader(bytes: Uint8Array): Header {
       `unsupported archive magic ${JSON.stringify(magic)}, version ${version}, header length ${headerLength}, or root offset ${rootOffset}`,
     );
   }
-  return { rootLength, entryCount, dataOffset };
+  return { version, rootLength, entryCount, dataOffset };
+}
+
+function codecLabel(
+  codec: ChunkCodec,
+): "none" | "zstd-1" | "zstd-3" | "zstd-6" {
+  switch (codec) {
+    case 0:
+      return "none";
+    case 1:
+      return "zstd-1";
+    case 3:
+      return "zstd-3";
+    case 6:
+      return "zstd-6";
+  }
 }
 
 function decodeCodec(value: number): ChunkCodec {
@@ -405,6 +550,11 @@ function validateQuery(query: RegionQuery): void {
   }
   if (query.context !== undefined) {
     assertNonNegativeSafeInteger(query.context, "query.context");
+    if (query.context > CONSTRUCTION_CONTEXT) {
+      throw new RangeError(
+        `query.context exceeds the construction halo ${CONSTRUCTION_CONTEXT}`,
+      );
+    }
   }
   query.signal?.throwIfAborted();
 }
@@ -431,6 +581,12 @@ export class FzstdDecompressor implements ChunkDecompressor {
       "expected decompressed length",
     );
     options?.signal?.throwIfAborted();
+    const declaredLength = zstdFrameContentSize(compressed);
+    if (declaredLength !== BigInt(expectedLength)) {
+      throw corrupt(
+        `zstd frame declares ${declaredLength} bytes, expected ${expectedLength}`,
+      );
+    }
     let result: Uint8Array;
     try {
       result = fzstdDecompress(compressed, new Uint8Array(expectedLength));
@@ -447,8 +603,55 @@ export class FzstdDecompressor implements ChunkDecompressor {
   }
 }
 
+function zstdFrameContentSize(compressed: Uint8Array): bigint {
+  if (
+    compressed.byteLength < 6 ||
+    compressed[0] !== 0x28 ||
+    compressed[1] !== 0xb5 ||
+    compressed[2] !== 0x2f ||
+    compressed[3] !== 0xfd
+  ) {
+    throw corrupt("zstd payload has no standard frame header");
+  }
+  const descriptor = compressed[4] as number;
+  if ((descriptor & 0x18) !== 0) {
+    throw corrupt("zstd frame uses reserved descriptor bits");
+  }
+  const singleSegment = (descriptor & 0x20) !== 0;
+  const dictionaryFlag = descriptor & 0x03;
+  const dictionaryBytes = [0, 1, 2, 4][dictionaryFlag] as number;
+  const sizeFlag = descriptor >>> 6;
+  const contentSizeBytes =
+    sizeFlag === 0
+      ? singleSegment
+        ? 1
+        : 0
+      : sizeFlag === 1
+        ? 2
+        : sizeFlag === 2
+          ? 4
+          : 8;
+  if (contentSizeBytes === 0) {
+    throw corrupt("zstd frame omits its decompressed content size");
+  }
+  const contentSizeOffset = 5 + (singleSegment ? 0 : 1) + dictionaryBytes;
+  if (contentSizeOffset + contentSizeBytes > compressed.byteLength) {
+    throw corrupt("zstd frame header is truncated");
+  }
+  let value = 0n;
+  for (let index = 0; index < contentSizeBytes; index += 1) {
+    value +=
+      BigInt(compressed[contentSizeOffset + index] as number) <<
+      BigInt(index * 8);
+  }
+  return contentSizeBytes === 2 ? value + 256n : value;
+}
+
 class ArchiveReader implements PangenomeArchive {
-  readonly formatVersion = 4 as const;
+  readonly formatVersion: number;
+  readonly semantics:
+    | "named-paths-v3"
+    | "anonymous-distinct-weighted-tile-paths";
   readonly #source: RangeSource;
   readonly #sourceSize: bigint;
   readonly #bootstrap: Uint8Array;
@@ -458,6 +661,9 @@ class ArchiveReader implements PangenomeArchive {
   readonly #payloadCache: ByteCache;
   readonly #decompressor: ChunkDecompressor;
   readonly #maxChunkBytes: number;
+  readonly #payloadCoalescingGapBytes: number;
+  readonly #openRanges: readonly QueryRequestRange[];
+  readonly #openDependencyRounds: number;
   #closed = false;
 
   constructor(
@@ -467,7 +673,14 @@ class ArchiveReader implements PangenomeArchive {
     header: Header,
     manifests: Manifest[],
     options: OpenPangenomeOptions,
+    openRanges: readonly QueryRequestRange[],
+    openDependencyRounds: number,
   ) {
+    this.formatVersion = header.version;
+    this.semantics =
+      header.version === 3
+        ? "named-paths-v3"
+        : "anonymous-distinct-weighted-tile-paths";
     this.#source = source;
     this.#sourceSize = sourceSize;
     this.#bootstrap = bootstrap;
@@ -481,6 +694,10 @@ class ArchiveReader implements PangenomeArchive {
     );
     this.#decompressor = options.decompressor ?? new FzstdDecompressor();
     this.#maxChunkBytes = options.maxChunkBytes ?? DEFAULT_MAX_CHUNK_BYTES;
+    this.#payloadCoalescingGapBytes =
+      options.payloadCoalescingGapBytes ?? DEFAULT_PAYLOAD_COALESCING_GAP_BYTES;
+    this.#openRanges = openRanges;
+    this.#openDependencyRounds = openDependencyRounds;
   }
 
   references(): readonly ReferenceDescriptor[] {
@@ -495,22 +712,79 @@ class ArchiveReader implements PangenomeArchive {
   }
 
   async query(query: RegionQuery): Promise<RegionResult> {
+    this.#assertOpen();
+    validateQuery(query);
+    const instrument = query.trace !== undefined && query.trace !== false;
+    const trace = instrument
+      ? traceState(this.#openRanges, this.#openDependencyRounds)
+      : undefined;
     const tiles: RegionTile[] = [];
-    for await (const tile of this.queryTiles(query)) tiles.push(tile);
+    for await (const tile of this.#streamTiles(query, trace)) tiles.push(tile);
     tiles.sort(
       (left, right) => left.start - right.start || left.end - right.end,
     );
-    return {
-      query: { ...query },
-      semantics: "anonymous-distinct-weighted-tile-paths",
+    const mergeStarted = performance.now();
+    const graph = assembleCanonicalGraph(tiles, query);
+    const mergeMs = performance.now() - mergeStarted;
+    const baseResult: RegionResult = {
+      query: {
+        sample: query.sample,
+        contig: query.contig,
+        start: query.start,
+        end: query.end,
+        ...(query.context === undefined ? {} : { context: query.context }),
+      },
+      semantics: this.semantics,
+      graph,
       tiles,
     };
+    if (trace !== undefined) {
+      const completed = finishTrace(
+        trace,
+        mergeMs,
+        canonicalGraphHash(graph),
+        tiles,
+        graph.nodes.ids.length,
+      );
+      if (typeof query.trace === "function") query.trace(completed);
+      return { ...baseResult, trace: completed };
+    }
+    return baseResult;
   }
 
   async *queryTiles(query: RegionQuery): AsyncIterable<RegionTile> {
     this.#assertOpen();
     validateQuery(query);
-    const entries = await this.#lookup(query);
+    const instrument = typeof query.trace === "function";
+    const trace = instrument
+      ? traceState(this.#openRanges, this.#openDependencyRounds)
+      : undefined;
+    const tiles: RegionTile[] = [];
+    for await (const tile of this.#streamTiles(query, trace)) {
+      tiles.push(tile);
+      yield tile;
+    }
+    if (trace !== undefined && typeof query.trace === "function") {
+      const mergeStarted = performance.now();
+      const graph = assembleCanonicalGraph(tiles, query);
+      const mergeMs = performance.now() - mergeStarted;
+      query.trace(
+        finishTrace(
+          trace,
+          mergeMs,
+          canonicalGraphHash(graph),
+          tiles,
+          graph.nodes.ids.length,
+        ),
+      );
+    }
+  }
+
+  async *#streamTiles(
+    query: RegionQuery,
+    trace?: MutableQueryTrace,
+  ): AsyncIterable<RegionTile> {
+    const entries = await this.#lookup(query, trace);
     const uniqueEntries = new Map<string, DirectoryEntry>();
     for (const entry of entries) {
       uniqueEntries.set(
@@ -518,12 +792,14 @@ class ArchiveReader implements PangenomeArchive {
         entry,
       );
     }
-    const pending = Array.from(uniqueEntries.values(), (entry, index) => ({
+    const tilePromises = await this.#prepareTiles(
+      [...uniqueEntries.values()],
+      query.signal,
+      trace,
+    );
+    const pending = tilePromises.map((promise, index) => ({
       index,
-      promise: this.#loadTile(entry, query.signal).then((tile) => ({
-        index,
-        tile,
-      })),
+      promise: promise.then((tile) => ({ index, tile })),
     }));
     while (pending.length > 0) {
       const completed = await Promise.race(pending.map((item) => item.promise));
@@ -533,6 +809,22 @@ class ArchiveReader implements PangenomeArchive {
     }
   }
 
+  cacheStats(): ArchiveCacheStats {
+    this.#assertOpen();
+    return {
+      directoryBytes: this.#directoryCache.bytes,
+      directoryEntries: this.#directoryCache.entries,
+      payloadBytes: this.#payloadCache.bytes,
+      payloadEntries: this.#payloadCache.entries,
+    };
+  }
+
+  clearCaches(): void {
+    this.#assertOpen();
+    this.#directoryCache.clear();
+    this.#payloadCache.clear();
+  }
+
   async close(): Promise<void> {
     if (!this.#closed) {
       this.#closed = true;
@@ -540,7 +832,10 @@ class ArchiveReader implements PangenomeArchive {
     }
   }
 
-  async #lookup(query: RegionQuery): Promise<DirectoryEntry[]> {
+  async #lookup(
+    query: RegionQuery,
+    trace?: MutableQueryTrace,
+  ): Promise<DirectoryEntry[]> {
     const queryStart = BigInt(query.start);
     const queryEnd = BigInt(query.end);
     const matching = this.#manifests.filter(
@@ -569,6 +864,7 @@ class ArchiveReader implements PangenomeArchive {
           firstBucket,
           lastBucket,
           query.signal,
+          trace,
         );
         return pages
           .flatMap(({ bytes, bucketIndex }) =>
@@ -598,6 +894,7 @@ class ArchiveReader implements PangenomeArchive {
     firstBucket: bigint,
     lastBucket: bigint,
     signal?: AbortSignal,
+    trace?: MutableQueryTrace,
   ): Promise<Array<{ bytes: Uint8Array; bucketIndex: bigint }>> {
     if (
       firstBucket < 0n ||
@@ -611,7 +908,7 @@ class ArchiveReader implements PangenomeArchive {
       "directory page count",
     );
     const pages: Array<{ bytes: Uint8Array; bucketIndex: bigint }> = [];
-    let allCached = true;
+    const missingIndexes: number[] = [];
     for (let index = 0; index < pageCount; index += 1) {
       const bucketIndex = firstBucket + BigInt(index);
       const offset = checkedAdd(
@@ -624,54 +921,182 @@ class ArchiveReader implements PangenomeArchive {
         "page offset",
       );
       const cached = this.#directoryCache.get(String(offset));
-      if (cached === undefined) allCached = false;
+      if (cached === undefined) {
+        missingIndexes.push(index);
+      } else if (trace !== undefined) {
+        trace.directoryHits += 1;
+      }
       pages.push({ bytes: cached ?? new Uint8Array(), bucketIndex });
     }
-    if (allCached) return pages;
-
-    const firstOffset = checkedAdd(
-      manifest.firstPageOffset,
-      checkedMultiply(
-        firstBucket,
-        BigInt(DIRECTORY_PAGE_BYTES),
+    if (missingIndexes.length === 0) return pages;
+    const spans: Array<{ first: number; last: number }> = [];
+    for (const index of missingIndexes) {
+      const previous = spans.at(-1);
+      if (previous !== undefined && index === previous.last + 1) {
+        previous.last = index;
+      } else {
+        spans.push({ first: index, last: index });
+      }
+    }
+    const storedSpans = spans.map(({ first, last }) => {
+      const bucketIndex = firstBucket + BigInt(first);
+      const offset = checkedAdd(
+        manifest.firstPageOffset,
+        checkedMultiply(
+          bucketIndex,
+          BigInt(DIRECTORY_PAGE_BYTES),
+          "page span start",
+        ),
         "page span start",
-      ),
-      "page span start",
-    );
-    const totalBytes = pageCount * DIRECTORY_PAGE_BYTES;
-    const fetched = await this.#readStored(firstOffset, totalBytes, signal);
-    for (let index = 0; index < pageCount; index += 1) {
-      const start = index * DIRECTORY_PAGE_BYTES;
-      const page = fetched.slice(start, start + DIRECTORY_PAGE_BYTES);
-      const offset = firstOffset + BigInt(start);
-      this.#directoryCache.set(String(offset), page);
-      pages[index] = {
-        bytes: page,
-        bucketIndex: firstBucket + BigInt(index),
+      );
+      return {
+        first,
+        last,
+        offset,
+        length: (last - first + 1) * DIRECTORY_PAGE_BYTES,
       };
+    });
+    if (
+      trace !== undefined &&
+      storedSpans.some(
+        ({ offset, length }) =>
+          offset + BigInt(length) > BigInt(this.#bootstrap.byteLength),
+      ) &&
+      !trace.directoryRoundRecorded
+    ) {
+      trace.dependencyRounds += 1;
+      trace.directoryRoundRecorded = true;
+    }
+    const fetchedSpans = await Promise.all(
+      storedSpans.map(async (span) => ({
+        ...span,
+        bytes: await this.#readStored(
+          span.offset,
+          span.length,
+          signal,
+          "directory",
+          trace,
+        ),
+      })),
+    );
+    for (const span of fetchedSpans) {
+      for (let index = span.first; index <= span.last; index += 1) {
+        const start = (index - span.first) * DIRECTORY_PAGE_BYTES;
+        const page = span.bytes.slice(start, start + DIRECTORY_PAGE_BYTES);
+        const offset = span.offset + BigInt(start);
+        this.#directoryCache.set(String(offset), page);
+        pages[index] = {
+          bytes: page,
+          bucketIndex: firstBucket + BigInt(index),
+        };
+      }
     }
     return pages;
   }
 
-  async #loadTile(
-    entry: DirectoryEntry,
+  async #prepareTiles(
+    entries: readonly DirectoryEntry[],
     signal?: AbortSignal,
-  ): Promise<RegionTile> {
+    trace?: MutableQueryTrace,
+  ): Promise<Array<Promise<RegionTile>>> {
     signal?.throwIfAborted();
-    const key = `${entry.offset}:${entry.compressedLength}`;
-    let compressed = this.#payloadCache.get(key);
-    if (compressed === undefined) {
-      compressed = await this.#readStored(
+    const compressedByKey = new Map<string, Uint8Array>();
+    const missing: DirectoryEntry[] = [];
+    for (const entry of entries) {
+      const key = `${entry.offset}:${entry.compressedLength}`;
+      const cached = this.#payloadCache.get(key);
+      if (cached === undefined) {
+        missing.push(entry);
+      } else {
+        compressedByKey.set(key, cached);
+        if (trace !== undefined) trace.payloadHits += 1;
+      }
+    }
+
+    const ranges: Array<{ start: bigint; end: bigint }> = [];
+    for (const entry of [...missing].sort((left, right) =>
+      left.offset < right.offset ? -1 : left.offset > right.offset ? 1 : 0,
+    )) {
+      const end = checkedAdd(
         entry.offset,
-        safeNumber(entry.compressedLength, "compressed payload length"),
-        signal,
+        entry.compressedLength,
+        "payload end",
       );
+      const previous = ranges.at(-1);
+      const mergedLength = previous === undefined ? 0n : end - previous.start;
+      if (
+        previous !== undefined &&
+        entry.offset <=
+          previous.end + BigInt(this.#payloadCoalescingGapBytes) &&
+        mergedLength <= BigInt(this.#maxChunkBytes)
+      ) {
+        if (end > previous.end) previous.end = end;
+      } else {
+        ranges.push({ start: entry.offset, end });
+      }
+    }
+    if (
+      trace !== undefined &&
+      ranges.some(({ end }) => end > BigInt(this.#bootstrap.byteLength)) &&
+      !trace.payloadRoundRecorded
+    ) {
+      trace.dependencyRounds += 1;
+      trace.payloadRoundRecorded = true;
+    }
+    const fetched = await Promise.all(
+      ranges.map(async (range) => ({
+        range,
+        bytes: await this.#readStored(
+          range.start,
+          safeNumber(range.end - range.start, "coalesced payload range"),
+          signal,
+          "payload",
+          trace,
+        ),
+      })),
+    );
+    for (const entry of missing) {
+      const entryEnd = entry.offset + entry.compressedLength;
+      const stored = fetched.find(
+        ({ range }) => range.start <= entry.offset && range.end >= entryEnd,
+      );
+      if (stored === undefined) {
+        throw corrupt("coalesced payload response does not cover its chunk");
+      }
+      const start = safeNumber(
+        entry.offset - stored.range.start,
+        "payload slice start",
+      );
+      const length = safeNumber(
+        entry.compressedLength,
+        "compressed payload length",
+      );
+      const compressed = stored.bytes.slice(start, start + length);
+      const key = `${entry.offset}:${entry.compressedLength}`;
+      compressedByKey.set(key, compressed);
       this.#payloadCache.set(key, compressed);
     }
+    return entries.map((entry) => {
+      const key = `${entry.offset}:${entry.compressedLength}`;
+      const compressed = compressedByKey.get(key);
+      if (compressed === undefined) {
+        throw corrupt("payload cache lost a selected chunk");
+      }
+      return this.#decodeTile(entry, compressed, signal, trace);
+    });
+  }
+
+  async #decodeTile(
+    entry: DirectoryEntry,
+    compressed: Uint8Array,
+    signal?: AbortSignal,
+    trace?: MutableQueryTrace,
+  ): Promise<RegionTile> {
     const expectedLength = safeNumber(
       entry.uncompressedLength,
       "uncompressed payload length",
     );
+    const decompressionStarted = performance.now();
     const raw =
       entry.manifest.codec === 0
         ? compressed.slice()
@@ -680,19 +1105,31 @@ class ArchiveReader implements PangenomeArchive {
             expectedLength,
             signalOptions(signal),
           );
+    if (trace !== undefined) {
+      trace.decompressionMs += performance.now() - decompressionStarted;
+    }
     signal?.throwIfAborted();
     if (raw.byteLength !== expectedLength) {
       throw corrupt(
         `regional payload has ${raw.byteLength} bytes after decompression, expected ${expectedLength}`,
       );
     }
+    const decodeStarted = performance.now();
     const tile = decodeRegionalPayload(raw, {
       archiveOffset: entry.offset,
       encodedLength: safeNumber(
         entry.compressedLength,
         "encoded payload length",
       ),
+      codec: codecLabel(entry.manifest.codec),
+      coreStart: safeNumber(entry.start, "regional core start"),
+      coreEnd: safeNumber(entry.end, "regional core end"),
+      referenceSample: entry.manifest.sample,
+      referenceContig: entry.manifest.contig,
     });
+    if (trace !== undefined) {
+      trace.decodeMs += performance.now() - decodeStarted;
+    }
     if (
       BigInt(tile.start) !== entry.start ||
       BigInt(tile.end) !== entry.end ||
@@ -710,6 +1147,8 @@ class ArchiveReader implements PangenomeArchive {
     offset: bigint,
     length: number,
     signal?: AbortSignal,
+    layer: QueryRequestRange["layer"] = "payload",
+    trace?: MutableQueryTrace,
   ): Promise<Uint8Array> {
     assertNonNegativeSafeInteger(length, "stored range length");
     const end = checkedAdd(offset, BigInt(length), "stored range end");
@@ -718,20 +1157,29 @@ class ArchiveReader implements PangenomeArchive {
     }
     const bootstrapEnd = BigInt(this.#bootstrap.byteLength);
     if (end <= bootstrapEnd) {
+      if (trace !== undefined) trace.bootstrapHits += 1;
       return this.#bootstrap.slice(
         safeNumber(offset, "bootstrap range offset"),
         safeNumber(end, "bootstrap range end"),
       );
     }
     if (offset >= bootstrapEnd) {
+      trace?.requestRanges.push({ offset, length, layer });
       return this.#source.read(offset, length, signalOptions(signal));
     }
+    if (trace !== undefined) trace.bootstrapHits += 1;
     const prefix = this.#bootstrap.slice(
       safeNumber(offset, "bootstrap range offset"),
     );
+    const suffixLength = safeNumber(end - bootstrapEnd, "stored range suffix");
+    trace?.requestRanges.push({
+      offset: bootstrapEnd,
+      length: suffixLength,
+      layer,
+    });
     const suffix = await this.#source.read(
       bootstrapEnd,
-      safeNumber(end - bootstrapEnd, "stored range suffix"),
+      suffixLength,
       signalOptions(signal),
     );
     const result = new Uint8Array(length);
@@ -747,10 +1195,22 @@ class ArchiveReader implements PangenomeArchive {
 
 function createSource(options: OpenPangenomeOptions): RangeSource {
   if (typeof options.source === "string") {
-    return new HttpRangeSource(
-      options.source,
-      options.fetch === undefined ? {} : { fetch: options.fetch },
-    );
+    return new HttpRangeSource(options.source, {
+      ...(options.fetch === undefined ? {} : { fetch: options.fetch }),
+      ...(options.httpHeaders === undefined
+        ? {}
+        : { headers: options.httpHeaders }),
+      ...(options.httpCache === undefined ? {} : { cache: options.httpCache }),
+      ...(options.httpUseHead === undefined
+        ? {}
+        : { useHead: options.httpUseHead }),
+      ...(options.httpUseIfRange === undefined
+        ? {}
+        : { useIfRange: options.httpUseIfRange }),
+      ...(options.maxFullResponseBytes === undefined
+        ? {}
+        : { maxFullResponseBytes: options.maxFullResponseBytes }),
+    });
   }
   if (isRangeSource(options.source)) return options.source;
   if (options.source instanceof Blob)
@@ -768,11 +1228,14 @@ export async function openPangenomeArchive(
     options.payloadCacheBytes ?? DEFAULT_PAYLOAD_CACHE_BYTES;
   const maxRootBytes = options.maxRootBytes ?? DEFAULT_MAX_ROOT_BYTES;
   const maxChunkBytes = options.maxChunkBytes ?? DEFAULT_MAX_CHUNK_BYTES;
+  const payloadCoalescingGapBytes =
+    options.payloadCoalescingGapBytes ?? DEFAULT_PAYLOAD_COALESCING_GAP_BYTES;
   for (const [value, label] of [
     [directoryCacheBytes, "directoryCacheBytes"],
     [payloadCacheBytes, "payloadCacheBytes"],
     [maxRootBytes, "maxRootBytes"],
     [maxChunkBytes, "maxChunkBytes"],
+    [payloadCoalescingGapBytes, "payloadCoalescingGapBytes"],
   ] as const) {
     assertNonNegativeSafeInteger(value, label);
   }
@@ -791,6 +1254,10 @@ export async function openPangenomeArchive(
         : BigInt(BOOTSTRAP_BYTES),
       "bootstrap length",
     );
+    const openRanges: QueryRequestRange[] = [
+      { offset: 0n, length: firstLength, layer: "bootstrap" },
+    ];
+    let openDependencyRounds = 1;
     let bootstrap = await source.read(0n, firstLength, {
       ...(options.signal === undefined ? {} : { signal: options.signal }),
     });
@@ -814,6 +1281,12 @@ export async function openPangenomeArchive(
         safeNumber(rootEnd - BigInt(bootstrap.byteLength), "root remainder"),
         signalOptions(options.signal),
       );
+      openRanges.push({
+        offset: BigInt(bootstrap.byteLength),
+        length: remainder.byteLength,
+        layer: "bootstrap",
+      });
+      openDependencyRounds += 1;
       const combined = new Uint8Array(
         bootstrap.byteLength + remainder.byteLength,
       );
@@ -832,6 +1305,8 @@ export async function openPangenomeArchive(
       header,
       manifests,
       options,
+      openRanges,
+      openDependencyRounds,
     );
   } catch (error) {
     await source.close?.();

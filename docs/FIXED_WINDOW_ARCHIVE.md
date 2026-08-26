@@ -2,9 +2,9 @@
 
 Status: research prototype. This is the format currently emitted by
 `pangenome-range-build`. Rust validates and queries the complete archive;
-Rust/TypeScript share the current regional decoder and golden fixtures; and the
-TypeScript reader opens local or strict HTTP-range archive-v4 objects. The
-format remains a research candidate rather than a stable release contract.
+Rust and TypeScript share deterministic fixtures for every retained decoder;
+the TypeScript reader opens local or strict HTTP-range archive-v3/v4 objects.
+The format remains a research candidate rather than a stable release contract.
 
 ## Design goals
 
@@ -122,13 +122,13 @@ must never reinterpret an older payload as the current representation.
 
 | Magic | Regional version | Semantics | Status |
 |---|---:|---|---|
-| `PNGRGN02` | 2 | globally named paths | Rust read compatibility only |
-| `PNGRGN03` | 3 | materialized anonymous weighted tile paths | Rust read compatibility only |
+| `PNGRGN02` | 2 | globally named paths | Rust and TypeScript read compatibility |
+| `PNGRGN03` | 3 | materialized anonymous weighted tile paths | Rust and TypeScript read compatibility |
 | `PNGRGN04` | 4 | exact local GBWT records reconstructed as anonymous weighted tile paths | emitted format; Rust and TypeScript decode |
 
-The TypeScript decoder explicitly rejects versions 2 and 3. Archive v3
-(`PNGRNG03`) is likewise rejected because its named-path semantics are not the
-current browser contract.
+The TypeScript reader dispatches archive v3 (`PNGRNG03`) and v4 (`PNGRNG04`)
+without reinterpreting their semantics. Unknown archive or regional versions
+fail with explicit unsupported-version errors.
 
 ## Record-preserving regional payload v4
 
@@ -195,7 +195,10 @@ longer emits it.
 `PNGRGN02` version 2 is the older named-path representation with local string
 dictionaries, global source path IDs, visit indices, and coordinate-bearing
 reference visits. It remains a research compatibility decoder only. Neither
-compatibility format is silently exposed as the current TypeScript tile model.
+compatibility format is silently relabeled as the current weighted tile model:
+the TypeScript API returns a distinct typed `NamedPathTable` and the
+`named-paths-v3` semantic label.
+
 ## Streaming, bounded construction
 
 The upstream `gbz` crate still deserializes the source GBZ in full. Archive
@@ -229,6 +232,7 @@ compression buffers.
 There is no payload spool, second full-file copy, global pending-entry sort, or
 source-global occurrence index. Failure cleanup is the default;
 `--keep-partial` is explicit.
+
 ## Reader and browser mapping
 
 `FixedArchiveReader` keeps the file open, reads the bootstrap once, and has a
@@ -236,19 +240,33 @@ source-global occurrence index. Failure cleanup is the default;
 creates one reader per coalescing-gap run and reuses it across that workload.
 `query_fixed_archive` remains a cold one-shot compatibility wrapper.
 
-The TypeScript package now shares the bounded `PNGRGN04` decoder and golden
-fixture with Rust. It returns typed arrays for node IDs/sequences, topology
-edges, the reference traversal, traversal offsets/nodes, and weights. The
-archive-open and HTTP directory state machine remains to be implemented:
+The TypeScript package implements the same retained archive/payload dispatch as
+Rust. It returns typed arrays for node IDs/sequences, topology edges, the
+reference traversal, named paths, traversal offsets/nodes, and weights. Its
+archive and HTTP state machine:
 
 1. fetch and retain the 16 KiB bootstrap;
 2. decode the small manifest root;
 3. compute fixed leaf offsets with integer arithmetic;
 4. use an explicit byte-bounded leaf cache in addition to the browser HTTP
    cache;
-5. issue payload ranges in one parallel dependency round;
+5. coalesce selected payloads and issue them in one parallel dependency round;
 6. decode packed sections into structures needed by rendering instead of
    reconstructing Rust `BTreeMap`/`BTreeSet` shapes.
+
+`queryTiles()` yields decoded source tiles as their independent decode promises
+finish. `query()` collects those tiles, merges node and edge topology plus the
+real reference traversal, and never stitches anonymous haplotypes across tile
+boundaries. Named archive-v3 paths are merged only by their real retained path
+and visit identities. Both paths reject query context greater than the encoded
+100-base construction halo.
+
+The default HTTP policy uses `HEAD` when its size, range, and ETag metadata are
+usable, otherwise probes `bytes=0-0`; exact reads validate `206`, exposed range
+headers, response length, and stable identity. Incorrect `200` responses remain
+fail-closed by default and are accepted only for an explicitly capped small
+object. Directory and compressed-payload caches are independently byte-bounded
+and report cache hits separately from browser HTTP caching.
 
 Cold and warm browser phases must be reported separately. Rust local positioned
 reads and simulated network profiles are layout evidence, not browser
@@ -315,5 +333,6 @@ See the [retained v4 smoke report](https://github.com/a-r-d/pangenome-range/blob
   serializer could make that transient bound stricter.
 - There are no per-section checksums, authentication, corruption recovery, or
   forward-migration rules.
-- The TypeScript HTTP-range reader and browser benchmark are next; no browser
-  speed claim is made here.
+- The TypeScript reader has functional Node and three-engine browser range
+  coverage, but no public-network latency corpus or browser speed claim exists.
+- The viewer remains outside this tranche.

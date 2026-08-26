@@ -16,7 +16,8 @@ Candidate experiments should pursue and measure:
 - independently decompressible regions or blocks;
 - unsigned 64-bit offsets and lengths wherever serialized;
 - streamable, bounded-memory construction if practical;
-- browser-decodable primitives with no JavaScript binding requirement yet;
+- browser-decodable primitives with a pure TypeScript range reader and no
+  native JavaScript binding requirement;
 - immutable static-object hosting on S3, R2, GCS, or a conventional HTTP CDN;
 - no required database server or custom query backend;
 - preservation of node, edge, haplotype/path, reference-path, and coordinate

@@ -15,7 +15,7 @@
     "test": "pnpm -r test",
     "check": "biome check . && pnpm typecheck && pnpm test",
     "check:rust": "bash scripts/check-rust.sh",
-    "build": "pnpm --filter pangenome-range build && pnpm --filter @pangenome-range/benchmark build && pnpm --filter @pangenome-range/docs build && pnpm smoke:exports",
+    "build": "pnpm --filter pangenome-range build && pnpm --filter pangenome-range test:bundle && pnpm --filter @pangenome-range/benchmark build && pnpm --filter @pangenome-range/docs build && pnpm smoke:exports",
     "smoke:exports": "node packages/browser/test/export-smoke.mjs",
     "docs:dev": "pnpm --filter @pangenome-range/docs dev",
     "docs:build": "pnpm --filter pangenome-range build && pnpm --filter @pangenome-range/docs build",

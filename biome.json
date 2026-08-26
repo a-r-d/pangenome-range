@@ -11,6 +11,7 @@
       "**",
       "!!results",
       "!!target",
+      "!!test-data/conformance/manifest.json",
       "!!**/dist",
       "!!**/.vitepress/cache",
       "!!**/.vitepress/dist"

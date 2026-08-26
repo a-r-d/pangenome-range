@@ -156,7 +156,30 @@ browser range gate used the same source-verified CHM13 query: Chromium fetched
 294,190 bytes in 11 strict `206` responses and decoded seven tiles from the
 8.23 GiB object. Chromium, Firefox, and WebKit also pass the deterministic
 cross-origin fixture through `pnpm test:browser`. Loopback timing is retained as
-functional evidence only.
+functional evidence only. The 11-request large-object observation predates the
+current TypeScript coalescing and cache tranche and remains historical evidence,
+not a prediction of the current request plan.
+
+## TypeScript reader conformance result
+
+The current Node integration serves a deterministic 164,266-byte archive made
+from the pinned 73,920-byte MICB/KIR3DL1 fixture through a real loopback range
+origin. It validates one usable `HEAD`, stable `ETag`/`If-Range`, every exact
+`206`, the raw origin ranges, the optional query trace, and matching canonical
+results from HTTP, Blob, and positioned file sources.
+
+| Query | Selected tiles | Nodes | Weighted traversals | GETs | Fetched bytes | Canonical hash |
+|---|---:|---:|---:|---:|---:|---|
+| MICB, `GRCh38#chr6:31498145-31511124` | 2 | 659 | 94 | 2 | 37,797 | `afb9deec...8c3d2` |
+| KIR3DL1, `GRCh38#chr19:54816468-54830778` | 2 | 2,231 | 67 | 3 | 68,619 | `62868752...c2411` |
+
+The hermetic browser gate opens a separate 70,024-byte synthetic archive in
+Chromium, Firefox, and WebKit. Each engine performs one `HEAD`, then exactly
+three `206` GETs totaling 20,604 bytes: a 16 KiB bootstrap, one 4 KiB directory
+page, and one 124-byte zstd payload. These loopback results establish transport,
+CORS, version dispatch, decompression, and decode behavior; the timings are not
+a browser performance claim. Exact commands and raw range lists are retained in
+`results/2026-08-25-typescript-reader-conformance/`.
 
 The full comparative matrix remains:
 
