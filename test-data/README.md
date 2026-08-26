@@ -66,3 +66,17 @@ HPRC year-1 material. The repository tracks this fixture under the explicit
 small-fixture decision recorded here; re-check the source record's license and
 the applicable HPRC Data Use Protocol before redistributing the GBZ or derived
 data outside this research repository.
+
+## Cross-language v4 golden fixtures
+
+`golden/record-region-v4.hex` is the normative uncompressed `PNGRGN04`
+regional payload. `record-region-v4.zstd3.hex` is its zstd level-3 archive
+representation, and `record-region-v4.expected.json` records the decoded
+reference, topology, sequences, weighted traversal, and BLAKE3 digest. Rust and
+TypeScript decode the same bytes.
+
+`golden/record-archive-v4.pngr` is a 7,354-byte deterministic archive containing
+one 1,024 bp CHM13 chr6 tile derived from the tiny MICB/KIR3DL1 source. Its
+source checksum, archive checksum, exact command, interval, codec, and versions
+are retained in `record-archive-v4.json`. The Rust test suite rebuilds it and
+checks the decoded query against the source oracle.

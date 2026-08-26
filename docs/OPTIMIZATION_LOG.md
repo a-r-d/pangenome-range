@@ -194,3 +194,44 @@ at 8,775,512 KiB RSS. Total encode-start to first payload was 52,107.791 ms.
 This confirms that
 the next scale bottleneck is lazy/memory-mapped source access; it is not evidence
 of remaining encoder scratch or a reason to recreate a global occurrence index.
+
+## 2026-08-25: record-preserving regional payload accepted at whole-source scale
+
+The monitored materialized-path writer later reached only 70,148 bp/s at
+0.2148% and projected 84,556 seconds (23.49 hours). A larger interval did not
+amortize the work: a 4 Mb upstream supertile exceeded 12.5 GiB RSS and was
+stopped after 82 seconds, while a 256 KiB supertile took roughly 17 seconds.
+Large intervals increase the number and length of distinct traversals that must
+be materialized and sorted. Supertile batching is rejected.
+
+The accepted replacement treats the GBWT records as the compressed local
+haplotype evidence already present in the source. Each tile selects topology
+with `HaplotypeOutput::None`, copies exact compressed records and sequences,
+stores topology edges separately, and retains one real reference occurrence
+anchor. The reader reconstructs and weights paths only for queried tiles. An
+eight-worker full-source record-copy kernel covered 5,944,255,022 reference
+bases in 156.733 seconds before archive compression/writing was implemented.
+
+The completed product run used regional magic `PNGRGN04`, 16 KiB base windows,
+zstd-3, eight bounded workers, and a 256 MiB queue cap. It wrote and validated
+an 8,828,856,533-byte archive in 475.810 seconds; the whole command including
+source and output SHA-256 passes took 557.55 seconds. Payload processing reached
+23,008,155 bp/s. This is 151.65x faster end-to-end and 177.71x faster for
+construction than the stopped 23.49-hour estimate, clearing the requested 100x
+large-input gate.
+
+The run retained 363,105 payloads, 79 adaptive splits, a 47,376,617-byte index,
+35,562,073 peak pending raw+compressed bytes, 8,776,260 KiB peak RSS, and zero
+occurrence-index, spool, or scratch bytes. Archive validation was the largest
+remaining construction phase at 202.109 seconds. Source load remains the cause
+of the high RSS; validation and archive size are now higher-information targets
+than GPU/SIMD path materialization. Exact commands, provenance, checksums, and
+limitations are retained in
+`results/2026-08-25-record-preserving-v4/REPORT.md`.
+
+A separate post-build source-oracle query checked seven archive tiles for
+`CHM13#chr1:1,000,000-1,100,000`, including weighted anonymous traversals, and
+matched canonical hash
+`cbf983e845fcd6adcb1504089aba3c80fae85cd0c3998bcc90ba02f8fac8c5b4`.
+That semantic check is intentionally distinct from the full structural payload
+validation performed before rename.

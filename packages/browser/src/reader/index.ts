@@ -1,3 +1,10 @@
+export type { DecodeRegionalPayloadOptions } from "./regional.js";
+export {
+  CorruptRegionalPayloadError,
+  decodeRegionalPayload,
+  detectRegionalPayloadVersion,
+  UnsupportedRegionalPayloadVersionError,
+} from "./regional.js";
 export type {
   ChunkDecompressor,
   HaplotypeSemantics,

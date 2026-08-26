@@ -25,19 +25,31 @@ reference/coordinate order. Compact per-reference/per-bucket descriptors are
 retained for directory backfill; there is no payload spool, second full-file
 copy, occurrence table, or global pending-entry sort.
 
-Topology-only preflight uses an upstream node safety limit once per directory
-bucket. Clearly oversized parents split before weighted haplotype extraction;
-every accepted candidate still undergoes authoritative encoded-size checking,
-so a conservative estimate cannot change correctness. Adjacent extractions
-reuse `Subgraph` record storage after an exact-output MHC experiment measured a
-1.175x extraction speedup.
+The normal regional path uses `HaplotypeOutput::None` only to select local graph
+state. It copies the exact compressed GBWT records, forward node sequences, and
+canonical topology edges; it does not enumerate or sort anonymous paths while
+encoding. Exact borrowed record lengths provide the adaptive-split preflight,
+so an oversized parent is rejected before a second payload corpus is copied.
+The real reference is retained as a GBWT occurrence anchor with fragment and
+node offsets. Weighted anonymous paths are reconstructed only by a reader for
+the tiles selected by a query.
 
-Compression may use bounded batches controlled by `--threads` and
-`--max-queued-bytes`. GBZ selection remains ordered and single-threaded. Worker
-results are consumed in input order, so thread completion order cannot change
-archive offsets or bytes. The completed temporary object is flushed, decoded,
-and every physical payload is decompressed and bounds-checked before atomic
-rename. Failed temporary objects are removed unless `--keep-partial` is set.
+Tile selection/materialization and compression use bounded batches controlled
+by `--threads` and `--max-queued-bytes`; the CLI defaults to available
+parallelism capped at eight and a 256 MiB queue cap. Results are consumed in
+input order, and adaptive children precede later completed work, so worker
+completion order cannot change archive offsets or bytes. The completed
+temporary object is flushed, every physical payload is decompressed and
+structurally bounds-checked, and then it is atomically renamed. Failed temporary
+objects are removed unless `--keep-partial` is set.
+
+The encoder computes exact total selected reference bases before payload work.
+Progress snapshots report current reference/coordinate, accepted and physical
+chunks, processed/total bases, global and per-reference percentage, observed
+bp/s and chunks/s, a rate-derived ETA, build/processing elapsed time, and the
+current temp-final byte length. JSON and plain progress contain the same
+measurements; `--progress-interval-seconds` controls their cadence. Percent is
+coordinate-based rather than inferred from compressed bytes.
 
 ## TypeScript product boundary
 
@@ -48,9 +60,12 @@ DOM or Node built-ins; `/viewer` owns the framework-neutral rendering contract,
 and `/node` owns Node-only range sources. `packages/benchmark` is private and
 will own Node and real-browser measurements.
 
-Only the public contracts and a Node file-range source exist in the current
-scaffold. Archive decoding, HTTP range transport, rendering, and browser
-benchmarks remain explicitly unimplemented.
+The public contracts, range-source implementations, and the current
+record-preserving regional payload decoder exist. Rust and TypeScript decode the
+same raw golden payload into typed-array-oriented nodes, sequences, topology,
+reference traversal, and weighted local paths. Archive bootstrap/directory
+opening, HTTP range transport, rendering, and real browser benchmarks remain
+explicitly unimplemented.
 
 ## Range sources and traces
 

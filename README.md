@@ -24,7 +24,10 @@ The Rust binary is not shipped through npm. See
 cargo run --release -- inspect test-data/micb-kir3dl1.gbz
 cargo run --release -- benchmark-source test-data/micb-kir3dl1.gbz
 cargo run --release -- encode test-data/mhc-10.gbz /tmp/mhc.pngr \
-  --sample MHC-GRCh38 --contig MHC --threads 1 --progress plain
+  --sample MHC-GRCh38 --contig MHC --progress plain
+cargo run --release -- verify /tmp/mhc.pngr \
+  --against test-data/mhc-10.gbz --sample MHC-GRCh38 --contig MHC \
+  --start 100000 --end 200000
 ```
 
 Development checks:
@@ -63,18 +66,27 @@ opt-in; the default test suite uses synthetic bytes and stays fast.
   BLAKE3 comparison hash for local graph semantics.
 - `pangenome-range-cli`: the direct-write v4 encoder, GBZ inspection, source
   tracing, and retained research benchmarks.
-- `packages/browser`: private ESM package skeleton with isolated reader,
-  viewer, and Node exports. Archive decoding and rendering are not implemented.
+- `packages/browser`: private ESM package with isolated reader, viewer, and Node
+  exports plus the cross-language record-preserving regional decoder. Full
+  archive opening and rendering are not implemented.
 - `packages/benchmark`: private browser/Node benchmark scaffold; no benchmark
   suite is implemented yet.
 - `docs`: the existing research Markdown plus a VitePress shell and demo
   placeholder deployed under `/pangenome-range/`.
 
 `encode INPUT.gbz OUTPUT.pngr` is implemented with sample/contig/interval and
-`--max-chunks` pilot guards, bounded deterministic compression, JSON build
-reports, archive validation, and atomic rename. Run `pangenome-range help` for
-the complete option list. The planned CLI names `build`, `query`, `benchmark`,
-and `verify` remain reserved until there is a real experiment behind each one.
+`--max-chunks` pilot guards, bounded deterministic parallel tile construction,
+exact compressed local GBWT records, direct writing, JSON build reports,
+periodic coordinate/base/chunk/percent/throughput/ETA progress, archive
+validation, and atomic rename. It defaults to available parallelism capped at
+eight workers and a 256 MiB raw/compressed queue. Progress defaults to
+five-second snapshots and is configurable with
+`--progress-interval-seconds`. Run
+`pangenome-range help` for the complete option list. `verify` compares an
+archive query against an independently extracted GBZ source oracle, including
+tile-local weighted traversal evidence. The planned CLI names `build`, `query`,
+and `benchmark` remain reserved until there is a real experiment behind each
+one.
 
 ## Data tiers
 

@@ -101,16 +101,44 @@ For cheap construction-only pilots, use the public encoder directly:
 ```bash
 cargo run --release -p pangenome-range-cli -- encode INPUT.gbz OUTPUT.pngr \
   --sample GRCh38 --contig chr6 --max-chunks 2 \
-  --threads 1 --progress json --report build-report.json
+  --threads 8 --progress json --report build-report.json
 ```
 
-The report separates source checksum, source load, reference path index, manifest discovery,
-topology preflight, local haplotype extraction, materialization, binary encode,
-compression, finalization, validation, and the removed copy/occurrence phases.
+The report separates source checksum, source load, reference path index,
+manifest discovery, local subgraph selection, record/topology materialization,
+binary encode, compression, finalization, validation, and the removed
+haplotype-enumeration/copy/occurrence phases.
 It also retains input/output SHA-256, time to first payload, archive/index/payload
 bytes, queue peaks, scratch/temp bytes, throughput, and process RSS. A filtered
 pilot still pays the current full GBZ deserialization and `PathIndex` costs, but
 reference-length discovery is restricted before walking reference paths.
+
+For long runs, use `--progress json --progress-interval-seconds 5`. The initial
+`encoding_plan` records the exact selected reference count/base total and the
+base-window count before adaptive splits. `chunk_progress` events then report
+coordinate-based percentage and measured ETA. Do not derive completion from
+temporary archive size because regional compression ratios vary.
+
+The accepted whole-source record-preserving run is retained in
+[`results/2026-08-25-record-preserving-v4/REPORT.md`](https://github.com/a-r-d/pangenome-range/blob/main/results/2026-08-25-record-preserving-v4/REPORT.md).
+It completed the 5.49 GB HPRC v2.1 object in 557.55 seconds end-to-end, including
+both SHA-256 passes, versus the stopped materialized-path writer's 84,556-second
+ETA (151.65x). Its 475.810-second construction includes a 202.109-second full
+payload validation phase; parallel `*_worker_ms` counters are aggregate worker
+time, while `payload_pipeline_wall_ms` is elapsed wall time.
+
+Structural validation is necessary but is not a semantic oracle. Verify at
+least one retained workload against the exact source after a large build:
+
+```bash
+cargo run --release -p pangenome-range-cli -- verify OUTPUT.pngr \
+  --against INPUT.gbz --sample CHM13 --contig chr1 \
+  --start 1000000 --end 1100000
+```
+
+The accepted run checked all seven selected tile-local haplotype results and
+matched canonical hash
+`cbf983e845fcd6adcb1504089aba3c80fae85cd0c3998bcc90ba02f8fac8c5b4`.
 
 The full comparative matrix remains:
 

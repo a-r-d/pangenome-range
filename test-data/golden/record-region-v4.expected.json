@@ -1,0 +1,26 @@
+{
+  "payloadMagic": "PNGRGN04",
+  "payloadVersion": 4,
+  "payloadBlake3": "46dbb25184ffadfb063a41665f6350b9b47f42a0021d46cf747ae72271db7dc6",
+  "tileCanonicalBlake3": "4802ea7b9f9821318089c07c4647702218f6076ea7d987be904eca7c4bde3b7b",
+  "core": [100, 102],
+  "semantics": "anonymous-distinct-weighted-tile-paths",
+  "reference": {
+    "sample": "GRCh38",
+    "contig": "chr1",
+    "haplotype": 0,
+    "fragment": 100,
+    "start": 100,
+    "end": 102,
+    "traversal": ["2", "4"]
+  },
+  "nodeIds": ["1", "2"],
+  "nodeSequences": ["A", "C"],
+  "edges": ["2", "4"],
+  "traversals": [
+    {
+      "weight": "1",
+      "path": ["2", "4"]
+    }
+  ]
+}

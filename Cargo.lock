@@ -439,9 +439,11 @@ name = "pangenome-range-cli"
 version = "0.1.0"
 dependencies = [
  "gbz",
+ "gbz-base",
  "pangenome-range-build",
  "pangenome-range-format",
  "pangenome-range-query",
+ "serde_json",
  "simple-sds",
 ]
 

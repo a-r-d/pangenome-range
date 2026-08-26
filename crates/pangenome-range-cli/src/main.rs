@@ -1,8 +1,9 @@
 use gbz::GBZ;
+use gbz_base::PathIndex;
 use pangenome_range_build::{
     BuildProgressMode, ChunkCodec, EncodeOptions, EncoderScaleOptions, ExperimentMode,
-    ExperimentOptions, internal_gbz_base_query, run_encode, run_encoder_scale_experiment,
-    run_fixed_window_experiment,
+    ExperimentOptions, FixedArchiveConfig, QuerySpec, internal_gbz_base_query, query_fixed_archive,
+    run_encode, run_encoder_scale_experiment, run_fixed_window_experiment, source_oracle,
 };
 use pangenome_range_format::{FileRangeSource, NetworkProfile, RangeSource, TracingRangeSource};
 use simple_sds::serialize;
@@ -28,6 +29,7 @@ fn run(mut args: impl Iterator<Item = String>) -> AppResult<()> {
 
     match command.as_str() {
         "encode" => encode(&mut args),
+        "verify" => verify(&mut args),
         "inspect" => {
             let path = one_path_argument(&mut args, "inspect")?;
             inspect_gbz(&path)
@@ -46,7 +48,7 @@ fn run(mut args: impl Iterator<Item = String>) -> AppResult<()> {
             print_help();
             Ok(())
         }
-        "build" | "query" | "benchmark" | "verify" => Err(format!(
+        "build" | "query" | "benchmark" => Err(format!(
             "'{command}' is reserved for a future experiment; use 'inspect' or 'benchmark-source'"
         )
         .into()),
@@ -210,6 +212,9 @@ fn print_help() {
     println!();
     println!("Usage:");
     println!("  pangenome-range encode <input.gbz> <output.pngr> [options]");
+    println!(
+        "  pangenome-range verify <input.pngr> --against <input.gbz> --sample NAME --contig NAME --start BP --end BP [options]"
+    );
     println!("  pangenome-range inspect <graph.gbz>");
     println!("  pangenome-range benchmark-source <file>");
     println!(
@@ -230,15 +235,90 @@ fn print_help() {
     println!("  --haplotypes MODE          anonymous-distinct-weighted-tile-paths");
     println!("  --max-uncompressed-chunk-bytes N");
     println!("  --min-window-size BP");
-    println!("  --threads N                bounded compression workers (default: 1)");
+    println!(
+        "  --threads N                bounded tile/compression workers (default: up to 8 available cores)"
+    );
     println!("  --max-queued-bytes N       raw+compressed queue cap");
     println!("  --scratch-dir PATH         validate/report a research scratch location");
     println!("  --keep-partial             retain the sibling temp archive on failure");
     println!("  --progress auto|plain|json|off");
+    println!("  --progress-interval-seconds N  chunk progress cadence (default: 5)");
     println!("  --max-chunks N             bounded single-reference research guard");
     println!("  --report PATH              JSON build report path");
     println!();
-    println!("Reserved experiment commands: build, query, benchmark, verify");
+    println!("Reserved experiment commands: build, query, benchmark");
+}
+
+fn verify(args: &mut impl Iterator<Item = String>) -> AppResult<()> {
+    let usage = "usage: pangenome-range verify <input.pngr> --against <input.gbz> --sample NAME --contig NAME --start BP --end BP [options]";
+    let archive = PathBuf::from(args.next().ok_or(usage)?);
+    let mut against = None;
+    let mut sample = None;
+    let mut contig = None;
+    let mut start = None;
+    let mut end = None;
+    let mut context = 100_u64;
+    let mut coalescing_gap = 65_536_u64;
+    let mut window_size = 16_384_u64;
+    let mut codec = ChunkCodec::Zstd3;
+    while let Some(flag) = args.next() {
+        match flag.as_str() {
+            "--against" => against = Some(PathBuf::from(option_value(args, &flag)?)),
+            "--sample" => sample = Some(option_value(args, &flag)?),
+            "--contig" => contig = Some(option_value(args, &flag)?),
+            "--start" => start = Some(parse_option(args, &flag)?),
+            "--end" => end = Some(parse_option(args, &flag)?),
+            "--context" => context = parse_option(args, &flag)?,
+            "--coalescing-gap" => coalescing_gap = parse_option(args, &flag)?,
+            "--window-size" => window_size = parse_option(args, &flag)?,
+            "--codec" => {
+                codec = match option_value(args, &flag)?.as_str() {
+                    "none" => ChunkCodec::None,
+                    "zstd-1" => ChunkCodec::Zstd1,
+                    "zstd-3" => ChunkCodec::Zstd3,
+                    "zstd-6" => ChunkCodec::Zstd6,
+                    value => return Err(format!("unsupported codec '{value}'").into()),
+                };
+            }
+            "--help" | "-h" => {
+                println!("{usage}");
+                return Ok(());
+            }
+            _ => return Err(format!("unknown verify option '{flag}'").into()),
+        }
+    }
+    let against = against.ok_or("verify requires --against <input.gbz>")?;
+    let query = QuerySpec {
+        id: "cli-verify".into(),
+        class: "post-build-verification".into(),
+        sample: sample.ok_or("verify requires --sample")?,
+        contig: contig.ok_or("verify requires --contig")?,
+        start: start.ok_or("verify requires --start")?,
+        end: end.ok_or("verify requires --end")?,
+        context,
+    };
+    let graph: GBZ = serialize::load_from(&against)?;
+    let path_index = PathIndex::new(&graph, 1_000, false)?;
+    let oracle = source_oracle(&graph, &path_index, &query)?;
+    let archive_config = FixedArchiveConfig {
+        experiment_id: "cli-verify".into(),
+        window_size,
+        codec,
+        deduplicate_chunks: false,
+        max_uncompressed_chunk_bytes: 8 * 1024 * 1024,
+        min_window_size: 1_024,
+    };
+    let measurement = query_fixed_archive(
+        &archive,
+        &archive_config,
+        &query,
+        coalescing_gap,
+        &oracle,
+        &graph,
+        &path_index,
+    )?;
+    println!("{}", serde_json::to_string_pretty(&measurement)?);
+    Ok(())
 }
 
 fn encode(args: &mut impl Iterator<Item = String>) -> AppResult<()> {
@@ -296,6 +376,12 @@ fn encode(args: &mut impl Iterator<Item = String>) -> AppResult<()> {
                     "json" => BuildProgressMode::Json,
                     _ => return Err(format!("unsupported progress mode '{value}'").into()),
                 };
+            }
+            "--progress-interval-seconds" => {
+                let seconds: u64 = parse_option(args, &flag)?;
+                options.progress_interval_ms = seconds
+                    .checked_mul(1_000)
+                    .ok_or("progress interval is too large")?;
             }
             "--help" | "-h" => {
                 print_help();

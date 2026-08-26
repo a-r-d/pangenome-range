@@ -72,7 +72,10 @@ export interface RegionTile {
   readonly archiveOffset: bigint;
   readonly encodedLength: number;
   readonly nodeIds: BigUint64Array;
+  readonly nodeSequenceOffsets: Uint32Array;
+  readonly nodeSequences: Uint8Array;
   readonly edges: BigUint64Array;
+  readonly referenceTraversal: BigUint64Array;
   readonly traversalOffsets: Uint32Array;
   readonly traversalNodes: BigUint64Array;
   readonly traversalWeights: BigUint64Array;

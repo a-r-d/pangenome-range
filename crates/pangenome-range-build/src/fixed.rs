@@ -1,8 +1,7 @@
+use gbz::bwt::{BWT, Record};
 use gbz::support;
-use gbz::{FullPathName, GBZ, Orientation};
-use gbz_base::{
-    ErrorKind as GbzBaseErrorKind, HaplotypeOutput, PathIndex, Subgraph, SubgraphQuery,
-};
+use gbz::{FullPathName, GBWT, GBZ, Orientation, Pos};
+use gbz_base::{GBZPath, HaplotypeOutput, PathIndex, Subgraph, SubgraphQuery};
 use pangenome_range_format::{FileRangeSource, NetworkProfile, RangeSource, TracingRangeSource};
 use pangenome_range_query::{
     CanonicalHaplotypeTile, CanonicalPath, CanonicalSubgraph, Edge, HaplotypeSemantics,
@@ -10,7 +9,7 @@ use pangenome_range_query::{
 };
 use serde::{Deserialize, Serialize};
 use std::cmp::Reverse;
-use std::collections::{BTreeMap, BTreeSet, BinaryHeap, HashMap};
+use std::collections::{BTreeMap, BTreeSet, BinaryHeap, HashMap, VecDeque};
 use std::error::Error;
 use std::fs::{File, OpenOptions};
 use std::io::{self, Read, Seek, SeekFrom, Write};
@@ -22,10 +21,11 @@ pub type ExperimentResult<T> = Result<T, Box<dyn Error + Send + Sync>>;
 
 const ARCHIVE_MAGIC_V3: &[u8; 8] = b"PNGRNG03";
 const ARCHIVE_MAGIC: &[u8; 8] = b"PNGRNG04";
-const REGION_MAGIC_V3: &[u8; 8] = b"PNGRGN02";
-const REGION_MAGIC: &[u8; 8] = b"PNGRGN03";
+const REGION_MAGIC_NAMED_V2: &[u8; 8] = b"PNGRGN02";
+const REGION_MAGIC_WEIGHTED_V3: &[u8; 8] = b"PNGRGN03";
+const REGION_MAGIC: &[u8; 8] = b"PNGRGN04";
 const ARCHIVE_VERSION: u32 = 4;
-const REGION_VERSION: u32 = 3;
+const REGION_VERSION: u32 = 4;
 const HEADER_LEN: usize = 64;
 const DIRECTORY_PAGE_BYTES: usize = 4 * 1024;
 const DIRECTORY_PAGE_HEADER_BYTES: usize = 16;
@@ -37,7 +37,9 @@ pub const BOOTSTRAP_LEN: usize = 16 * 1024;
 pub const CONSTRUCTION_CONTEXT: u64 = 100;
 pub const DEFAULT_MAX_UNCOMPRESSED_CHUNK_BYTES: u64 = 8 * 1024 * 1024;
 pub const DEFAULT_MIN_WINDOW_SIZE: u64 = 1024;
-pub const DEFAULT_MAX_QUEUED_BYTES: u64 = 32 * 1024 * 1024;
+pub const DEFAULT_MAX_QUEUED_BYTES: u64 = 256 * 1024 * 1024;
+pub const DEFAULT_PROGRESS_INTERVAL_MS: u64 = 5_000;
+const MAX_DECODED_OCCURRENCES_PER_TILE: u64 = 16 * 1024 * 1024;
 const DEFAULT_DIRECTORY_CACHE_BYTES: usize = 1024 * 1024;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -119,6 +121,7 @@ pub struct ArchiveBuildOptions {
     pub max_queued_bytes: u64,
     pub keep_partial: bool,
     pub progress: BuildProgressMode,
+    pub progress_interval_ms: u64,
 }
 
 impl Default for ArchiveBuildOptions {
@@ -133,6 +136,7 @@ impl Default for ArchiveBuildOptions {
             max_queued_bytes: DEFAULT_MAX_QUEUED_BYTES,
             keep_partial: false,
             progress: BuildProgressMode::Off,
+            progress_interval_ms: DEFAULT_PROGRESS_INTERVAL_MS,
         }
     }
 }
@@ -144,6 +148,119 @@ fn emit_progress(mode: BuildProgressMode, phase: &str, message: &str) {
         BuildProgressMode::Json => eprintln!(
             "{}",
             serde_json::json!({ "phase": phase, "message": message })
+        ),
+    }
+}
+
+#[derive(Clone, Debug, Serialize)]
+struct BuildProgressSnapshot {
+    phase: &'static str,
+    sequence: u64,
+    reference_ordinal: u64,
+    reference_count: u64,
+    references_completed: u64,
+    sample: String,
+    contig: String,
+    current_chunk_start: u64,
+    current_chunk_end: u64,
+    reference_start: u64,
+    reference_end: u64,
+    reference_percent_complete: f64,
+    processed_reference_bases: u64,
+    total_reference_bases: u64,
+    percent_complete: f64,
+    accepted_chunks: u64,
+    physical_chunks: u64,
+    reference_bp_per_second: f64,
+    chunks_per_second: f64,
+    estimated_seconds_remaining: Option<f64>,
+    processing_elapsed_seconds: f64,
+    build_elapsed_seconds: f64,
+    temporary_archive_bytes: u64,
+}
+
+fn emit_progress_snapshot(mode: BuildProgressMode, snapshot: &BuildProgressSnapshot) {
+    match mode {
+        BuildProgressMode::Off => {}
+        BuildProgressMode::Plain => eprintln!(
+            "chunk_progress: {:.3}% ref={}/{} {}#{}:{}-{} ref={:.2}% bases={}/{} chunks={} physical={} bp/s={:.0} chunks/s={:.2} eta_s={} elapsed_s={:.1} temp_bytes={}",
+            snapshot.percent_complete,
+            snapshot.reference_ordinal,
+            snapshot.reference_count,
+            snapshot.sample,
+            snapshot.contig,
+            snapshot.current_chunk_start,
+            snapshot.current_chunk_end,
+            snapshot.reference_percent_complete,
+            snapshot.processed_reference_bases,
+            snapshot.total_reference_bases,
+            snapshot.accepted_chunks,
+            snapshot.physical_chunks,
+            snapshot.reference_bp_per_second,
+            snapshot.chunks_per_second,
+            snapshot
+                .estimated_seconds_remaining
+                .map_or_else(|| "unknown".into(), |seconds| format!("{seconds:.0}")),
+            snapshot.processing_elapsed_seconds,
+            snapshot.temporary_archive_bytes,
+        ),
+        BuildProgressMode::Json => eprintln!(
+            "{}",
+            serde_json::to_string(snapshot).expect("progress snapshot is JSON-serializable")
+        ),
+    }
+}
+
+fn emit_encoding_plan(
+    mode: BuildProgressMode,
+    reference_count: u64,
+    total_reference_bases: u64,
+    planned_base_windows: u64,
+    temporary_archive_prefix_bytes: u64,
+    progress_interval_ms: u64,
+) {
+    match mode {
+        BuildProgressMode::Off => {}
+        BuildProgressMode::Plain => eprintln!(
+            "encoding_plan: references={reference_count} total_bases={total_reference_bases} base_windows={planned_base_windows} temp_prefix_bytes={temporary_archive_prefix_bytes} progress_interval_ms={progress_interval_ms}"
+        ),
+        BuildProgressMode::Json => eprintln!(
+            "{}",
+            serde_json::json!({
+                "phase": "encoding_plan",
+                "reference_count": reference_count,
+                "total_reference_bases": total_reference_bases,
+                "planned_base_windows": planned_base_windows,
+                "temporary_archive_prefix_bytes": temporary_archive_prefix_bytes,
+                "progress_interval_ms": progress_interval_ms,
+            })
+        ),
+    }
+}
+
+fn emit_reference_start(
+    mode: BuildProgressMode,
+    reference_ordinal: u64,
+    reference_count: u64,
+    reference: &ReferencePathSpec,
+) {
+    match mode {
+        BuildProgressMode::Off => {}
+        BuildProgressMode::Plain => eprintln!(
+            "reference_start: ref={reference_ordinal}/{reference_count} {}#{} {}-{}",
+            reference.name.sample, reference.name.contig, reference.start, reference.end
+        ),
+        BuildProgressMode::Json => eprintln!(
+            "{}",
+            serde_json::json!({
+                "phase": "reference_start",
+                "reference_ordinal": reference_ordinal,
+                "reference_count": reference_count,
+                "sample": reference.name.sample,
+                "contig": reference.name.contig,
+                "reference_start": reference.start,
+                "reference_end": reference.end,
+            })
         ),
     }
 }
@@ -208,10 +325,14 @@ pub struct ArchiveBuildMetrics {
     pub path_occurrence_index_bytes: u64,
     pub path_occurrence_index_wall_ms: f64,
     pub reference_manifest_discovery_wall_ms: f64,
+    #[serde(rename = "subgraph_selection_worker_ms")]
     pub subgraph_selection_wall_ms: f64,
     pub local_haplotype_extraction_wall_ms: f64,
+    #[serde(rename = "regional_materialization_worker_ms")]
     pub regional_materialization_wall_ms: f64,
+    #[serde(rename = "regional_encoding_worker_ms")]
     pub regional_encoding_wall_ms: f64,
+    pub payload_pipeline_wall_ms: f64,
     pub compression_wall_ms: f64,
     pub preflight_selection_wall_ms: f64,
     pub writer_finalization_wall_ms: f64,
@@ -223,7 +344,9 @@ pub struct ArchiveBuildMetrics {
     pub largest_rejected_parent_bytes: u64,
     pub first_payload_wall_ms: f64,
     pub references_processed: u64,
+    pub total_reference_bases: u64,
     pub reference_bases_processed: u64,
+    pub progress_events_emitted: u64,
     pub scratch_bytes: u64,
     pub scratch_bytes_before_first_payload: u64,
     pub temporary_file_bytes_before_first_payload: u64,
@@ -232,6 +355,7 @@ pub struct ArchiveBuildMetrics {
     pub peak_queued_raw_bytes: u64,
     pub peak_queued_compressed_bytes: u64,
     pub peak_queued_total_bytes: u64,
+    pub peak_ready_raw_bytes: u64,
     pub haplotype_extraction_evidence: Option<HaplotypeExtractionEvidence>,
     pub construction_wall_ms: f64,
 }
@@ -435,6 +559,8 @@ struct DirectWriterState {
     peak_queued_raw_bytes: u64,
     peak_queued_compressed_bytes: u64,
     peak_queued_total_bytes: u64,
+    last_progress_emit_ms: f64,
+    progress_events_emitted: u64,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
@@ -653,6 +779,7 @@ fn path_interval_from_name(name: &str) -> io::Result<(u64, u64)> {
     Ok((start, end))
 }
 
+#[cfg(test)]
 fn aggregate_traversals(
     traversals: &[WeightedTraversal],
 ) -> io::Result<BTreeMap<Vec<OrientedNode>, u64>> {
@@ -819,6 +946,1128 @@ fn extract_local_region_with_subgraph(
     Ok((regional, evidence))
 }
 
+#[derive(Debug)]
+struct DirectReferencePosition {
+    query_offset: usize,
+    node_offset: usize,
+    gbwt_pos: Pos,
+    path_name: FullPathName,
+}
+
+#[derive(Debug)]
+struct DirectPathRecord {
+    handle: usize,
+    successors: Vec<Pos>,
+    has_predecessor: Vec<bool>,
+    sequence_len: usize,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+struct PackedGbwtRecord {
+    handle: u64,
+    occurrence_count: u64,
+    bytes: Vec<u8>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+struct RecordRegionalPayload {
+    semantics: HaplotypeSemantics,
+    core_start: u64,
+    core_end: u64,
+    context: u64,
+    reference_sample: String,
+    reference_contig: String,
+    reference_haplotype: u64,
+    reference_fragment_start: u64,
+    reference_query_offset: u64,
+    reference_node_offset: u64,
+    reference_position: (u64, u64),
+    nodes: BTreeMap<u64, Vec<u8>>,
+    edges: BTreeSet<Edge>,
+    records: Vec<PackedGbwtRecord>,
+    total_occurrences: u64,
+}
+
+#[derive(Debug)]
+struct RecordChunk {
+    raw: Vec<u8>,
+    subgraph_selection_wall_ms: f64,
+    regional_materialization_wall_ms: f64,
+    regional_encoding_wall_ms: f64,
+}
+
+#[derive(Debug)]
+enum RecordChunkOutcome {
+    Accepted(RecordChunk),
+    Split {
+        estimated_bytes: u64,
+        subgraph_selection_wall_ms: f64,
+    },
+}
+
+#[derive(Clone, Copy, Debug)]
+struct ChunkTask {
+    start: u64,
+    end: u64,
+}
+
+#[derive(Debug)]
+enum ChunkWorkItem {
+    Task(ChunkTask),
+    Ready(ChunkTask, RecordChunk),
+}
+
+fn gbwt_record(graph: &GBZ, handle: usize) -> Option<Record<'_>> {
+    let index: &GBWT = graph.as_ref();
+    let records: &BWT = index.as_ref();
+    records.record(index.node_to_record(handle))
+}
+
+fn direct_reference_position(
+    graph: &GBZ,
+    path_index: &PathIndex,
+    query_pos: &FullPathName,
+) -> ExperimentResult<DirectReferencePosition> {
+    let path = GBZPath::with_name(graph, query_pos)
+        .ok_or_else(|| invalid_data(format!("cannot find a path covering {query_pos}")))?;
+    let query_offset = query_pos
+        .fragment
+        .checked_sub(path.name.fragment)
+        .ok_or_else(|| invalid_data("query starts before its reference fragment"))?;
+    let index_offset = path_index
+        .path_to_offset(path.handle)
+        .ok_or_else(|| invalid_data(format!("reference path {} is not indexed", path.name())))?;
+    let (mut path_offset, mut pos) = path_index
+        .indexed_position(index_offset, query_offset)
+        .ok_or_else(|| {
+            invalid_data(format!(
+                "reference path {} has no indexed position",
+                path.name()
+            ))
+        })?;
+    loop {
+        let node_id = support::node_id(pos.node);
+        let sequence_len = graph.sequence_len(node_id).ok_or_else(|| {
+            invalid_data(format!("missing sequence for reference node {node_id}"))
+        })?;
+        let node_end = path_offset
+            .checked_add(sequence_len)
+            .ok_or_else(|| invalid_data("reference path offset overflow"))?;
+        if node_end > query_offset {
+            return Ok(DirectReferencePosition {
+                query_offset,
+                node_offset: query_offset - path_offset,
+                gbwt_pos: pos,
+                path_name: path.name,
+            });
+        }
+        path_offset = node_end;
+        let record = gbwt_record(graph, pos.node)
+            .ok_or_else(|| invalid_data(format!("missing GBWT record for handle {}", pos.node)))?;
+        pos = record.lf(pos.offset).ok_or_else(|| {
+            invalid_data(format!(
+                "reference path {} ended before offset {query_offset}",
+                path.name()
+            ))
+        })?;
+    }
+}
+
+fn handles_to_oriented(path: &[usize]) -> ExperimentResult<Vec<OrientedNode>> {
+    Ok(path
+        .iter()
+        .map(|&handle| {
+            let (node_id, orientation) = support::decode_node(handle);
+            oriented(node_id, orientation)
+        })
+        .collect::<io::Result<Vec<_>>>()?)
+}
+
+#[cfg(test)]
+#[allow(clippy::too_many_lines)]
+fn direct_weighted_paths(
+    graph: &GBZ,
+    subgraph: &Subgraph,
+    reference: &DirectReferencePosition,
+) -> ExperimentResult<(Vec<OrientedNode>, u64, u64, Vec<WeightedTraversal>)> {
+    let handles = subgraph.handle_iter().collect::<Vec<_>>();
+    let mut handle_to_record = HashMap::with_capacity(handles.len());
+    let mut records = Vec::with_capacity(handles.len());
+    for handle in handles {
+        let record = gbwt_record(graph, handle)
+            .ok_or_else(|| invalid_data(format!("missing GBWT record for handle {handle}")))?;
+        let successors = record.decompress();
+        let sequence_len = graph
+            .sequence_len(support::node_id(handle))
+            .ok_or_else(|| invalid_data(format!("missing sequence for handle {handle}")))?;
+        handle_to_record.insert(handle, records.len());
+        records.push(DirectPathRecord {
+            handle,
+            has_predecessor: vec![false; successors.len()],
+            successors,
+            sequence_len,
+        });
+    }
+
+    for source in 0..records.len() {
+        for offset in 0..records[source].successors.len() {
+            let successor = records[source].successors[offset];
+            let Some(&target) = handle_to_record.get(&successor.node) else {
+                continue;
+            };
+            let predecessor = records[target]
+                .has_predecessor
+                .get_mut(successor.offset)
+                .ok_or_else(|| invalid_data("GBWT successor offset is outside the local record"))?;
+            *predecessor = true;
+        }
+    }
+    let local_occurrences = records.iter().try_fold(0_usize, |total, item| {
+        total
+            .checked_add(item.successors.len())
+            .ok_or_else(|| invalid_data("local GBWT occurrence count overflow"))
+    })?;
+
+    let mut paths = Vec::<Vec<usize>>::new();
+    let mut reference_path = None::<Vec<usize>>;
+    let mut reference_offset = None::<usize>;
+    for record in &records {
+        for offset in 0..record.successors.len() {
+            if record.has_predecessor[offset] {
+                continue;
+            }
+            let mut pos = Some(Pos::new(record.handle, offset));
+            let mut path = Vec::new();
+            let mut matched_reference = None;
+            while let Some(current) = pos {
+                if current == reference.gbwt_pos {
+                    matched_reference = Some(path.len());
+                }
+                path.push(current.node);
+                let current_record = handle_to_record
+                    .get(&current.node)
+                    .and_then(|&index| records.get(index))
+                    .ok_or_else(|| {
+                        invalid_data("local GBWT traversal left the selected records")
+                    })?;
+                let next = current_record
+                    .successors
+                    .get(current.offset)
+                    .copied()
+                    .ok_or_else(|| invalid_data("local GBWT traversal offset is out of bounds"))?;
+                pos = (next.node != 0 && handle_to_record.contains_key(&next.node)).then_some(next);
+                if path.len() > local_occurrences {
+                    return Err(invalid_data("cyclic local GBWT traversal").into());
+                }
+            }
+            if let Some(offset) = matched_reference {
+                reference_offset = Some(offset);
+                reference_path = Some(path.clone());
+                paths.push(path);
+            } else if support::encoded_path_is_canonical(&path) {
+                paths.push(path);
+            }
+        }
+    }
+
+    let reference_path = reference_path
+        .ok_or_else(|| invalid_data("could not find the reference path in direct extraction"))?;
+    let reference_offset = reference_offset
+        .ok_or_else(|| invalid_data("direct reference path has no matching GBWT position"))?;
+    let reference_len = reference_path.iter().try_fold(0_usize, |total, handle| {
+        let sequence_len = handle_to_record
+            .get(handle)
+            .and_then(|&index| records.get(index))
+            .map(|record| record.sequence_len)
+            .ok_or_else(|| invalid_data("reference traversal handle is not local"))?;
+        total
+            .checked_add(sequence_len)
+            .ok_or_else(|| invalid_data("reference traversal length overflow"))
+    })?;
+    let prefix_len = reference_path.iter().take(reference_offset).try_fold(
+        reference.node_offset,
+        |total, handle| {
+            let sequence_len = handle_to_record
+                .get(handle)
+                .and_then(|&index| records.get(index))
+                .map(|record| record.sequence_len)
+                .ok_or_else(|| invalid_data("reference prefix handle is not local"))?;
+            total
+                .checked_add(sequence_len)
+                .ok_or_else(|| invalid_data("reference prefix length overflow"))
+        },
+    )?;
+    let relative_start = reference
+        .query_offset
+        .checked_sub(prefix_len)
+        .ok_or_else(|| invalid_data("reference context starts before its fragment"))?;
+    let reference_start = reference
+        .path_name
+        .fragment
+        .checked_add(relative_start)
+        .ok_or_else(|| invalid_data("reference interval start overflow"))?;
+    let reference_end = reference_start
+        .checked_add(reference_len)
+        .ok_or_else(|| invalid_data("reference interval end overflow"))?;
+
+    paths.sort_unstable();
+    let mut traversals = Vec::new();
+    let mut index = 0;
+    while index < paths.len() {
+        let mut end = index + 1;
+        while end < paths.len() && paths[end] == paths[index] {
+            end += 1;
+        }
+        let count = usize_to_u64(end - index)?;
+        let anonymous_weight = if paths[index] == reference_path {
+            count.saturating_sub(1)
+        } else {
+            count
+        };
+        if anonymous_weight > 0 {
+            traversals.push(WeightedTraversal {
+                weight: anonymous_weight,
+                traversal: handles_to_oriented(&paths[index])?,
+            });
+        }
+        index = end;
+    }
+    traversals.sort();
+
+    Ok((
+        handles_to_oriented(&reference_path)?,
+        usize_to_u64(reference_start)?,
+        usize_to_u64(reference_end)?,
+        traversals,
+    ))
+}
+
+fn record_payload_size_estimate(
+    graph: &GBZ,
+    subgraph: &Subgraph,
+    reference: &DirectReferencePosition,
+) -> ExperimentResult<(u64, u64)> {
+    let index: &GBWT = graph.as_ref();
+    let bwt: &BWT = index.as_ref();
+    let mut bytes = 128_u64
+        .checked_add(16)
+        .and_then(|value| value.checked_add(usize_to_u64(reference.path_name.sample.len()).ok()?))
+        .and_then(|value| value.checked_add(usize_to_u64(reference.path_name.contig.len()).ok()?))
+        .ok_or_else(|| invalid_data("record payload header size overflow"))?;
+    let mut total_occurrences = 0_u64;
+    for node_id in subgraph.node_iter() {
+        let sequence_len = subgraph
+            .sequence_len(node_id)
+            .ok_or_else(|| invalid_data(format!("missing local sequence for node {node_id}")))?;
+        bytes = bytes
+            .checked_add(16)
+            .and_then(|value| value.checked_add(usize_to_u64(sequence_len).ok()?))
+            .ok_or_else(|| invalid_data("record payload node size overflow"))?;
+        for orientation in [Orientation::Forward, Orientation::Reverse] {
+            for (next_id, next_orientation) in subgraph
+                .supergraph_successors(node_id, orientation)
+                .ok_or_else(|| invalid_data(format!("missing local node {node_id}")))?
+            {
+                if support::edge_is_canonical((node_id, orientation), (next_id, next_orientation)) {
+                    bytes = bytes
+                        .checked_add(16)
+                        .ok_or_else(|| invalid_data("record payload edge size overflow"))?;
+                }
+            }
+        }
+    }
+    for handle in subgraph.handle_iter() {
+        let record_id = index.node_to_record(handle);
+        let (edges, bwt_bytes) = bwt.compressed_record(record_id).ok_or_else(|| {
+            invalid_data(format!(
+                "missing compressed GBWT record for handle {handle}"
+            ))
+        })?;
+        let occurrence_count = gbwt_record(graph, handle)
+            .ok_or_else(|| invalid_data(format!("missing GBWT record for handle {handle}")))?
+            .len();
+        total_occurrences = total_occurrences
+            .checked_add(usize_to_u64(occurrence_count)?)
+            .ok_or_else(|| invalid_data("record payload occurrence count overflow"))?;
+        bytes = bytes
+            .checked_add(24)
+            .and_then(|value| value.checked_add(usize_to_u64(edges.len()).ok()?))
+            .and_then(|value| value.checked_add(usize_to_u64(bwt_bytes.len()).ok()?))
+            .ok_or_else(|| invalid_data("record payload GBWT size overflow"))?;
+    }
+    Ok((bytes, total_occurrences))
+}
+
+impl RecordRegionalPayload {
+    fn from_subgraph(
+        graph: &GBZ,
+        subgraph: &Subgraph,
+        reference: &DirectReferencePosition,
+        core_start: u64,
+        core_end: u64,
+    ) -> ExperimentResult<Self> {
+        let mut nodes = BTreeMap::new();
+        let mut edges = BTreeSet::new();
+        for node_id in subgraph.node_iter() {
+            let sequence = subgraph.sequence(node_id).ok_or_else(|| {
+                invalid_data(format!("missing local sequence for node {node_id}"))
+            })?;
+            nodes.insert(usize_to_u64(node_id)?, sequence.to_vec());
+            for orientation in [Orientation::Forward, Orientation::Reverse] {
+                for (next_id, next_orientation) in subgraph
+                    .supergraph_successors(node_id, orientation)
+                    .ok_or_else(|| invalid_data(format!("missing local node {node_id}")))?
+                {
+                    if support::edge_is_canonical(
+                        (node_id, orientation),
+                        (next_id, next_orientation),
+                    ) {
+                        edges.insert(Edge {
+                            from: oriented(node_id, orientation)?,
+                            to: oriented(next_id, next_orientation)?,
+                        });
+                    }
+                }
+            }
+        }
+
+        let index: &GBWT = graph.as_ref();
+        let bwt: &BWT = index.as_ref();
+        let mut records = Vec::with_capacity(subgraph.handle_iter().count());
+        let mut total_occurrences = 0_u64;
+        for handle in subgraph.handle_iter() {
+            let record_id = index.node_to_record(handle);
+            let (edge_bytes, bwt_bytes) = bwt.compressed_record(record_id).ok_or_else(|| {
+                invalid_data(format!(
+                    "missing compressed GBWT record for handle {handle}"
+                ))
+            })?;
+            let occurrence_count = usize_to_u64(
+                gbwt_record(graph, handle)
+                    .ok_or_else(|| {
+                        invalid_data(format!("missing GBWT record for handle {handle}"))
+                    })?
+                    .len(),
+            )?;
+            total_occurrences = total_occurrences
+                .checked_add(occurrence_count)
+                .ok_or_else(|| invalid_data("record payload occurrence count overflow"))?;
+            let mut bytes = Vec::with_capacity(edge_bytes.len() + bwt_bytes.len());
+            bytes.extend_from_slice(edge_bytes);
+            bytes.extend_from_slice(bwt_bytes);
+            records.push(PackedGbwtRecord {
+                handle: usize_to_u64(handle)?,
+                occurrence_count,
+                bytes,
+            });
+        }
+        Ok(Self {
+            semantics: HaplotypeSemantics::AnonymousDistinctWeightedTilePaths,
+            core_start,
+            core_end,
+            context: CONSTRUCTION_CONTEXT,
+            reference_sample: reference.path_name.sample.clone(),
+            reference_contig: reference.path_name.contig.clone(),
+            reference_haplotype: usize_to_u64(reference.path_name.haplotype)?,
+            reference_fragment_start: usize_to_u64(reference.path_name.fragment)?,
+            reference_query_offset: usize_to_u64(reference.query_offset)?,
+            reference_node_offset: usize_to_u64(reference.node_offset)?,
+            reference_position: (
+                usize_to_u64(reference.gbwt_pos.node)?,
+                usize_to_u64(reference.gbwt_pos.offset)?,
+            ),
+            nodes,
+            edges,
+            records,
+            total_occurrences,
+        })
+    }
+
+    fn encode(&self) -> ExperimentResult<Vec<u8>> {
+        if self.semantics != HaplotypeSemantics::AnonymousDistinctWeightedTilePaths {
+            return Err(invalid_data("record payload requires distinct weighted semantics").into());
+        }
+        let mut output = Vec::new();
+        output.extend_from_slice(REGION_MAGIC);
+        put_u32(&mut output, REGION_VERSION);
+        put_u32(&mut output, 1);
+        output.push(semantics_code(self.semantics));
+        output.extend_from_slice(&[0_u8; 7]);
+        put_u64(&mut output, usize_to_u64(self.nodes.len())?);
+        put_u64(&mut output, usize_to_u64(self.edges.len())?);
+        put_u64(&mut output, usize_to_u64(self.records.len())?);
+        put_u64(&mut output, self.total_occurrences);
+        put_u64(&mut output, self.core_start);
+        put_u64(&mut output, self.core_end);
+        put_u64(&mut output, self.context);
+        put_u64(&mut output, self.reference_haplotype);
+        put_u64(&mut output, self.reference_fragment_start);
+        put_u64(&mut output, self.reference_query_offset);
+        put_u64(&mut output, self.reference_node_offset);
+        put_u64(&mut output, self.reference_position.0);
+        put_u64(&mut output, self.reference_position.1);
+        put_string(&mut output, &self.reference_sample)?;
+        put_string(&mut output, &self.reference_contig)?;
+        let mut previous_node_id = 0_u64;
+        for (node_id, sequence) in &self.nodes {
+            put_u64(
+                &mut output,
+                node_id
+                    .checked_sub(previous_node_id)
+                    .ok_or_else(|| invalid_data("record payload nodes are not sorted"))?,
+            );
+            put_bytes(&mut output, sequence)?;
+            previous_node_id = *node_id;
+        }
+        for edge in &self.edges {
+            put_u64(&mut output, pack_oriented(edge.from)?);
+            put_u64(&mut output, pack_oriented(edge.to)?);
+        }
+        let mut previous_handle = None;
+        let mut total_occurrences = 0_u64;
+        for record in &self.records {
+            if previous_handle.is_some_and(|handle| record.handle <= handle) {
+                return Err(invalid_data("record payload handles are not strictly sorted").into());
+            }
+            previous_handle = Some(record.handle);
+            total_occurrences = total_occurrences
+                .checked_add(record.occurrence_count)
+                .ok_or_else(|| invalid_data("record payload occurrence count overflow"))?;
+            put_u64(&mut output, record.handle);
+            put_u64(&mut output, record.occurrence_count);
+            put_bytes(&mut output, &record.bytes)?;
+        }
+        if total_occurrences != self.total_occurrences {
+            return Err(
+                invalid_data("record payload occurrence total differs from records").into(),
+            );
+        }
+        Ok(output)
+    }
+}
+
+#[allow(clippy::too_many_lines)]
+fn weighted_paths_from_decoded_records(
+    mut records: Vec<DirectPathRecord>,
+    reference: &DirectReferencePosition,
+) -> ExperimentResult<(Vec<OrientedNode>, u64, u64, Vec<WeightedTraversal>)> {
+    let handle_to_record = records
+        .iter()
+        .enumerate()
+        .map(|(index, record)| (record.handle, index))
+        .collect::<HashMap<_, _>>();
+    for source in 0..records.len() {
+        for offset in 0..records[source].successors.len() {
+            let successor = records[source].successors[offset];
+            let Some(&target) = handle_to_record.get(&successor.node) else {
+                continue;
+            };
+            let predecessor = records[target]
+                .has_predecessor
+                .get_mut(successor.offset)
+                .ok_or_else(|| invalid_data("GBWT successor offset is outside the local record"))?;
+            *predecessor = true;
+        }
+    }
+    let local_occurrences = records.iter().try_fold(0_usize, |total, item| {
+        total
+            .checked_add(item.successors.len())
+            .ok_or_else(|| invalid_data("local GBWT occurrence count overflow"))
+    })?;
+    let mut paths = Vec::<Vec<usize>>::new();
+    let mut reference_path = None::<Vec<usize>>;
+    let mut reference_offset = None::<usize>;
+    for record in &records {
+        for offset in 0..record.successors.len() {
+            if record.has_predecessor[offset] {
+                continue;
+            }
+            let mut pos = Some(Pos::new(record.handle, offset));
+            let mut path = Vec::new();
+            let mut matched_reference = None;
+            while let Some(current) = pos {
+                if current == reference.gbwt_pos {
+                    matched_reference = Some(path.len());
+                }
+                path.push(current.node);
+                let current_record = handle_to_record
+                    .get(&current.node)
+                    .and_then(|&index| records.get(index))
+                    .ok_or_else(|| {
+                        invalid_data("local GBWT traversal left the selected records")
+                    })?;
+                let next = current_record
+                    .successors
+                    .get(current.offset)
+                    .copied()
+                    .ok_or_else(|| invalid_data("local GBWT traversal offset is out of bounds"))?;
+                pos = (next.node != 0 && handle_to_record.contains_key(&next.node)).then_some(next);
+                if path.len() > local_occurrences {
+                    return Err(invalid_data("cyclic local GBWT traversal").into());
+                }
+            }
+            if let Some(offset) = matched_reference {
+                reference_offset = Some(offset);
+                reference_path = Some(path.clone());
+                paths.push(path);
+            } else if support::encoded_path_is_canonical(&path) {
+                paths.push(path);
+            }
+        }
+    }
+    let reference_path = reference_path
+        .ok_or_else(|| invalid_data("could not find the reference path in record payload"))?;
+    let reference_offset = reference_offset
+        .ok_or_else(|| invalid_data("record payload reference has no matching GBWT position"))?;
+    let reference_len = reference_path.iter().try_fold(0_usize, |total, handle| {
+        let sequence_len = handle_to_record
+            .get(handle)
+            .and_then(|&index| records.get(index))
+            .map(|record| record.sequence_len)
+            .ok_or_else(|| invalid_data("reference traversal handle is not local"))?;
+        total
+            .checked_add(sequence_len)
+            .ok_or_else(|| invalid_data("reference traversal length overflow"))
+    })?;
+    let prefix_len = reference_path.iter().take(reference_offset).try_fold(
+        reference.node_offset,
+        |total, handle| {
+            let sequence_len = handle_to_record
+                .get(handle)
+                .and_then(|&index| records.get(index))
+                .map(|record| record.sequence_len)
+                .ok_or_else(|| invalid_data("reference prefix handle is not local"))?;
+            total
+                .checked_add(sequence_len)
+                .ok_or_else(|| invalid_data("reference prefix length overflow"))
+        },
+    )?;
+    let relative_start = reference
+        .query_offset
+        .checked_sub(prefix_len)
+        .ok_or_else(|| invalid_data("reference context starts before its fragment"))?;
+    let reference_start = reference
+        .path_name
+        .fragment
+        .checked_add(relative_start)
+        .ok_or_else(|| invalid_data("reference interval start overflow"))?;
+    let reference_end = reference_start
+        .checked_add(reference_len)
+        .ok_or_else(|| invalid_data("reference interval end overflow"))?;
+    paths.sort_unstable();
+    let mut traversals = Vec::new();
+    let mut index = 0;
+    while index < paths.len() {
+        let mut end = index + 1;
+        while end < paths.len() && paths[end] == paths[index] {
+            end += 1;
+        }
+        let count = usize_to_u64(end - index)?;
+        let anonymous_weight = if paths[index] == reference_path {
+            count.saturating_sub(1)
+        } else {
+            count
+        };
+        if anonymous_weight > 0 {
+            traversals.push(WeightedTraversal {
+                weight: anonymous_weight,
+                traversal: handles_to_oriented(&paths[index])?,
+            });
+        }
+        index = end;
+    }
+    traversals.sort();
+    Ok((
+        handles_to_oriented(&reference_path)?,
+        usize_to_u64(reference_start)?,
+        usize_to_u64(reference_end)?,
+        traversals,
+    ))
+}
+
+#[allow(clippy::too_many_arguments)]
+fn construct_record_chunk(
+    graph: &GBZ,
+    path_index: &PathIndex,
+    reference: &FullPathName,
+    start: u64,
+    end: u64,
+    max_uncompressed_bytes: u64,
+) -> ExperimentResult<RecordChunkOutcome> {
+    let query = SubgraphQuery::path_interval(reference, u64_to_usize(start)?..u64_to_usize(end)?)
+        .with_context(u64_to_usize(CONSTRUCTION_CONTEXT)?)
+        .with_haplotypes(HaplotypeOutput::None);
+    let selection_started = Instant::now();
+    let mut subgraph = Subgraph::new();
+    subgraph.from_gbz(graph, Some(path_index), None, &query)?;
+    let mut query_position = reference.clone();
+    query_position.fragment = u64_to_usize(start)?;
+    let reference_position = direct_reference_position(graph, path_index, &query_position)?;
+    let subgraph_selection_wall_ms = selection_started.elapsed().as_secs_f64() * 1_000.0;
+    let (estimated_bytes, total_occurrences) =
+        record_payload_size_estimate(graph, &subgraph, &reference_position)?;
+    if estimated_bytes > max_uncompressed_bytes {
+        return Ok(RecordChunkOutcome::Split {
+            estimated_bytes,
+            subgraph_selection_wall_ms,
+        });
+    }
+    if total_occurrences > MAX_DECODED_OCCURRENCES_PER_TILE {
+        return Ok(RecordChunkOutcome::Split {
+            estimated_bytes: estimated_bytes.max(max_uncompressed_bytes.saturating_add(1)),
+            subgraph_selection_wall_ms,
+        });
+    }
+    let materialization_started = Instant::now();
+    let payload =
+        RecordRegionalPayload::from_subgraph(graph, &subgraph, &reference_position, start, end)?;
+    let regional_materialization_wall_ms =
+        materialization_started.elapsed().as_secs_f64() * 1_000.0;
+    let encoding_started = Instant::now();
+    let raw = payload.encode()?;
+    let regional_encoding_wall_ms = encoding_started.elapsed().as_secs_f64() * 1_000.0;
+    if usize_to_u64(raw.len())? != estimated_bytes {
+        return Err(invalid_data(format!(
+            "record payload estimate {estimated_bytes} differs from encoded size {}",
+            raw.len()
+        ))
+        .into());
+    }
+    Ok(RecordChunkOutcome::Accepted(RecordChunk {
+        raw,
+        subgraph_selection_wall_ms,
+        regional_materialization_wall_ms,
+        regional_encoding_wall_ms,
+    }))
+}
+
+fn decode_bytecode_integer(bytes: &[u8], position: &mut usize) -> io::Result<u64> {
+    let mut result = 0_u64;
+    let mut shift = 0_u32;
+    loop {
+        let byte = *bytes
+            .get(*position)
+            .ok_or_else(|| invalid_data("truncated GBWT bytecode integer"))?;
+        *position = position
+            .checked_add(1)
+            .ok_or_else(|| invalid_data("GBWT bytecode position overflow"))?;
+        let payload = u64::from(byte & 0x7f);
+        if shift >= 64 || payload > (u64::MAX >> shift) {
+            return Err(invalid_data("GBWT bytecode integer overflow"));
+        }
+        result = result
+            .checked_add(payload << shift)
+            .ok_or_else(|| invalid_data("GBWT bytecode integer overflow"))?;
+        if byte & 0x80 == 0 {
+            return Ok(result);
+        }
+        shift = shift
+            .checked_add(7)
+            .ok_or_else(|| invalid_data("GBWT bytecode shift overflow"))?;
+    }
+}
+
+fn decode_packed_gbwt_record(
+    record: &PackedGbwtRecord,
+    expand: bool,
+) -> ExperimentResult<Vec<Pos>> {
+    if record.occurrence_count == 0 {
+        return Err(invalid_data("GBWT record has no occurrences").into());
+    }
+    if record.occurrence_count > MAX_DECODED_OCCURRENCES_PER_TILE {
+        return Err(invalid_data("GBWT record exceeds the decoded occurrence safety limit").into());
+    }
+    let mut position = 0_usize;
+    let sigma = decode_bytecode_integer(&record.bytes, &mut position)?;
+    if sigma == 0 {
+        return Err(invalid_data("GBWT record has an empty edge alphabet").into());
+    }
+    let sigma = u64_to_usize(sigma)?;
+    if sigma > record.bytes.len().saturating_sub(position) / 2 {
+        return Err(invalid_data("GBWT edge count exceeds the record bytes").into());
+    }
+    let mut edges = Vec::with_capacity(sigma);
+    let mut previous_node = 0_u64;
+    for edge_index in 0..sigma {
+        let delta = decode_bytecode_integer(&record.bytes, &mut position)?;
+        let node = previous_node
+            .checked_add(delta)
+            .ok_or_else(|| invalid_data("GBWT successor handle overflow"))?;
+        if edge_index > 0 && node <= previous_node {
+            return Err(invalid_data("GBWT successor handles are not strictly sorted").into());
+        }
+        let offset = decode_bytecode_integer(&record.bytes, &mut position)?;
+        edges.push((u64_to_usize(node)?, u64_to_usize(offset)?));
+        previous_node = node;
+    }
+    if position >= record.bytes.len() {
+        return Err(invalid_data("GBWT record has no run-length data").into());
+    }
+
+    let expected = u64_to_usize(record.occurrence_count)?;
+    let mut successors = Vec::new();
+    if expand {
+        successors
+            .try_reserve_exact(expected)
+            .map_err(|error| invalid_data(format!("cannot allocate GBWT successors: {error}")))?;
+    }
+    let threshold = if sigma < 255 { 256 / sigma } else { 0 };
+    let mut decoded = 0_usize;
+    let mut next_offsets = edges.clone();
+    while position < record.bytes.len() {
+        let (rank, run_len) = if sigma >= 255 {
+            let rank = u64_to_usize(decode_bytecode_integer(&record.bytes, &mut position)?)?;
+            let run_len = u64_to_usize(
+                decode_bytecode_integer(&record.bytes, &mut position)?
+                    .checked_add(1)
+                    .ok_or_else(|| invalid_data("GBWT run length overflow"))?,
+            )?;
+            (rank, run_len)
+        } else {
+            let byte = usize::from(
+                *record
+                    .bytes
+                    .get(position)
+                    .ok_or_else(|| invalid_data("truncated GBWT run"))?,
+            );
+            position += 1;
+            let rank = byte % sigma;
+            let mut run_len = byte / sigma + 1;
+            if run_len == threshold {
+                run_len = run_len
+                    .checked_add(u64_to_usize(decode_bytecode_integer(
+                        &record.bytes,
+                        &mut position,
+                    )?)?)
+                    .ok_or_else(|| invalid_data("GBWT run length overflow"))?;
+            }
+            (rank, run_len)
+        };
+        let edge = next_offsets
+            .get_mut(rank)
+            .ok_or_else(|| invalid_data("GBWT run rank is outside its edge alphabet"))?;
+        decoded = decoded
+            .checked_add(run_len)
+            .filter(|count| *count <= expected)
+            .ok_or_else(|| invalid_data("GBWT runs exceed the declared occurrence count"))?;
+        if expand {
+            for _ in 0..run_len {
+                successors.push(Pos::new(edge.0, edge.1));
+                edge.1 = edge
+                    .1
+                    .checked_add(1)
+                    .ok_or_else(|| invalid_data("GBWT successor offset overflow"))?;
+            }
+        } else {
+            edge.1 = edge
+                .1
+                .checked_add(run_len)
+                .ok_or_else(|| invalid_data("GBWT successor offset overflow"))?;
+        }
+    }
+    if decoded != expected {
+        return Err(invalid_data("GBWT runs differ from the declared occurrence count").into());
+    }
+    Ok(successors)
+}
+
+impl RecordRegionalPayload {
+    #[allow(clippy::too_many_lines)]
+    fn decode(bytes: &[u8]) -> ExperimentResult<Self> {
+        let mut reader = BinaryReader::new(bytes);
+        if reader.take(8)? != REGION_MAGIC {
+            return Err(invalid_data("invalid record regional chunk magic").into());
+        }
+        let version = reader.u32()?;
+        if version != REGION_VERSION {
+            return Err(invalid_data(format!("unsupported regional version {version}")).into());
+        }
+        if reader.u32()? != 1 {
+            return Err(invalid_data("unsupported record regional flags").into());
+        }
+        let semantics = semantics_from_code(reader.u8()?)?;
+        if semantics != HaplotypeSemantics::AnonymousDistinctWeightedTilePaths {
+            return Err(invalid_data("record payload must use distinct weighted semantics").into());
+        }
+        if reader.take(7)? != [0_u8; 7] {
+            return Err(invalid_data("record payload reserved bytes are nonzero").into());
+        }
+        let node_count = reader.u64()?;
+        let edge_count = reader.u64()?;
+        let record_count = reader.u64()?;
+        let total_occurrences = reader.u64()?;
+        let core_start = reader.u64()?;
+        let core_end = reader.u64()?;
+        let context = reader.u64()?;
+        let reference_haplotype = reader.u64()?;
+        let reference_fragment_start = reader.u64()?;
+        let reference_query_offset = reader.u64()?;
+        let reference_node_offset = reader.u64()?;
+        let reference_position = (reader.u64()?, reader.u64()?);
+        if core_start >= core_end {
+            return Err(invalid_data("record payload has an invalid core interval").into());
+        }
+        if context != CONSTRUCTION_CONTEXT {
+            return Err(invalid_data(format!(
+                "unsupported record payload construction context {context}"
+            ))
+            .into());
+        }
+        if reference_fragment_start.checked_add(reference_query_offset) != Some(core_start) {
+            return Err(
+                invalid_data("record payload query offset does not match core start").into(),
+            );
+        }
+        if total_occurrences == 0 || total_occurrences > MAX_DECODED_OCCURRENCES_PER_TILE {
+            return Err(
+                invalid_data("record payload occurrence total exceeds its safety bound").into(),
+            );
+        }
+        if record_count
+            != node_count
+                .checked_mul(2)
+                .ok_or_else(|| invalid_data("record count overflow"))?
+        {
+            return Err(
+                invalid_data("record payload must contain both handles for every node").into(),
+            );
+        }
+        let reference_sample = reader.string()?;
+        let reference_contig = reader.string()?;
+        if reference_sample.is_empty() || reference_contig.is_empty() {
+            return Err(invalid_data("record payload reference provenance is empty").into());
+        }
+        let mut nodes = BTreeMap::new();
+        let mut previous_node_id = 0_u64;
+        for _ in
+            0..count_bounded_by_bytes(node_count, reader.remaining(), 16, "record payload nodes")?
+        {
+            let node_id = previous_node_id
+                .checked_add(reader.u64()?)
+                .ok_or_else(|| invalid_data("record payload node delta overflow"))?;
+            if node_id == 0 || node_id <= previous_node_id {
+                return Err(invalid_data("record payload nodes are not strictly sorted").into());
+            }
+            let sequence = reader.bytes()?;
+            if sequence.is_empty() {
+                return Err(invalid_data("record payload contains an empty node sequence").into());
+            }
+            nodes.insert(node_id, sequence);
+            previous_node_id = node_id;
+        }
+        let mut edges = BTreeSet::new();
+        for _ in
+            0..count_bounded_by_bytes(edge_count, reader.remaining(), 16, "record payload edges")?
+        {
+            let edge = Edge {
+                from: unpack_oriented(reader.u64()?),
+                to: unpack_oriented(reader.u64()?),
+            };
+            if !nodes.contains_key(&edge.from.id) {
+                return Err(invalid_data("record payload edge source is not local").into());
+            }
+            let from = (
+                u64_to_usize(edge.from.id)?,
+                if edge.from.reverse {
+                    Orientation::Reverse
+                } else {
+                    Orientation::Forward
+                },
+            );
+            let to = (
+                u64_to_usize(edge.to.id)?,
+                if edge.to.reverse {
+                    Orientation::Reverse
+                } else {
+                    Orientation::Forward
+                },
+            );
+            if !support::edge_is_canonical(from, to) {
+                return Err(invalid_data("record payload edge is not canonical").into());
+            }
+            if !edges.insert(edge) {
+                return Err(invalid_data("record payload contains a duplicate edge").into());
+            }
+        }
+        let mut records = Vec::with_capacity(count_bounded_by_bytes(
+            record_count,
+            reader.remaining(),
+            24,
+            "record payload GBWT records",
+        )?);
+        let mut previous_handle = None;
+        let mut decoded_occurrences = 0_u64;
+        for _ in 0..record_count {
+            let record = PackedGbwtRecord {
+                handle: reader.u64()?,
+                occurrence_count: reader.u64()?,
+                bytes: reader.bytes()?,
+            };
+            if record.handle == 0 || previous_handle.is_some_and(|handle| record.handle <= handle) {
+                return Err(invalid_data("record payload handles are not strictly sorted").into());
+            }
+            if !nodes.contains_key(&(record.handle / 2)) {
+                return Err(invalid_data("record payload handle refers to an absent node").into());
+            }
+            let _ = u64_to_usize(record.handle)?;
+            decode_packed_gbwt_record(&record, false)?;
+            decoded_occurrences = decoded_occurrences
+                .checked_add(record.occurrence_count)
+                .ok_or_else(|| invalid_data("record payload occurrence total overflow"))?;
+            previous_handle = Some(record.handle);
+            records.push(record);
+        }
+        reader.finish()?;
+        if decoded_occurrences != total_occurrences {
+            return Err(
+                invalid_data("record payload occurrence total differs from records").into(),
+            );
+        }
+        let reference_record = records
+            .binary_search_by_key(&reference_position.0, |record| record.handle)
+            .ok()
+            .and_then(|index| records.get(index))
+            .ok_or_else(|| invalid_data("record payload reference handle is not local"))?;
+        if reference_position.1 >= reference_record.occurrence_count {
+            return Err(invalid_data("record payload reference offset is out of bounds").into());
+        }
+        let reference_node = nodes
+            .get(&(reference_position.0 / 2))
+            .ok_or_else(|| invalid_data("record payload reference node is absent"))?;
+        if reference_node_offset >= usize_to_u64(reference_node.len())? {
+            return Err(
+                invalid_data("record payload reference node offset is out of bounds").into(),
+            );
+        }
+        Ok(Self {
+            semantics,
+            core_start,
+            core_end,
+            context,
+            reference_sample,
+            reference_contig,
+            reference_haplotype,
+            reference_fragment_start,
+            reference_query_offset,
+            reference_node_offset,
+            reference_position,
+            nodes,
+            edges,
+            records,
+            total_occurrences,
+        })
+    }
+
+    fn into_regional_graph(self) -> ExperimentResult<RegionalGraph> {
+        let mut direct_records = Vec::with_capacity(self.records.len());
+        for record in &self.records {
+            let successors = decode_packed_gbwt_record(record, true)?;
+            let sequence_len = self
+                .nodes
+                .get(&(record.handle / 2))
+                .ok_or_else(|| invalid_data("record payload handle has no local sequence"))?
+                .len();
+            direct_records.push(DirectPathRecord {
+                handle: u64_to_usize(record.handle)?,
+                has_predecessor: vec![false; successors.len()],
+                successors,
+                sequence_len,
+            });
+        }
+        let reference = DirectReferencePosition {
+            query_offset: u64_to_usize(self.reference_query_offset)?,
+            node_offset: u64_to_usize(self.reference_node_offset)?,
+            gbwt_pos: Pos::new(
+                u64_to_usize(self.reference_position.0)?,
+                u64_to_usize(self.reference_position.1)?,
+            ),
+            path_name: FullPathName {
+                sample: self.reference_sample.clone(),
+                contig: self.reference_contig.clone(),
+                haplotype: u64_to_usize(self.reference_haplotype)?,
+                fragment: u64_to_usize(self.reference_fragment_start)?,
+            },
+        };
+        let (reference_traversal, reference_start, reference_end, traversals) =
+            weighted_paths_from_decoded_records(direct_records, &reference)?;
+        let mut result = RegionalGraph {
+            nodes: self.nodes,
+            edges: self.edges,
+            semantics: self.semantics,
+            ..RegionalGraph::default()
+        };
+        result.reference_paths.push(RegionalReferencePath {
+            sample: self.reference_sample.clone(),
+            contig: self.reference_contig.clone(),
+            haplotype: self.reference_haplotype,
+            start: reference_start,
+            end: reference_end,
+            traversal: reference_traversal,
+        });
+        result.haplotype_tiles.push(CanonicalHaplotypeTile {
+            reference_sample: self.reference_sample,
+            reference_contig: self.reference_contig,
+            core_start: self.core_start,
+            core_end: self.core_end,
+            traversals,
+        });
+        Ok(result)
+    }
+}
+
+#[cfg(test)]
+#[allow(clippy::too_many_arguments)]
+fn extract_local_region_direct(
+    graph: &GBZ,
+    path_index: &PathIndex,
+    subgraph: &mut Subgraph,
+    reference: &FullPathName,
+    core_start: u64,
+    core_end: u64,
+    context: u64,
+) -> ExperimentResult<(RegionalGraph, HaplotypeModeEvidence)> {
+    let query = SubgraphQuery::path_interval(
+        reference,
+        u64_to_usize(core_start)?..u64_to_usize(core_end)?,
+    )
+    .with_context(u64_to_usize(context)?)
+    .with_haplotypes(HaplotypeOutput::None);
+    let extraction_started = Instant::now();
+    subgraph.from_gbz(graph, Some(path_index), None, &query)?;
+    let mut query_position = reference.clone();
+    query_position.fragment = u64_to_usize(core_start)?;
+    let reference_position = direct_reference_position(graph, path_index, &query_position)?;
+    let (reference_traversal, reference_start, reference_end, traversals) =
+        direct_weighted_paths(graph, subgraph, &reference_position)?;
+    let extraction_wall_ms = extraction_started.elapsed().as_secs_f64() * 1_000.0;
+    let evidence = mode_evidence(
+        HaplotypeOutput::Distinct,
+        &traversals,
+        extraction_wall_ms,
+        0,
+    )?;
+
+    let mut regional = RegionalGraph::topology_from_subgraph(subgraph)?;
+    regional.semantics = HaplotypeSemantics::AnonymousDistinctWeightedTilePaths;
+    regional.reference_paths.push(RegionalReferencePath {
+        sample: reference.sample.clone(),
+        contig: reference.contig.clone(),
+        haplotype: usize_to_u64(reference.haplotype)?,
+        start: reference_start,
+        end: reference_end,
+        traversal: reference_traversal,
+    });
+    regional.haplotype_tiles.push(CanonicalHaplotypeTile {
+        reference_sample: reference.sample.clone(),
+        reference_contig: reference.contig.clone(),
+        core_start,
+        core_end,
+        traversals,
+    });
+    Ok((regional, evidence))
+}
+
+#[cfg(test)]
 pub fn compare_haplotype_outputs(
     graph: &GBZ,
     path_index: &PathIndex,
@@ -859,45 +2108,6 @@ pub fn compare_haplotype_outputs(
     })
 }
 
-fn preflight_region(
-    graph: &GBZ,
-    path_index: &PathIndex,
-    reusable: &mut Subgraph,
-    reference: &FullPathName,
-    start: u64,
-    end: u64,
-    max_raw_bytes: u64,
-) -> ExperimentResult<Option<u64>> {
-    // The topology-only representation is materially smaller than the final
-    // weighted traversal payload. This limit is therefore deliberately
-    // conservative and only prevents clearly oversized parent allocations.
-    let node_limit = u64_to_usize((max_raw_bytes / 32).max(1))?;
-    let query = SubgraphQuery::path_interval(reference, u64_to_usize(start)?..u64_to_usize(end)?)
-        .with_context(u64_to_usize(CONSTRUCTION_CONTEXT)?)
-        .with_haplotypes(HaplotypeOutput::None)
-        .with_limit(Some(node_limit));
-    match reusable.from_gbz(graph, Some(path_index), None, &query) {
-        Ok(()) => {
-            let sequence_bytes = reusable.node_iter().try_fold(0_u64, |total, node_id| {
-                total
-                    .checked_add(usize_to_u64(reusable.sequence_len(node_id).unwrap_or(0))?)
-                    .ok_or_else(|| invalid_data("preflight sequence byte estimate overflow"))
-            })?;
-            let node_bytes = usize_to_u64(reusable.nodes())?
-                .checked_mul(64)
-                .ok_or_else(|| invalid_data("preflight node estimate overflow"))?;
-            let estimated_bytes = sequence_bytes
-                .checked_add(node_bytes)
-                .ok_or_else(|| invalid_data("preflight byte estimate overflow"))?;
-            Ok((estimated_bytes > max_raw_bytes).then_some(estimated_bytes))
-        }
-        Err(error) if error.kind() == GbzBaseErrorKind::LimitExceeded => {
-            Ok(Some(max_raw_bytes.saturating_add(1)))
-        }
-        Err(error) => Err(error.into()),
-    }
-}
-
 fn selected_reference_paths(
     graph: &GBZ,
     config: &FixedArchiveConfig,
@@ -934,6 +2144,84 @@ fn selected_reference_paths(
     Ok(references)
 }
 
+#[allow(clippy::cast_precision_loss, clippy::too_many_arguments)]
+fn maybe_emit_chunk_progress(
+    mode: BuildProgressMode,
+    interval_ms: u64,
+    force: bool,
+    archive: &File,
+    manifest: &ReferenceManifest,
+    reference_id: usize,
+    reference_count: usize,
+    chunk_start: u64,
+    chunk_end: u64,
+    total_reference_bases: u64,
+    build_started: Instant,
+    processing_started: Instant,
+    state: &mut DirectWriterState,
+) -> ExperimentResult<()> {
+    if mode == BuildProgressMode::Off {
+        return Ok(());
+    }
+    let processing_elapsed_seconds = processing_started.elapsed().as_secs_f64();
+    let processing_elapsed_ms = processing_elapsed_seconds * 1_000.0;
+    if !force
+        && state.progress_events_emitted > 0
+        && processing_elapsed_ms - state.last_progress_emit_ms < interval_ms as f64
+    {
+        return Ok(());
+    }
+    let reference_bases = manifest.end.saturating_sub(manifest.start);
+    let reference_bases_processed = chunk_end.min(manifest.end).saturating_sub(manifest.start);
+    let reference_bp_per_second = if processing_elapsed_seconds > 0.0 {
+        state.reference_bases_processed as f64 / processing_elapsed_seconds
+    } else {
+        0.0
+    };
+    let chunks_per_second = if processing_elapsed_seconds > 0.0 {
+        state.accepted_chunks as f64 / processing_elapsed_seconds
+    } else {
+        0.0
+    };
+    let estimated_seconds_remaining = (reference_bp_per_second > 0.0).then(|| {
+        total_reference_bases.saturating_sub(state.reference_bases_processed) as f64
+            / reference_bp_per_second
+    });
+    state.progress_events_emitted = state
+        .progress_events_emitted
+        .checked_add(1)
+        .ok_or_else(|| invalid_data("progress event count overflow"))?;
+    state.last_progress_emit_ms = processing_elapsed_ms;
+    let reference_complete = chunk_end >= manifest.end;
+    let snapshot = BuildProgressSnapshot {
+        phase: "chunk_progress",
+        sequence: state.progress_events_emitted,
+        reference_ordinal: usize_to_u64(reference_id + 1)?,
+        reference_count: usize_to_u64(reference_count)?,
+        references_completed: usize_to_u64(reference_id + usize::from(reference_complete))?,
+        sample: manifest.sample.clone(),
+        contig: manifest.contig.clone(),
+        current_chunk_start: chunk_start,
+        current_chunk_end: chunk_end,
+        reference_start: manifest.start,
+        reference_end: manifest.end,
+        reference_percent_complete: ratio(reference_bases_processed, reference_bases) * 100.0,
+        processed_reference_bases: state.reference_bases_processed,
+        total_reference_bases,
+        percent_complete: ratio(state.reference_bases_processed, total_reference_bases) * 100.0,
+        accepted_chunks: state.accepted_chunks,
+        physical_chunks: usize_to_u64(state.chunks.len())?,
+        reference_bp_per_second,
+        chunks_per_second,
+        estimated_seconds_remaining,
+        processing_elapsed_seconds,
+        build_elapsed_seconds: build_started.elapsed().as_secs_f64(),
+        temporary_archive_bytes: archive.metadata()?.len(),
+    };
+    emit_progress_snapshot(mode, &snapshot);
+    Ok(())
+}
+
 #[allow(clippy::too_many_arguments, clippy::too_many_lines)]
 fn flush_pending_chunks(
     pending: &mut Vec<PendingRawChunk>,
@@ -944,6 +2232,9 @@ fn flush_pending_chunks(
     config: &FixedArchiveConfig,
     options: &ArchiveBuildOptions,
     build_started: Instant,
+    processing_started: Instant,
+    total_reference_bases: u64,
+    reference_count: usize,
     state: &mut DirectWriterState,
 ) -> ExperimentResult<()> {
     if pending.is_empty() {
@@ -1103,6 +2394,108 @@ fn flush_pending_chunks(
             .reference_bases_processed
             .checked_add(chunk.end - chunk.start)
             .ok_or_else(|| invalid_data("processed reference bases overflow"))?;
+        maybe_emit_chunk_progress(
+            options.progress,
+            options.progress_interval_ms,
+            chunk.end >= manifest.end,
+            archive,
+            manifest,
+            chunk.reference_id,
+            reference_count,
+            chunk.start,
+            chunk.end,
+            total_reference_bases,
+            build_started,
+            processing_started,
+            state,
+        )?;
+    }
+    Ok(())
+}
+
+#[allow(clippy::too_many_arguments)]
+fn queue_record_chunk(
+    record_chunk: RecordChunk,
+    task: ChunkTask,
+    reference_id: usize,
+    pending: &mut Vec<PendingRawChunk>,
+    pending_memory_bound: &mut u64,
+    peak_raw_chunk_bytes: &mut u64,
+    archive: &mut File,
+    manifests: &mut [ReferenceManifest],
+    bucket_entries: &mut [Vec<Vec<ArchiveEntry>>],
+    bucket_span: u64,
+    config: &FixedArchiveConfig,
+    options: &ArchiveBuildOptions,
+    build_started: Instant,
+    processing_started: Instant,
+    total_reference_bases: u64,
+    reference_count: usize,
+    writer: &mut DirectWriterState,
+) -> ExperimentResult<()> {
+    let raw_len = usize_to_u64(record_chunk.raw.len())?;
+    *peak_raw_chunk_bytes = (*peak_raw_chunk_bytes).max(raw_len);
+    let compressed_bound = match config.codec {
+        ChunkCodec::None => raw_len,
+        _ => usize_to_u64(zstd::zstd_safe::compress_bound(record_chunk.raw.len()))?,
+    };
+    let chunk_memory_bound = raw_len
+        .checked_add(compressed_bound)
+        .ok_or_else(|| invalid_data("chunk queue bound overflow"))?;
+    if chunk_memory_bound > options.max_queued_bytes {
+        return Err(invalid_input(format!(
+            "accepted raw+compressed chunk bound is {chunk_memory_bound} bytes, above the {} byte queue cap",
+            options.max_queued_bytes
+        ))
+        .into());
+    }
+    if !pending.is_empty()
+        && (pending.len() >= options.threads
+            || pending_memory_bound.saturating_add(chunk_memory_bound) > options.max_queued_bytes)
+    {
+        flush_pending_chunks(
+            pending,
+            archive,
+            manifests,
+            bucket_entries,
+            bucket_span,
+            config,
+            options,
+            build_started,
+            processing_started,
+            total_reference_bases,
+            reference_count,
+            writer,
+        )?;
+        *pending_memory_bound = 0;
+    }
+    let hash = blake3::hash(&record_chunk.raw);
+    pending.push(PendingRawChunk {
+        reference_id,
+        start: task.start,
+        end: task.end,
+        raw: record_chunk.raw,
+        hash,
+    });
+    *pending_memory_bound = pending_memory_bound
+        .checked_add(chunk_memory_bound)
+        .ok_or_else(|| invalid_data("pending queue bound overflow"))?;
+    if pending.len() >= options.threads {
+        flush_pending_chunks(
+            pending,
+            archive,
+            manifests,
+            bucket_entries,
+            bucket_span,
+            config,
+            options,
+            build_started,
+            processing_started,
+            total_reference_bases,
+            reference_count,
+            writer,
+        )?;
+        *pending_memory_bound = 0;
     }
     Ok(())
 }
@@ -1165,6 +2558,25 @@ pub fn build_fixed_archive_with_options(
     if references.is_empty() {
         return Err(invalid_input("no reference paths match the requested filters").into());
     }
+    let total_reference_bases = references.iter().try_fold(0_u64, |total, reference| {
+        total
+            .checked_add(reference.end.saturating_sub(reference.start))
+            .ok_or_else(|| invalid_data("total reference base count overflow"))
+    })?;
+    let planned_base_windows = references.iter().try_fold(0_u64, |total, reference| {
+        let grid_start = (reference.start / config.window_size) * config.window_size;
+        let span = reference
+            .end
+            .checked_sub(grid_start)
+            .ok_or_else(|| invalid_data("reference window span underflow"))?;
+        let windows = span
+            .checked_add(config.window_size - 1)
+            .ok_or_else(|| invalid_data("reference window count overflow"))?
+            / config.window_size;
+        total
+            .checked_add(windows)
+            .ok_or_else(|| invalid_data("planned base window count overflow"))
+    })?;
     let bucket_span = config
         .window_size
         .checked_mul(DIRECTORY_BUCKET_WINDOWS)
@@ -1236,32 +2648,39 @@ pub fn build_fixed_archive_with_options(
         .collect::<Result<Vec<_>, io::Error>>()?;
     let mut writer = DirectWriterState::default();
     let mut pending = Vec::<PendingRawChunk>::with_capacity(options.threads);
-    let mut pending_raw_bytes = 0_u64;
     let mut pending_memory_bound = 0_u64;
+    let mut ready_raw_bytes = 0_u64;
+    let mut peak_ready_raw_bytes = 0_u64;
     let mut peak_raw_chunk_bytes = 0_u64;
     let mut adaptive_splits = 0_u64;
-    let mut preflight_splits = 0_u64;
+    let preflight_splits = 0_u64;
     let mut post_materialization_splits = 0_u64;
     let mut largest_rejected_parent_bytes = 0_u64;
-    let mut preflight_selection_wall_ms = 0.0;
+    let preflight_selection_wall_ms = 0.0;
     let mut subgraph_selection_wall_ms = 0.0;
     let mut regional_materialization_wall_ms = 0.0;
     let mut regional_encoding_wall_ms = 0.0;
-    let mut haplotype_extraction_evidence = None;
+    let haplotype_extraction_evidence = None;
+    let processing_started = Instant::now();
+    emit_encoding_plan(
+        options.progress,
+        usize_to_u64(references.len())?,
+        total_reference_bases,
+        planned_base_windows,
+        data_offset,
+        options.progress_interval_ms,
+    );
 
     for (reference_id, reference) in references.iter().enumerate() {
-        emit_progress(
+        emit_reference_start(
             options.progress,
-            "preflight_selection",
-            &format!(
-                "encoding reference {}#{} {}-{}",
-                reference.name.sample, reference.name.contig, reference.start, reference.end
-            ),
+            usize_to_u64(reference_id + 1)?,
+            usize_to_u64(references.len())?,
+            reference,
         );
         let first_boundary = (reference.start / config.window_size) * config.window_size;
         let mut boundary = first_boundary;
-        let mut preflight_subgraph = Subgraph::new();
-        let mut extraction_subgraph = Subgraph::new();
+        let mut work = VecDeque::new();
         while boundary < reference.end {
             let boundary_end = boundary
                 .checked_add(config.window_size)
@@ -1269,174 +2688,171 @@ pub fn build_fixed_archive_with_options(
             let start = boundary.max(reference.start);
             let end = boundary_end.min(reference.end);
             if start < end {
-                let mut intervals = vec![(start, end)];
-                while let Some((part_start, part_end)) = intervals.pop() {
-                    let query_name = FullPathName {
-                        sample: reference.name.sample.clone(),
-                        contig: reference.name.contig.clone(),
-                        haplotype: reference.name.haplotype,
-                        fragment: 0,
-                    };
-                    // Probe once per directory bucket. Exact encoded-size checks
-                    // remain authoritative for every chunk, while the periodic
-                    // safety-limited topology probe catches obviously hostile
-                    // regions without doubling ordinary selection work.
-                    let base_window_index = boundary
-                        .checked_sub(first_boundary)
-                        .ok_or_else(|| invalid_data("preflight window index underflow"))?
-                        / config.window_size;
-                    let preflight_rejected = if base_window_index % DIRECTORY_BUCKET_WINDOWS == 0 {
-                        let preflight_started = Instant::now();
-                        let result = preflight_region(
-                            graph,
-                            path_index,
-                            &mut preflight_subgraph,
-                            &query_name,
-                            part_start,
-                            part_end,
-                            config.max_uncompressed_chunk_bytes,
-                        )?;
-                        preflight_selection_wall_ms +=
-                            preflight_started.elapsed().as_secs_f64() * 1_000.0;
-                        result
-                    } else {
-                        None
-                    };
-                    if let Some(estimated_bytes) = preflight_rejected {
-                        let width = part_end.saturating_sub(part_start);
-                        if width > config.min_window_size {
-                            let midpoint = part_start + width / 2;
-                            intervals.push((midpoint, part_end));
-                            intervals.push((part_start, midpoint));
-                            preflight_splits = preflight_splits
-                                .checked_add(1)
-                                .ok_or_else(|| invalid_data("preflight split count overflow"))?;
-                            adaptive_splits = adaptive_splits
-                                .checked_add(1)
-                                .ok_or_else(|| invalid_data("adaptive split count overflow"))?;
-                            largest_rejected_parent_bytes =
-                                largest_rejected_parent_bytes.max(estimated_bytes);
-                            continue;
-                        }
-                    }
-                    let phase_started = Instant::now();
-                    if haplotype_extraction_evidence.is_none() {
-                        let evidence = compare_haplotype_outputs(
-                            graph, path_index, reference, part_start, part_end,
-                        )?;
-                        if !evidence.exact_multiset_equivalent {
-                            return Err(invalid_data(
-                                "gbz-base All and Distinct local haplotype multisets differ",
-                            )
-                            .into());
-                        }
-                        haplotype_extraction_evidence = Some(evidence);
-                    }
-                    let (regional, local_evidence) = extract_local_region_with_subgraph(
-                        graph,
-                        path_index,
-                        &mut extraction_subgraph,
-                        &query_name,
-                        part_start,
-                        part_end,
-                        CONSTRUCTION_CONTEXT,
-                        HaplotypeOutput::Distinct,
-                    )?;
-                    let local_total_ms = phase_started.elapsed().as_secs_f64() * 1_000.0;
-                    subgraph_selection_wall_ms += local_evidence.extraction_wall_ms;
-                    regional_materialization_wall_ms +=
-                        (local_total_ms - local_evidence.extraction_wall_ms).max(0.0);
-                    let phase_started = Instant::now();
-                    let raw = regional.encode()?;
-                    regional_encoding_wall_ms += phase_started.elapsed().as_secs_f64() * 1_000.0;
-                    let raw_len = usize_to_u64(raw.len())?;
-                    peak_raw_chunk_bytes = peak_raw_chunk_bytes.max(raw_len);
-                    if let Some([left, right]) = adaptive_split_interval(
-                        part_start,
-                        part_end,
-                        raw_len,
-                        config.max_uncompressed_chunk_bytes,
-                        config.min_window_size,
-                    )? {
-                        intervals.push(right);
-                        intervals.push(left);
-                        post_materialization_splits =
-                            post_materialization_splits.checked_add(1).ok_or_else(|| {
-                                invalid_data("post-materialization split count overflow")
-                            })?;
-                        adaptive_splits = adaptive_splits
-                            .checked_add(1)
-                            .ok_or_else(|| invalid_data("adaptive split count overflow"))?;
-                        largest_rejected_parent_bytes = largest_rejected_parent_bytes.max(raw_len);
-                        continue;
-                    }
-
-                    let compressed_bound = match config.codec {
-                        ChunkCodec::None => raw_len,
-                        _ => usize_to_u64(zstd::zstd_safe::compress_bound(raw.len()))?,
-                    };
-                    let chunk_memory_bound = raw_len
-                        .checked_add(compressed_bound)
-                        .ok_or_else(|| invalid_data("chunk queue bound overflow"))?;
-                    if chunk_memory_bound > options.max_queued_bytes {
-                        return Err(invalid_input(format!(
-                            "accepted raw+compressed chunk bound is {chunk_memory_bound} bytes, above the {} byte queue cap",
-                            options.max_queued_bytes
-                        ))
-                        .into());
-                    }
-                    if !pending.is_empty()
-                        && (pending.len() >= options.threads
-                            || pending_memory_bound.saturating_add(chunk_memory_bound)
-                                > options.max_queued_bytes)
-                    {
-                        flush_pending_chunks(
-                            &mut pending,
-                            &mut archive_temp.file,
-                            &mut manifests,
-                            &mut bucket_entries,
-                            bucket_span,
-                            config,
-                            options,
-                            started,
-                            &mut writer,
-                        )?;
-                        pending_raw_bytes = 0;
-                        pending_memory_bound = 0;
-                    }
-                    let hash = blake3::hash(&raw);
-                    pending.push(PendingRawChunk {
-                        reference_id,
-                        start: part_start,
-                        end: part_end,
-                        raw,
-                        hash,
-                    });
-                    pending_raw_bytes = pending_raw_bytes
-                        .checked_add(raw_len)
-                        .ok_or_else(|| invalid_data("pending raw byte count overflow"))?;
-                    pending_memory_bound = pending_memory_bound
-                        .checked_add(chunk_memory_bound)
-                        .ok_or_else(|| invalid_data("pending queue bound overflow"))?;
-                    if pending.len() >= options.threads {
-                        flush_pending_chunks(
-                            &mut pending,
-                            &mut archive_temp.file,
-                            &mut manifests,
-                            &mut bucket_entries,
-                            bucket_span,
-                            config,
-                            options,
-                            started,
-                            &mut writer,
-                        )?;
-                        pending_raw_bytes = 0;
-                        pending_memory_bound = 0;
-                    }
-                }
+                work.push_back(ChunkWorkItem::Task(ChunkTask { start, end }));
             }
             boundary = boundary_end;
         }
+        let query_name = FullPathName {
+            sample: reference.name.sample.clone(),
+            contig: reference.name.contig.clone(),
+            haplotype: reference.name.haplotype,
+            fragment: 0,
+        };
+        while !work.is_empty() {
+            if matches!(work.front(), Some(ChunkWorkItem::Ready(_, _))) {
+                let Some(ChunkWorkItem::Ready(task, chunk)) = work.pop_front() else {
+                    unreachable!("front was checked as a ready chunk");
+                };
+                ready_raw_bytes = ready_raw_bytes
+                    .checked_sub(usize_to_u64(chunk.raw.len())?)
+                    .ok_or_else(|| invalid_data("ready raw byte count underflow"))?;
+                subgraph_selection_wall_ms += chunk.subgraph_selection_wall_ms;
+                regional_materialization_wall_ms += chunk.regional_materialization_wall_ms;
+                regional_encoding_wall_ms += chunk.regional_encoding_wall_ms;
+                queue_record_chunk(
+                    chunk,
+                    task,
+                    reference_id,
+                    &mut pending,
+                    &mut pending_memory_bound,
+                    &mut peak_raw_chunk_bytes,
+                    &mut archive_temp.file,
+                    &mut manifests,
+                    &mut bucket_entries,
+                    bucket_span,
+                    config,
+                    options,
+                    started,
+                    processing_started,
+                    total_reference_bases,
+                    references.len(),
+                    &mut writer,
+                )?;
+                continue;
+            }
+            flush_pending_chunks(
+                &mut pending,
+                &mut archive_temp.file,
+                &mut manifests,
+                &mut bucket_entries,
+                bucket_span,
+                config,
+                options,
+                started,
+                processing_started,
+                total_reference_bases,
+                references.len(),
+                &mut writer,
+            )?;
+            pending_memory_bound = 0;
+            let mut tasks = Vec::with_capacity(options.threads);
+            while tasks.len() < options.threads {
+                match work.front() {
+                    Some(ChunkWorkItem::Task(_)) => {
+                        let Some(ChunkWorkItem::Task(task)) = work.pop_front() else {
+                            unreachable!("front was checked as a task");
+                        };
+                        tasks.push(task);
+                    }
+                    _ => break,
+                }
+            }
+            let outcomes = if tasks.len() == 1 {
+                vec![construct_record_chunk(
+                    graph,
+                    path_index,
+                    &query_name,
+                    tasks[0].start,
+                    tasks[0].end,
+                    config.max_uncompressed_chunk_bytes,
+                )?]
+            } else {
+                std::thread::scope(|scope| {
+                    let query_name = &query_name;
+                    let handles = tasks
+                        .iter()
+                        .map(|task| {
+                            scope.spawn(move || {
+                                construct_record_chunk(
+                                    graph,
+                                    path_index,
+                                    query_name,
+                                    task.start,
+                                    task.end,
+                                    config.max_uncompressed_chunk_bytes,
+                                )
+                            })
+                        })
+                        .collect::<Vec<_>>();
+                    handles
+                        .into_iter()
+                        .map(|handle| {
+                            handle
+                                .join()
+                                .map_err(|_| invalid_data("record construction worker panicked"))?
+                        })
+                        .collect::<ExperimentResult<Vec<_>>>()
+                })?
+            };
+            for (task, outcome) in tasks.into_iter().zip(outcomes).rev() {
+                match outcome {
+                    RecordChunkOutcome::Accepted(chunk) => {
+                        ready_raw_bytes = ready_raw_bytes
+                            .checked_add(usize_to_u64(chunk.raw.len())?)
+                            .ok_or_else(|| invalid_data("ready raw byte count overflow"))?;
+                        peak_ready_raw_bytes = peak_ready_raw_bytes.max(ready_raw_bytes);
+                        work.push_front(ChunkWorkItem::Ready(task, chunk));
+                    }
+                    RecordChunkOutcome::Split {
+                        estimated_bytes,
+                        subgraph_selection_wall_ms: selection_ms,
+                    } => {
+                        subgraph_selection_wall_ms += selection_ms;
+                        let [left, right] = adaptive_split_interval(
+                            task.start,
+                            task.end,
+                            estimated_bytes,
+                            config.max_uncompressed_chunk_bytes,
+                            config.min_window_size,
+                        )?
+                        .ok_or_else(|| {
+                            invalid_data("record payload requested a split below its byte cap")
+                        })?;
+                        work.push_front(ChunkWorkItem::Task(ChunkTask {
+                            start: right.0,
+                            end: right.1,
+                        }));
+                        work.push_front(ChunkWorkItem::Task(ChunkTask {
+                            start: left.0,
+                            end: left.1,
+                        }));
+                        post_materialization_splits = post_materialization_splits
+                            .checked_add(1)
+                            .ok_or_else(|| invalid_data("record payload split count overflow"))?;
+                        adaptive_splits = adaptive_splits
+                            .checked_add(1)
+                            .ok_or_else(|| invalid_data("adaptive split count overflow"))?;
+                        largest_rejected_parent_bytes =
+                            largest_rejected_parent_bytes.max(estimated_bytes);
+                    }
+                }
+            }
+        }
+        flush_pending_chunks(
+            &mut pending,
+            &mut archive_temp.file,
+            &mut manifests,
+            &mut bucket_entries,
+            bucket_span,
+            config,
+            options,
+            started,
+            processing_started,
+            total_reference_bases,
+            references.len(),
+            &mut writer,
+        )?;
+        pending_memory_bound = 0;
     }
 
     flush_pending_chunks(
@@ -1448,8 +2864,12 @@ pub fn build_fixed_archive_with_options(
         config,
         options,
         started,
+        processing_started,
+        total_reference_bases,
+        references.len(),
         &mut writer,
     )?;
+    let payload_pipeline_wall_ms = processing_started.elapsed().as_secs_f64() * 1_000.0;
 
     let directory_entries = manifests.iter().try_fold(0_u64, |total, manifest| {
         total
@@ -1546,9 +2966,10 @@ pub fn build_fixed_archive_with_options(
         path_occurrence_index_wall_ms: 0.0,
         reference_manifest_discovery_wall_ms,
         subgraph_selection_wall_ms,
-        local_haplotype_extraction_wall_ms: subgraph_selection_wall_ms,
+        local_haplotype_extraction_wall_ms: 0.0,
         regional_materialization_wall_ms,
         regional_encoding_wall_ms,
+        payload_pipeline_wall_ms,
         compression_wall_ms: writer.compression_wall_ms,
         preflight_selection_wall_ms,
         writer_finalization_wall_ms,
@@ -1560,7 +2981,9 @@ pub fn build_fixed_archive_with_options(
         largest_rejected_parent_bytes,
         first_payload_wall_ms: writer.first_payload_wall_ms.unwrap_or(0.0),
         references_processed: usize_to_u64(references.len())?,
+        total_reference_bases,
         reference_bases_processed: writer.reference_bases_processed,
+        progress_events_emitted: writer.progress_events_emitted,
         scratch_bytes: 0,
         scratch_bytes_before_first_payload: 0,
         temporary_file_bytes_before_first_payload: data_offset,
@@ -1569,6 +2992,7 @@ pub fn build_fixed_archive_with_options(
         peak_queued_raw_bytes: writer.peak_queued_raw_bytes,
         peak_queued_compressed_bytes: writer.peak_queued_compressed_bytes,
         peak_queued_total_bytes: writer.peak_queued_total_bytes,
+        peak_ready_raw_bytes,
         haplotype_extraction_evidence,
         construction_wall_ms: started.elapsed().as_secs_f64() * 1_000.0,
     })
@@ -1597,6 +3021,12 @@ fn adaptive_split_interval(
     Ok(Some([(start, midpoint), (midpoint, end)]))
 }
 
+/// Extracts the canonical source result used to verify an archive query.
+///
+/// # Errors
+///
+/// Returns an error when the query is invalid or the requested source region
+/// cannot be extracted or encoded canonically.
 pub fn source_oracle(
     graph: &GBZ,
     path_index: &PathIndex,
@@ -2492,6 +3922,7 @@ impl RegionalGraph {
         Ok(result)
     }
 
+    #[cfg(test)]
     fn encode(&self) -> ExperimentResult<Vec<u8>> {
         if self.reference_paths.is_empty() {
             return self.encode_v3();
@@ -2512,8 +3943,8 @@ impl RegionalGraph {
             );
         }
         let mut output = Vec::new();
-        output.extend_from_slice(REGION_MAGIC);
-        put_u32(&mut output, REGION_VERSION);
+        output.extend_from_slice(REGION_MAGIC_WEIGHTED_V3);
+        put_u32(&mut output, 3);
         put_u32(&mut output, 1);
         output.push(semantics_code(self.semantics));
         output.extend_from_slice(&[0_u8; 7]);
@@ -2559,6 +3990,7 @@ impl RegionalGraph {
         Ok(output)
     }
 
+    #[cfg(test)]
     fn encode_v3(&self) -> ExperimentResult<Vec<u8>> {
         let samples = self
             .paths
@@ -2585,7 +4017,7 @@ impl RegionalGraph {
             .map(|(id, contig)| (contig.as_str(), id))
             .collect::<HashMap<_, _>>();
         let mut output = Vec::new();
-        output.extend_from_slice(REGION_MAGIC_V3);
+        output.extend_from_slice(REGION_MAGIC_NAMED_V2);
         put_u32(&mut output, 2);
         put_u32(&mut output, 1); // packed oriented handles and delta-coded identifiers
         put_u64(&mut output, usize_to_u64(self.nodes.len())?);
@@ -2657,6 +4089,9 @@ impl RegionalGraph {
 
     fn decode(bytes: &[u8]) -> ExperimentResult<Self> {
         if bytes.get(..8) == Some(REGION_MAGIC.as_slice()) {
+            return RecordRegionalPayload::decode(bytes)?.into_regional_graph();
+        }
+        if bytes.get(..8) == Some(REGION_MAGIC_WEIGHTED_V3.as_slice()) {
             return Self::decode_v4(bytes);
         }
         Self::decode_v3(bytes)
@@ -2665,11 +4100,11 @@ impl RegionalGraph {
     #[allow(clippy::too_many_lines)]
     fn decode_v4(bytes: &[u8]) -> ExperimentResult<Self> {
         let mut reader = BinaryReader::new(bytes);
-        if reader.take(8)? != REGION_MAGIC {
+        if reader.take(8)? != REGION_MAGIC_WEIGHTED_V3 {
             return Err(invalid_data("invalid v4 regional chunk magic").into());
         }
         let version = reader.u32()?;
-        if version != REGION_VERSION {
+        if version != 3 {
             return Err(invalid_data(format!("unsupported regional version {version}")).into());
         }
         if reader.u32()? != 1 {
@@ -2781,7 +4216,7 @@ impl RegionalGraph {
 
     fn decode_v3(bytes: &[u8]) -> ExperimentResult<Self> {
         let mut reader = BinaryReader::new(bytes);
-        if reader.take(8)? != REGION_MAGIC_V3 {
+        if reader.take(8)? != REGION_MAGIC_NAMED_V2 {
             return Err(invalid_data("invalid regional chunk magic").into());
         }
         let version = reader.u32()?;
@@ -3404,12 +4839,17 @@ fn validate_archive_file(path: &Path) -> ExperimentResult<()> {
                 let compressed =
                     source.read_range(entry.offset, u64_to_usize(entry.compressed_len)?)?;
                 let raw = decompress(entry.codec, &compressed, entry.uncompressed_len)?;
-                let regional = RegionalGraph::decode(&raw)?;
-                let tile = regional
-                    .haplotype_tiles
-                    .first()
-                    .ok_or_else(|| invalid_data("validated v4 payload has no tile provenance"))?;
-                if tile.core_start != entry.start || tile.core_end != entry.end {
+                let (core_start, core_end) = if raw.get(..8) == Some(REGION_MAGIC.as_slice()) {
+                    let payload = RecordRegionalPayload::decode(&raw)?;
+                    (payload.core_start, payload.core_end)
+                } else {
+                    let regional = RegionalGraph::decode(&raw)?;
+                    let tile = regional.haplotype_tiles.first().ok_or_else(|| {
+                        invalid_data("validated compatibility payload has no tile provenance")
+                    })?;
+                    (tile.core_start, tile.core_end)
+                };
+                if core_start != entry.start || core_end != entry.end {
                     return Err(invalid_data(
                         "validated payload provenance differs from its directory entry",
                     )
@@ -3708,6 +5148,67 @@ pub fn internal_gbz_base_query(
 mod tests {
     use super::*;
 
+    fn decode_hex(value: &str) -> Vec<u8> {
+        let value = value.trim();
+        assert_eq!(value.len() % 2, 0);
+        (0..value.len())
+            .step_by(2)
+            .map(|index| u8::from_str_radix(&value[index..index + 2], 16).unwrap())
+            .collect()
+    }
+
+    fn record_regional_golden() -> RecordRegionalPayload {
+        let forward_1 = OrientedNode {
+            id: 1,
+            reverse: false,
+        };
+        let forward_2 = OrientedNode {
+            id: 2,
+            reverse: false,
+        };
+        RecordRegionalPayload {
+            semantics: HaplotypeSemantics::AnonymousDistinctWeightedTilePaths,
+            core_start: 100,
+            core_end: 102,
+            context: CONSTRUCTION_CONTEXT,
+            reference_sample: "GRCh38".into(),
+            reference_contig: "chr1".into(),
+            reference_haplotype: 0,
+            reference_fragment_start: 100,
+            reference_query_offset: 0,
+            reference_node_offset: 0,
+            reference_position: (2, 0),
+            nodes: BTreeMap::from([(1, b"A".to_vec()), (2, b"C".to_vec())]),
+            edges: BTreeSet::from([Edge {
+                from: forward_1,
+                to: forward_2,
+            }]),
+            records: vec![
+                PackedGbwtRecord {
+                    handle: 2,
+                    occurrence_count: 2,
+                    bytes: vec![1, 4, 0, 1],
+                },
+                PackedGbwtRecord {
+                    handle: 3,
+                    occurrence_count: 2,
+                    bytes: vec![1, 0, 0, 1],
+                },
+                PackedGbwtRecord {
+                    handle: 4,
+                    occurrence_count: 2,
+                    bytes: vec![1, 0, 0, 1],
+                },
+                PackedGbwtRecord {
+                    handle: 5,
+                    occurrence_count: 2,
+                    bytes: vec![1, 3, 0, 1],
+                },
+            ],
+            total_occurrences: 8,
+        }
+    }
+
     fn v4_regional_graph() -> RegionalGraph {
         let forward = OrientedNode {
             id: 1,
@@ -3832,7 +5333,7 @@ mod tests {
             "47952df5707d5eca5cc33807215e54dab095226169e56fe2f802779d619e9663",
             "the embedded deterministic v4 golden payload changed",
         );
-        assert_eq!(&encoded[..8], REGION_MAGIC);
+        assert_eq!(&encoded[..8], REGION_MAGIC_WEIGHTED_V3);
         let decoded = RegionalGraph::decode(&encoded).unwrap();
         assert_eq!(decoded.nodes, graph.nodes);
         assert_eq!(decoded.reference_paths, graph.reference_paths);
@@ -3853,6 +5354,148 @@ mod tests {
         let mut impossible_node_count = encoded;
         impossible_node_count[24..32].copy_from_slice(&u64::MAX.to_le_bytes());
         assert!(RegionalGraph::decode(&impossible_node_count).is_err());
+    }
+
+    #[test]
+    fn record_regional_v4_golden_reconstructs_weighted_paths() {
+        let encoded = record_regional_golden().encode().unwrap();
+        let fixture = decode_hex(include_str!(
+            "../../../test-data/golden/record-region-v4.hex"
+        ));
+        assert_eq!(encoded, fixture);
+        assert_eq!(
+            blake3::hash(&encoded).to_hex().as_str(),
+            "46dbb25184ffadfb063a41665f6350b9b47f42a0021d46cf747ae72271db7dc6"
+        );
+        let compressed = decode_hex(include_str!(
+            "../../../test-data/golden/record-region-v4.zstd3.hex"
+        ));
+        assert_eq!(
+            zstd::bulk::decompress(&compressed, encoded.len()).unwrap(),
+            encoded
+        );
+        assert_eq!(&encoded[..8], REGION_MAGIC);
+        let decoded = RecordRegionalPayload::decode(&encoded)
+            .unwrap()
+            .into_regional_graph()
+            .unwrap();
+        assert_eq!(
+            decoded.haplotype_tiles[0]
+                .canonical_hash()
+                .to_hex()
+                .as_str(),
+            "4802ea7b9f9821318089c07c4647702218f6076ea7d987be904eca7c4bde3b7b"
+        );
+        assert_eq!(
+            decoded.nodes,
+            BTreeMap::from([(1, b"A".to_vec()), (2, b"C".to_vec())])
+        );
+        assert_eq!(
+            decoded.reference_paths,
+            vec![RegionalReferencePath {
+                sample: "GRCh38".into(),
+                contig: "chr1".into(),
+                haplotype: 0,
+                start: 100,
+                end: 102,
+                traversal: vec![
+                    OrientedNode {
+                        id: 1,
+                        reverse: false,
+                    },
+                    OrientedNode {
+                        id: 2,
+                        reverse: false,
+                    },
+                ],
+            }]
+        );
+        assert_eq!(decoded.haplotype_tiles[0].traversals.len(), 1);
+        assert_eq!(decoded.haplotype_tiles[0].traversals[0].weight, 1);
+        assert_eq!(
+            decoded.haplotype_tiles[0].traversals[0].traversal,
+            decoded.reference_paths[0].traversal
+        );
+    }
+
+    #[test]
+    fn record_regional_v4_rejects_corrupt_counts_runs_and_reference_offsets() {
+        let encoded = record_regional_golden().encode().unwrap();
+        assert!(RecordRegionalPayload::decode(&encoded[..encoded.len() - 1]).is_err());
+
+        let mut impossible_occurrences = encoded.clone();
+        impossible_occurrences[48..56].copy_from_slice(&u64::MAX.to_le_bytes());
+        assert!(RecordRegionalPayload::decode(&impossible_occurrences).is_err());
+
+        let mut invalid_reference_offset = encoded.clone();
+        invalid_reference_offset[120..128].copy_from_slice(&2_u64.to_le_bytes());
+        assert!(RecordRegionalPayload::decode(&invalid_reference_offset).is_err());
+
+        let mut invalid_run = encoded;
+        *invalid_run.last_mut().unwrap() = 255;
+        assert!(RecordRegionalPayload::decode(&invalid_run).is_err());
+    }
+
+    #[test]
+    fn record_archive_v4_golden_is_deterministic_and_matches_source_oracle() {
+        let source = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../test-data/micb-kir3dl1.gbz");
+        let fixture = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../test-data/golden/record-archive-v4.pngr");
+        let graph: GBZ = simple_sds::serialize::load_from(&source).unwrap();
+        let path_index = PathIndex::new(&graph, 1_000, false).unwrap();
+        let config = FixedArchiveConfig {
+            experiment_id: "record-archive-golden".into(),
+            window_size: 16_384,
+            codec: ChunkCodec::Zstd3,
+            deduplicate_chunks: false,
+            max_uncompressed_chunk_bytes: DEFAULT_MAX_UNCOMPRESSED_CHUNK_BYTES,
+            min_window_size: DEFAULT_MIN_WINDOW_SIZE,
+        };
+        let output = simple_sds::serialize::temp_file_name("pangenome-range-record-golden");
+        build_fixed_archive_with_options(
+            &graph,
+            &path_index,
+            std::fs::metadata(&source).unwrap().len(),
+            &output,
+            &config,
+            &ArchiveBuildOptions {
+                sample: Some("CHM13".into()),
+                contig: Some("chr6".into()),
+                start: Some(31_350_872),
+                end: Some(31_351_896),
+                threads: 1,
+                ..ArchiveBuildOptions::default()
+            },
+        )
+        .unwrap();
+        assert_eq!(
+            std::fs::read(&output).unwrap(),
+            std::fs::read(&fixture).unwrap()
+        );
+
+        let query = QuerySpec {
+            id: "record-archive-golden".into(),
+            class: "golden".into(),
+            sample: "CHM13".into(),
+            contig: "chr6".into(),
+            start: 31_351_000,
+            end: 31_351_500,
+            context: 100,
+        };
+        let oracle = source_oracle(&graph, &path_index, &query).unwrap();
+        let measurement = query_fixed_archive(
+            &fixture,
+            &config,
+            &query,
+            65_536,
+            &oracle,
+            &graph,
+            &path_index,
+        )
+        .unwrap();
+        assert!(measurement.correctness);
+        assert!(measurement.haplotype_tiles_correct);
+        std::fs::remove_file(output).unwrap();
     }
 
     #[test]
@@ -3908,9 +5551,11 @@ mod tests {
             sample: Some(reference.name.sample),
             contig: Some(reference.name.contig),
             max_chunks: Some(4),
+            progress: BuildProgressMode::Plain,
+            progress_interval_ms: 0,
             ..ArchiveBuildOptions::default()
         };
-        build_fixed_archive_with_options(
+        let single_thread = build_fixed_archive_with_options(
             &graph,
             &path_index,
             std::fs::metadata(&source).unwrap().len(),
@@ -3919,7 +5564,10 @@ mod tests {
             &base_options,
         )
         .unwrap();
-        build_fixed_archive_with_options(
+        assert_eq!(single_thread.reference_bases_processed, 4 * 16_384);
+        assert_eq!(single_thread.total_reference_bases, 4 * 16_384);
+        assert_eq!(single_thread.progress_events_emitted, 4);
+        let parallel_build = build_fixed_archive_with_options(
             &graph,
             &path_index,
             std::fs::metadata(&source).unwrap().len(),
@@ -3931,12 +5579,122 @@ mod tests {
             },
         )
         .unwrap();
+        assert_eq!(parallel_build.reference_bases_processed, 4 * 16_384);
+        assert_eq!(parallel_build.total_reference_bases, 4 * 16_384);
+        assert_eq!(parallel_build.progress_events_emitted, 4);
         assert_eq!(
             std::fs::read(&first).unwrap(),
             std::fs::read(&parallel).unwrap()
         );
         std::fs::remove_file(first).unwrap();
         std::fs::remove_file(parallel).unwrap();
+    }
+
+    #[test]
+    fn mhc_direct_typed_extraction_matches_json_oracle() {
+        let source = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../test-data/mhc-10.gbz");
+        if !source.is_file() {
+            eprintln!(
+                "skipping direct typed extraction comparison because {} is absent",
+                source.display()
+            );
+            return;
+        }
+        let graph: GBZ = simple_sds::serialize::load_from(&source).unwrap();
+        let path_index = PathIndex::new(&graph, 1_000, false).unwrap();
+        let reference = reference_paths(&graph).unwrap().remove(0);
+        for offset in [0, 16_384, 131_072, 524_288] {
+            let start = reference.start + offset;
+            let end = (start + 16_384).min(reference.end);
+            if start >= end {
+                continue;
+            }
+            let mut oracle_subgraph = Subgraph::new();
+            let (oracle, _) = extract_local_region_with_subgraph(
+                &graph,
+                &path_index,
+                &mut oracle_subgraph,
+                &reference.name,
+                start,
+                end,
+                CONSTRUCTION_CONTEXT,
+                HaplotypeOutput::Distinct,
+            )
+            .unwrap();
+            let mut direct_subgraph = Subgraph::new();
+            let (direct, _) = extract_local_region_direct(
+                &graph,
+                &path_index,
+                &mut direct_subgraph,
+                &reference.name,
+                start,
+                end,
+                CONSTRUCTION_CONTEXT,
+            )
+            .unwrap();
+            assert_eq!(
+                direct.encode().unwrap(),
+                oracle.encode().unwrap(),
+                "direct typed extraction differs at {start}-{end}"
+            );
+        }
+    }
+
+    #[test]
+    fn mhc_record_payload_matches_json_oracle() {
+        let source = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../test-data/mhc-10.gbz");
+        if !source.is_file() {
+            eprintln!(
+                "skipping record payload comparison because {} is absent",
+                source.display()
+            );
+            return;
+        }
+        let graph: GBZ = simple_sds::serialize::load_from(&source).unwrap();
+        let path_index = PathIndex::new(&graph, 1_000, false).unwrap();
+        let reference = reference_paths(&graph).unwrap().remove(0);
+        for offset in [0, 16_384, 131_072, 524_288] {
+            let start = reference.start + offset;
+            let end = (start + 16_384).min(reference.end);
+            if start >= end {
+                continue;
+            }
+            let query_name = FullPathName {
+                sample: reference.name.sample.clone(),
+                contig: reference.name.contig.clone(),
+                haplotype: reference.name.haplotype,
+                fragment: 0,
+            };
+            let RecordChunkOutcome::Accepted(chunk) =
+                construct_record_chunk(&graph, &path_index, &query_name, start, end, u64::MAX)
+                    .unwrap()
+            else {
+                panic!("test record payload unexpectedly requested an adaptive split");
+            };
+            let decoded = RegionalGraph::decode(&chunk.raw).unwrap();
+            let mut oracle_subgraph = Subgraph::new();
+            let (oracle, _) = extract_local_region_with_subgraph(
+                &graph,
+                &path_index,
+                &mut oracle_subgraph,
+                &reference.name,
+                start,
+                end,
+                CONSTRUCTION_CONTEXT,
+                HaplotypeOutput::Distinct,
+            )
+            .unwrap();
+            assert_eq!(decoded.nodes, oracle.nodes, "nodes differ at {start}-{end}");
+            assert_eq!(decoded.edges, oracle.edges, "edges differ at {start}-{end}");
+            assert_eq!(
+                decoded.reference_paths, oracle.reference_paths,
+                "reference traversal differs at {start}-{end}"
+            );
+            assert_eq!(
+                decoded.haplotype_tiles, oracle.haplotype_tiles,
+                "weighted local paths differ at {start}-{end}"
+            );
+        }
     }
 
     #[test]

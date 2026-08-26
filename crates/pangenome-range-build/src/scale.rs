@@ -1,8 +1,9 @@
 use super::fixed::{
     ArchiveBuildMetrics, ArchiveBuildOptions, BuildProgressMode, ChunkCodec,
     DEFAULT_MAX_QUEUED_BYTES, DEFAULT_MAX_UNCOMPRESSED_CHUNK_BYTES, DEFAULT_MIN_WINDOW_SIZE,
-    ExperimentResult, FixedArchiveConfig, QueryMeasurement, QuerySpec, build_fixed_archive,
-    build_fixed_archive_with_options, query_fixed_archive, reference_paths, source_oracle,
+    DEFAULT_PROGRESS_INTERVAL_MS, ExperimentResult, FixedArchiveConfig, QueryMeasurement,
+    QuerySpec, build_fixed_archive, build_fixed_archive_with_options, query_fixed_archive,
+    reference_paths, source_oracle,
 };
 use gbz::GBZ;
 use gbz_base::PathIndex;
@@ -39,6 +40,7 @@ pub struct EncodeOptions {
     pub scratch_dir: Option<PathBuf>,
     pub keep_partial: bool,
     pub progress: BuildProgressMode,
+    pub progress_interval_ms: u64,
     pub max_chunks: Option<u64>,
 }
 
@@ -57,19 +59,28 @@ impl EncodeOptions {
             codec: ChunkCodec::Zstd3,
             max_uncompressed_chunk_bytes: DEFAULT_MAX_UNCOMPRESSED_CHUNK_BYTES,
             min_window_size: DEFAULT_MIN_WINDOW_SIZE,
-            threads: 1,
+            threads: default_encode_threads(),
             max_queued_bytes: DEFAULT_MAX_QUEUED_BYTES,
             scratch_dir: None,
             keep_partial: false,
             progress: BuildProgressMode::Off,
+            progress_interval_ms: DEFAULT_PROGRESS_INTERVAL_MS,
             max_chunks: None,
         }
     }
 }
 
+fn default_encode_threads() -> usize {
+    std::thread::available_parallelism()
+        .map_or(1, std::num::NonZeroUsize::get)
+        .min(8)
+}
+
 #[derive(Debug, Serialize)]
 pub struct EncodeSummary {
     pub schema_version: u32,
+    pub archive_version: u32,
+    pub regional_payload_version: u32,
     pub source_path: PathBuf,
     pub source_gbz_bytes: u64,
     pub source_sha256: String,
@@ -91,6 +102,7 @@ pub struct EncodeSummary {
     pub haplotype_semantics: &'static str,
     pub threads: usize,
     pub max_queued_bytes: u64,
+    pub progress_interval_ms: u64,
     pub scratch_dir: Option<PathBuf>,
     pub chunks_per_second: f64,
     pub reference_bp_per_second: f64,
@@ -165,7 +177,7 @@ pub fn run_encode(options: &EncodeOptions) -> ExperimentResult<EncodeSummary> {
     let path_index_wall_ms = elapsed_ms(index_started);
     let rss_after_path_index_kib = process_current_rss_kib();
     let config = FixedArchiveConfig {
-        experiment_id: "fixed-v4-direct".into(),
+        experiment_id: "fixed-v4-record".into(),
         window_size: options.window_size,
         codec: options.codec,
         deduplicate_chunks: false,
@@ -182,6 +194,7 @@ pub fn run_encode(options: &EncodeOptions) -> ExperimentResult<EncodeSummary> {
         max_queued_bytes: options.max_queued_bytes,
         keep_partial: options.keep_partial,
         progress: options.progress,
+        progress_interval_ms: options.progress_interval_ms,
     };
     encode_progress(
         options.progress,
@@ -210,7 +223,9 @@ pub fn run_encode(options: &EncodeOptions) -> ExperimentResult<EncodeSummary> {
         0.0
     };
     let summary = EncodeSummary {
-        schema_version: 1,
+        schema_version: 2,
+        archive_version: 4,
+        regional_payload_version: 4,
         source_path: options.input.clone(),
         source_gbz_bytes,
         source_sha256,
@@ -232,6 +247,7 @@ pub fn run_encode(options: &EncodeOptions) -> ExperimentResult<EncodeSummary> {
         haplotype_semantics: "anonymous-distinct-weighted-tile-paths",
         threads: options.threads,
         max_queued_bytes: options.max_queued_bytes,
+        progress_interval_ms: options.progress_interval_ms,
         scratch_dir: options.scratch_dir.clone(),
         chunks_per_second,
         reference_bp_per_second,

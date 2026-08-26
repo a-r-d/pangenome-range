@@ -15,7 +15,7 @@ pub use experiment::{ExperimentMode, ExperimentOptions, run_fixed_window_experim
 pub use fixed::{
     ArchiveBuildMetrics, ArchiveBuildOptions, BuildProgressMode, ChunkCodec, FixedArchiveConfig,
     FixedArchiveReader, OracleResult, QueryMeasurement, QuerySpec,
-    build_fixed_archive_with_options, internal_gbz_base_query, query_fixed_archive,
+    build_fixed_archive_with_options, internal_gbz_base_query, query_fixed_archive, source_oracle,
 };
 pub use scale::{
     EncodeOptions, EncodeSummary, EncoderScaleOptions, run_encode, run_encoder_scale_experiment,

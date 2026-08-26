@@ -1,8 +1,9 @@
 # Fixed-window archive v4 (Candidate 1)
 
 Status: research prototype. This is the format currently emitted by
-`pangenome-range-build`; it is deliberately documented before the TypeScript
-browser reader is implemented, but it is not yet a stable interchange format.
+`pangenome-range-build`. Rust reads the complete archive and Rust/TypeScript
+share the current regional decoder and golden fixtures, but the browser archive
+transport is not yet a stable interchange implementation.
 
 ## Design goals
 
@@ -10,11 +11,11 @@ Archive v4 is a static-object layout for HTTP range access to regional
 pangenome subgraphs. It has five properties needed before a multi-gigabyte
 experiment:
 
-- construction retains only metadata and one regional payload at a time;
+- construction retains compact metadata plus a bounded number of active tiles;
 - the root grows with reference paths, not with chunks or leaf pages;
 - leaf-page offsets are computed directly from reference coordinates;
 - oversized regional payloads split recursively until they satisfy a byte cap;
-- regional payloads use packed numeric fields and local string dictionaries;
+- regional payloads preserve exact compressed local GBWT records plus topology;
 - an open reader retains the bootstrap and a byte-bounded leaf-page cache.
 
 ```text
@@ -112,111 +113,121 @@ creating a non-arithmetic overflow chain.
 Multiple entries may point to the same physical payload when exact
 deduplication is enabled.
 
-## Packed regional payload v3
+## Regional payload version dispatch
 
-After independent decompression, a v3 regional chunk begins:
+Archive v4 keeps each independently compressed regional payload versioned. A
+reader must dispatch on the eight-byte regional magic after decompression; it
+must never reinterpret an older payload as the current representation.
 
-```text
-magic                  [u8; 8] = PNGRGN02
-version                u32 = 2
-flags                  u32 = 1
-node_count             u64
-edge_count             u64
-path_count             u64
-reference_visit_count  u64
-sample_count           u32
-contig_count           u32
-```
+| Magic | Regional version | Semantics | Status |
+|---|---:|---|---|
+| `PNGRGN02` | 2 | globally named paths | Rust read compatibility only |
+| `PNGRGN03` | 3 | materialized anonymous weighted tile paths | Rust read compatibility only |
+| `PNGRGN04` | 4 | exact local GBWT records reconstructed as anonymous weighted tile paths | emitted format; Rust and TypeScript decode |
 
-The sections that follow are suitable for a typed-array-oriented TypeScript
-decoder:
+The TypeScript decoder explicitly rejects versions 2 and 3. Archive v3
+(`PNGRNG03`) is likewise rejected because its named-path semantics are not the
+current browser contract.
 
-- sorted node IDs are delta-coded and followed by sequence bytes;
-- an oriented node is packed as `(node_id * 2) + reverse_bit` in one `u64`;
-- edges are pairs of packed oriented nodes;
-- sample and contig strings are stored once in local dictionaries;
-- paths use `u32` dictionary IDs and delta-code sorted visit indices;
-- coordinate-bearing reference visits use fixed numeric fields and one packed
-  oriented node.
+## Record-preserving regional payload v4
 
-Original graph path IDs and visit indices are retained. This lets adjacent
-chunks merge without inventing chunk-local order and preserves path
-multiplicity and orientation in canonical correctness checks.
-
-Boundary edges are stored even if the neighboring node belongs to another
-chunk. A reader activates an edge for context traversal only after both
-endpoint nodes have been assembled.
-
-Rust retains read compatibility for this v3 payload. New archives never emit
-it. The TypeScript scaffold recognizes archive v3 and returns an explicit
-unsupported-version error rather than reinterpreting its named-path semantics.
-
-## Packed regional payload v4
-
-After independent decompression, a v4 regional chunk begins:
+After independent decompression, the currently emitted regional chunk begins:
 
 ```text
-magic                    [u8; 8] = PNGRGN03
-version                  u32 = 3
-flags                    u32 = 1
-haplotype_semantics      u8 (1 = all anonymous, 2 = distinct weighted)
-reserved                 [u8; 7] = zero
-node_count               u64
-edge_count               u64
-core_start, core_end     u64, u64
-construction_context     u64 (currently 100)
-reference_start, end     u64, u64
-reference_haplotype      u64
-reference_visit_count    u64
-anonymous_path_count     u64
-reference_sample         string
-reference_contig         string
+magic                         [u8; 8] = PNGRGN04
+version                       u32 = 4
+flags                         u32 = 1
+haplotype_semantics           u8 = 2 (distinct weighted anonymous)
+reserved                      [u8; 7] = zero
+node_count                    u64
+topology_edge_count           u64
+gbwt_record_count             u64
+total_local_occurrences       u64
+core_start, core_end          u64, u64
+construction_context          u64 (currently 100)
+reference_haplotype           u64
+reference_fragment_start      u64
+reference_query_offset        u64
+reference_node_offset         u64
+reference_gbwt_handle         u64
+reference_occurrence_offset   u64
+reference_sample              string
+reference_contig              string
 ```
 
-Sections follow in this order:
+Sections follow in deterministic order:
 
-1. delta-coded sorted node IDs and length-prefixed sequences;
-2. oriented edges as pairs of packed `u64` handles;
-3. the real reference traversal as packed handles;
-4. anonymous traversals, each as `weight: u64`, `visit_count: u64`, and packed
-   handles.
+1. strictly increasing node IDs, delta-coded as `u64`, followed by
+   length-prefixed forward sequences;
+2. canonical graph-topology edges as pairs of packed oriented `u64` handles;
+3. strictly increasing oriented GBWT handles, each followed by its declared
+   occurrence count and one length-prefixed exact compressed GBWT record.
 
-The reference sample and contig occur once. Anonymous traversals have no name
-or global identifier. Their identity is only their exact oriented-node sequence
-within the payload's core interval and fixed construction halo. Integer weights
-retain exact local multiplicity. See [Haplotype semantics](HAPLOTYPE_SEMANTICS.md).
+The record bytes are the upstream GBWT adjacency bytecode followed by its
+run-length encoded BWT. They are copied exactly; the encoder does not enumerate,
+sort, or materialize local haplotype paths. Full graph topology remains a
+separate section because GBWT transitions are evidence of indexed traversals,
+not a complete substitute for graph edges.
 
+The reference anchor contains a real GBWT handle/occurrence and enough
+fragment/query/node offset information to recover the reference traversal and
+coordinates. A reader safely decodes local records, marks occurrences with
+local predecessors, walks local starts, identifies the anchored reference,
+keeps canonical traversal orientation, groups identical traversals, and
+subtracts the one reference copy. The result is
+`anonymous-distinct-weighted-tile-paths`: exact tile-local multiplicity with
+no invented sample or continuation identity.
+
+Counts, byte ranges, varints, run ranks, successor offsets, record ordering,
+reference anchors, and trailing bytes are checked before use. Both decoders
+limit a tile to 16,777,216 expanded local occurrences before allocation. Edges
+whose destination lies outside the tile remain present; they activate only
+after both endpoint nodes are assembled.
+
+## Retained compatibility payloads
+
+`PNGRGN03` version 3 stores already-materialized reference and anonymous
+weighted traversals. Its nodes, topology edges, packed handles, integer weights,
+provenance, and semantics remain readable in Rust, but the normal encoder no
+longer emits it.
+
+`PNGRGN02` version 2 is the older named-path representation with local string
+dictionaries, global source path IDs, visit indices, and coordinate-bearing
+reference visits. It remains a research compatibility decoder only. Neither
+compatibility format is silently exposed as the current TypeScript tile model.
 ## Streaming, bounded construction
 
-The builder still uses the upstream `gbz` crate to deserialize the source GBZ;
-v3 bounds the *additional encoder working set* rather than claiming that the
-upstream source graph itself is streamed.
+The upstream `gbz` crate still deserializes the source GBZ in full. Archive
+construction bounds its *additional* state and does not claim lazy source
+access.
 
-1. For each reference window, ask the upstream selector for topology, the real
-   reference walk, and distinct weighted local haplotype traversals in the
-   window plus the 100-base construction halo.
-2. Convert the bounded public upstream JSON representation immediately into
-   typed oriented-node vectors; no source-global traversal scan or occurrence
-   index precedes this step.
-3. Encode one regional graph and discard its collections after handling the
-   payload.
-4. If the raw payload exceeds `max_uncompressed_chunk_bytes` (8 MiB in current
-   presets), split its coordinate interval in half and retry. Splitting stops at
-   `min_window_size` (1 KiB); a still-oversized payload fails explicitly.
-5. Compress one accepted payload and append it immediately to a temporary
-   spool. Retain only its hash, spool offset, and lengths.
-6. For a BLAKE3 collision, read and decompress only the candidate spool payload
-   to confirm exact equality. Raw payloads are never retained as a corpus.
-7. Write the header, root, fixed pages, and stream-copy the payload spool into a
-   temporary sibling archive. Atomically rename it only after a successful
-   flush.
+1. Build compact reference metadata and the upstream `PathIndex`; do not scan
+   every haplotype visit or build an occurrence table.
+2. Form coordinate-ordered base-window tasks. At most `--threads` tasks select
+   local topology with `HaplotypeOutput::None` concurrently.
+3. For each selected tile, compute the real reference GBWT anchor, measure the
+   exact payload size from borrowed compressed records, and split before copying
+   if the byte or occurrence safety cap would be exceeded.
+4. Copy forward sequences, canonical topology edges, and exact compressed GBWT
+   records into one record payload. No anonymous path is enumerated during
+   construction.
+5. Consume worker results in original coordinate order, compress bounded
+   batches, and append directly to the temporary final archive. Parallel
+   completion order cannot affect archive bytes or offsets.
+6. Backfill fixed directory pages and the final header, fsync, structurally
+   validate every physical payload, and atomically rename. Query-time decoding
+   reconstructs weighted paths only for selected tiles.
 
-Encoder memory is proportional to the already-loaded source graph,
-descriptor/hash metadata, and the largest single regional
-raw/compressed payload. It is not proportional to total archive payload bytes.
-Temporary disk is proportional to final compressed payload bytes. Occurrence
-index bytes and time are exactly zero.
+Adaptive children are inserted before later completed tasks, preserving exact
+reference/coordinate order. Raw and compressed queues are bounded by
+`--max-queued-bytes`; the default is 256 MiB. The CLI defaults to the available
+parallelism capped at eight workers and reports the actual value. Active source
+state is one bounded local `Subgraph` per worker plus bounded payload and
+compression buffers.
 
+There is no payload spool, second full-file copy, global pending-entry sort, or
+source-global occurrence index. Failure cleanup is the default;
+`--keep-partial` is explicit.
 ## Reader and browser mapping
 
 `FixedArchiveReader` keeps the file open, reads the bootstrap once, and has a
@@ -224,7 +235,10 @@ index bytes and time are exactly zero.
 creates one reader per coalescing-gap run and reuses it across that workload.
 `query_fixed_archive` remains a cold one-shot compatibility wrapper.
 
-The TypeScript reader should mirror this state machine:
+The TypeScript package now shares the bounded `PNGRGN04` decoder and golden
+fixture with Rust. It returns typed arrays for node IDs/sequences, topology
+edges, the reference traversal, traversal offsets/nodes, and weights. The
+archive-open and HTTP directory state machine remains to be implemented:
 
 1. fetch and retain the 16 KiB bootstrap;
 2. decode the small manifest root;

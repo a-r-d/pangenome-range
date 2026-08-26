@@ -1,0 +1,19 @@
+{
+  "runId": "2026-08-25-record-preserving-v4",
+  "sourceUrl": "https://s3-us-west-2.amazonaws.com/human-pangenomics/pangenomes/freeze/release2/minigraph-cactus/v2.1/hprc-v2.1-mc-grch38/hprc-v2.1-mc-grch38.gbz",
+  "sourceBytes": 5492627216,
+  "sourceSha256": "11d6047f79575ffb83757462484bad134ed20928bd2c8171ec52e35a54976e2b",
+  "upstreamVersion": "HPRC Minigraph-Cactus v2.1 GRCh38",
+  "dataUse": "HPRC Data Use Protocol applies; upstream describes v2.1 resources as not fully QC'd and potentially containing known issues",
+  "archiveVersion": 4,
+  "regionalPayloadVersion": 4,
+  "windowSize": 16384,
+  "constructionContext": 100,
+  "codec": "zstd-3",
+  "threads": 8,
+  "maxQueuedBytes": 268435456,
+  "maxUncompressedChunkBytes": 8388608,
+  "minWindowSize": 1024,
+  "command": "target/release/pangenome-range encode SOURCE.gbz OUTPUT.pngr --threads 8 --codec zstd-3 --progress json --progress-interval-seconds 5 --report REPORT.json",
+  "verificationCommand": "target/release/pangenome-range verify OUTPUT.pngr --against SOURCE.gbz --sample CHM13 --contig chr1 --start 1000000 --end 1100000"
+}
