@@ -11,8 +11,8 @@ description = "Experimental candidate-layout builders for pangenome-range"
 blake3.workspace = true
 gbz.workspace = true
 gbz-base.workspace = true
-pangenome-range-format = { path = "../pangenome-range-format" }
-pangenome-range-query = { path = "../pangenome-range-query" }
+pangenome-range-format = { version = "0.1.0", path = "../pangenome-range-format" }
+pangenome-range-query = { version = "0.1.0", path = "../pangenome-range-query" }
 serde.workspace = true
 serde_json.workspace = true
 sha2.workspace = true

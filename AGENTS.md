@@ -21,9 +21,11 @@ The project has four product surfaces:
 4. **Documentation/demo site** — a GitHub Pages site under `docs/` that imports
    the public browser package and proves real range access.
 
-The native encoder is not bundled into the npm package. It is distributed as a
-Rust binary / Cargo package / GitHub release artifact. The npm package is the
-portable reader and viewer.
+The primary npm package distributes the portable reader/viewer and an isolated
+Node executable shim. Exact-version optional platform packages contain the
+native Rust encoder/CLI; ordinary reader and viewer imports must never load the
+shim or native code. Standalone GitHub Release binaries and a future Cargo
+installation remain additional distribution forms.
 
 ---
 
@@ -187,7 +189,7 @@ Target JavaScript layout:
 
 ```text
 packages/
-  browser/       # published package: pangenome-range
+  browser/       # primary package: browser-safe exports + isolated CLI shim
   benchmark/     # private Node/Playwright benchmark tools
 docs/            # existing Markdown + VitePress site/demo
 ```
@@ -272,7 +274,7 @@ unknown codecs, impossible record offsets, and decompressed-length mismatch.
 
 ---
 
-## Browser package contract
+## Primary npm package contract
 
 Working npm package name:
 
@@ -280,8 +282,9 @@ Working npm package name:
 pangenome-range
 ```
 
-Keep it `private: true` until the package name, ownership, release policy, and
-provenance publishing are deliberately confirmed.
+The checked-in package metadata is public, but no workflow may publish until
+npm ownership and trusted publishing are deliberately configured. Release
+workflows must stage and verify tarballs without publishing by default.
 
 Required subpath exports:
 
@@ -294,6 +297,13 @@ pangenome-range/node
 
 The root export should remain reader-focused. Importing the root or `/reader`
 must not pull viewer code, DOM code, or Node built-ins into the bundle.
+
+The package also exposes the `pangenome-range` executable from `bin/`. Its
+Node-only shim selects an exact-version platform package, forwards arguments,
+signals, and exit status, and reports unsupported or omitted optional packages
+without affecting JavaScript imports. Platform packages contain only the
+binary, license, README, and metadata; they use `os`/`cpu`/Linux `libc`
+restrictions and never use lifecycle scripts, downloads, or local compilation.
 
 Core source interface:
 

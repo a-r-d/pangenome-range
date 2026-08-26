@@ -13,7 +13,8 @@
     "lint": "biome lint .",
     "typecheck": "pnpm -r typecheck",
     "test": "pnpm -r test",
-    "check": "biome check . && pnpm typecheck && pnpm test",
+    "check": "biome check . && pnpm check:versions && pnpm typecheck && pnpm test",
+    "check:versions": "node npm/scripts/verify-version-sync.mjs",
     "check:rust": "bash scripts/check-rust.sh",
     "build": "pnpm --filter pangenome-range build && pnpm --filter pangenome-range test:bundle && pnpm --filter @pangenome-range/benchmark build && pnpm --filter @pangenome-range/docs build && pnpm smoke:exports",
     "smoke:exports": "node packages/browser/test/export-smoke.mjs",
@@ -23,7 +24,13 @@
     "test:pages": "pnpm --filter pangenome-range build && pnpm --filter @pangenome-range/docs build && pnpm --filter @pangenome-range/docs test:pages",
     "test:browser": "pnpm --filter @pangenome-range/benchmark test:browser",
     "test:browser:ci": "pnpm --filter @pangenome-range/benchmark test:browser:ci",
-    "bench": "pnpm --filter pangenome-range build && pnpm --filter @pangenome-range/benchmark build && pnpm --filter @pangenome-range/benchmark bench"
+    "bench": "pnpm --filter pangenome-range build && pnpm --filter @pangenome-range/benchmark build && pnpm --filter @pangenome-range/benchmark bench",
+    "package:cargo": "node npm/scripts/verify-cargo-package.mjs",
+    "package:cargo:list": "cargo package -p pangenome-range-cli --allow-dirty --locked --list",
+    "release:stage": "node npm/scripts/stage-release-set.mjs",
+    "release:verify": "node npm/scripts/verify-release-set.mjs",
+    "release:pack": "node npm/scripts/pack-release-set.mjs",
+    "release:smoke": "node npm/scripts/smoke-packed-release.mjs"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.5.10",

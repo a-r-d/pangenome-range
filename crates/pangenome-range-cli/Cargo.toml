@@ -4,15 +4,21 @@ version.workspace = true
 edition.workspace = true
 license.workspace = true
 repository.workspace = true
+homepage.workspace = true
 rust-version.workspace = true
-description = "Research CLI for pangenome-range"
+description = "Encode, inspect, verify, and benchmark range-addressable pangenome archives"
+readme = "README.md"
+keywords = ["pangenome", "genomics", "bioinformatics", "gbz", "cli"]
+categories = ["command-line-utilities", "science"]
+include = ["src/**", "tests/**", "README.md"]
+default-run = "pangenome-range"
 
 [dependencies]
 gbz.workspace = true
 gbz-base.workspace = true
-pangenome-range-build = { path = "../pangenome-range-build" }
-pangenome-range-format = { path = "../pangenome-range-format" }
-pangenome-range-query = { path = "../pangenome-range-query" }
+pangenome-range-build = { version = "0.1.0", path = "../pangenome-range-build" }
+pangenome-range-format = { version = "0.1.0", path = "../pangenome-range-format" }
+pangenome-range-query = { version = "0.1.0", path = "../pangenome-range-query" }
 serde.workspace = true
 serde_json.workspace = true
 sha2.workspace = true

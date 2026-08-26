@@ -61,14 +61,24 @@ terminals select readable plain progress by default; JSON mode emits stable
 newline-delimited events, while redirected commands remain quiet unless a mode
 is selected explicitly.
 
-## TypeScript product boundary
+## Primary npm product boundary
 
-The TypeScript workspace is a separate consumer of the static archive, not a
-Rust crate or native-binary wrapper. `packages/browser` publishes isolated
-reader, viewer, and Node entry points. The root and `/reader` entries contain no
-DOM or Node built-ins; `/viewer` owns the framework-neutral rendering contract,
-and `/node` owns Node-only range sources. `packages/benchmark` is private and
-owns Node and real-browser measurements.
+`packages/browser` is the primary npm package. It publishes isolated reader,
+viewer, and Node library entries plus a separate Node executable shim. The root
+and `/reader` entries contain no DOM, Node built-ins, launcher logic, or native
+code; `/viewer` owns the framework-neutral rendering contract, `/node` owns
+Node-only range sources, and `bin/` owns native process selection and launch.
+Adding the executable therefore does not change the reader/viewer dependency
+graph or bundle-size budgets. `packages/benchmark` remains private and owns Node
+and real-browser measurements.
+
+The shim maps the runtime operating system, architecture, and Linux libc to one
+exact-version optional `@pangenome-range/cli-*` package. Those platform packages
+are generated only during release staging and contain no JavaScript runtime,
+installer, downloader, or compiler. The shim validates package/binary metadata,
+then spawns the Rust CLI with inherited standard streams and forwarded arguments,
+signals, and exit status. Missing or unsupported native packages do not prevent
+ordinary library imports.
 
 The public contracts, strict HTTP/Blob/memory/file range sources, v1
 bootstrap/root and arithmetic directory reader, byte-bounded caches,

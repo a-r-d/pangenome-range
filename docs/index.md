@@ -19,7 +19,7 @@ features:
   - title: Native construction
     details: The Rust CLI owns encoding, verification, and reproducible research measurements.
   - title: Portable access
-    details: The private TypeScript package opens local or remote file-format-v1 objects, performs strict range reads, and decodes regional tiles.
+    details: The public npm package opens local or remote file-format-v1 objects, renders regional tiles, and launches the optional native encoder CLI without coupling it to browser imports.
 ---
 
 <script setup>

@@ -10,6 +10,20 @@ const entries = {
 const measurements = {};
 for (const [name, url] of Object.entries(entries)) {
   const bytes = await readFile(url);
+  const source = bytes.toString("utf8");
+  if (name === "reader" || name === "viewer") {
+    for (const forbidden of [
+      "node:child_process",
+      "@pangenome-range/cli-",
+      "pangenome-range.mjs",
+    ]) {
+      assert.equal(
+        source.includes(forbidden),
+        false,
+        `${name} bundle contains native launcher marker ${forbidden}`,
+      );
+    }
+  }
   measurements[name] = {
     rawBytes: bytes.byteLength,
     gzipBytes: gzipSync(bytes, { level: 9 }).byteLength,
@@ -37,4 +51,10 @@ assert(
   `viewer gzip is ${measurements.viewer.gzipBytes} bytes; budget is 16384`,
 );
 
-console.log(JSON.stringify({ budgetsPassed: true, measurements }, null, 2));
+console.log(
+  JSON.stringify(
+    { budgetsPassed: true, nativeLauncherIsolated: true, measurements },
+    null,
+    2,
+  ),
+);

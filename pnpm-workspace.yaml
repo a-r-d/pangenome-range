@@ -4,3 +4,9 @@ packages:
 
 allowBuilds:
   esbuild: true
+
+# These release-generated packages do not exist in the source workspace. Public
+# consumers resolve them normally from npm; local pnpm installs exercise them
+# through packed-tarball smoke tests.
+ignoredOptionalDependencies:
+  - "@pangenome-range/cli-*"

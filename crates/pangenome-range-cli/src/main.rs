@@ -53,6 +53,10 @@ fn run(mut args: impl Iterator<Item = String>) -> AppResult<()> {
             print_help();
             Ok(())
         }
+        "version" | "--version" | "-V" => {
+            print_version();
+            Ok(())
+        }
         "build" | "query" | "benchmark" => Err(format!(
             "'{command}' is reserved for a future experiment; use 'inspect' or 'benchmark-source'"
         )
@@ -231,6 +235,7 @@ fn print_help() {
         "  pangenome-range benchmark-fixed-window-smoke <graph.gbz> <run-id> [random-queries-per-size]"
     );
     println!("  pangenome-range benchmark-encoder-scale <graph.gbz> <run-id> <external-work-root>");
+    println!("  pangenome-range --version");
     println!();
     println!();
     println!("Encode options:");
@@ -266,6 +271,10 @@ fn print_help() {
     println!("  --progress-interval-seconds N  validation progress cadence (default: 5)");
     println!();
     println!("Reserved experiment commands: build, query, benchmark");
+}
+
+fn print_version() {
+    println!("pangenome-range {}", env!("CARGO_PKG_VERSION"));
 }
 
 fn fixtures(args: &mut impl Iterator<Item = String>) -> AppResult<()> {
@@ -629,7 +638,12 @@ fn validate_archive(args: &mut impl Iterator<Item = String>) -> AppResult<()> {
 
 fn encode(args: &mut impl Iterator<Item = String>) -> AppResult<()> {
     let usage = "usage: pangenome-range encode <input.gbz> <output.pngr> [options]";
-    let input = PathBuf::from(args.next().ok_or(usage)?);
+    let first = args.next().ok_or(usage)?;
+    if matches!(first.as_str(), "--help" | "-h") {
+        print_help();
+        return Ok(());
+    }
+    let input = PathBuf::from(first);
     let output = PathBuf::from(args.next().ok_or(usage)?);
     let mut options = EncodeOptions::new(input, output);
     options.progress = automatic_progress_mode();

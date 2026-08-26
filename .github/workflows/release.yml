@@ -1,0 +1,163 @@
+name: Release artifacts
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing version tag for a draft GitHub release
+        required: true
+        default: v0.1.0
+        type: string
+      create_github_release:
+        description: Attach verified artifacts to a protected draft release
+        required: true
+        default: false
+        type: boolean
+
+permissions:
+  contents: read
+
+jobs:
+  native:
+    name: Native ${{ matrix.target_name }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target_name: darwin-arm64
+            runner: macos-15
+            rust_target: aarch64-apple-darwin
+            binary: pangenome-range
+            archive: tar
+          - target_name: darwin-x64
+            runner: macos-15-intel
+            rust_target: x86_64-apple-darwin
+            binary: pangenome-range
+            archive: tar
+          - target_name: linux-x64-gnu
+            runner: ubuntu-24.04
+            rust_target: x86_64-unknown-linux-gnu
+            binary: pangenome-range
+            archive: tar
+          - target_name: linux-x64-musl
+            runner: ubuntu-24.04
+            rust_target: x86_64-unknown-linux-musl
+            binary: pangenome-range
+            archive: tar
+            install_musl: true
+          - target_name: linux-arm64-gnu
+            runner: ubuntu-24.04-arm
+            rust_target: aarch64-unknown-linux-gnu
+            binary: pangenome-range
+            archive: tar
+          - target_name: win32-x64
+            runner: windows-2025
+            rust_target: x86_64-pc-windows-msvc
+            binary: pangenome-range.exe
+            archive: zip
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.rust_target }}
+      - name: Install musl linker
+        if: matrix.install_musl
+        run: sudo apt-get update && sudo apt-get install --yes musl-tools
+      - name: Test native workspace
+        run: cargo test --locked --workspace --release --target ${{ matrix.rust_target }}
+      - name: Build native CLI
+        run: cargo build --locked --release -p pangenome-range-cli --target ${{ matrix.rust_target }}
+      - name: Verify native CLI version
+        shell: bash
+        run: target/${{ matrix.rust_target }}/release/${{ matrix.binary }} --version
+      - name: Stage Unix native archive
+        if: matrix.archive == 'tar'
+        shell: bash
+        run: |
+          mkdir -p release-root/bin release-upload/bin
+          cp target/${{ matrix.rust_target }}/release/${{ matrix.binary }} release-root/bin/${{ matrix.binary }}
+          cp release-root/bin/${{ matrix.binary }} release-upload/bin/${{ matrix.binary }}
+          cp LICENSE crates/pangenome-range-cli/README.md release-root/
+          tar -C release-root -czf release-upload/pangenome-range-${{ matrix.target_name }}.tar.gz .
+      - name: Stage Windows native archive
+        if: matrix.archive == 'zip'
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force release-root/bin, release-upload/bin
+          Copy-Item target/${{ matrix.rust_target }}/release/${{ matrix.binary }} release-root/bin/${{ matrix.binary }}
+          Copy-Item release-root/bin/${{ matrix.binary }} release-upload/bin/${{ matrix.binary }}
+          Copy-Item LICENSE, crates/pangenome-range-cli/README.md release-root/
+          Compress-Archive -Path release-root/* -DestinationPath release-upload/pangenome-range-${{ matrix.target_name }}.zip
+      - uses: actions/upload-artifact@v4
+        with:
+          name: native-${{ matrix.target_name }}
+          path: release-upload
+          if-no-files-found: error
+
+  packages:
+    name: Verify npm and Cargo packages
+    needs: native
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: pnpm/setup@v2
+        with:
+          runtime: node@24
+          cache: true
+          install: false
+      - uses: actions/download-artifact@v5
+        with:
+          pattern: native-*
+          path: native-artifacts
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm check:versions
+      - run: pnpm package:cargo
+      - run: pnpm --filter pangenome-range build
+      - run: pnpm --filter pangenome-range test:bundle
+      - name: Stage main and native npm packages
+        run: pnpm release:stage -- --native-dir native-artifacts --out-dir release-staging
+      - name: Inspect every npm package dry-run
+        run: pnpm release:verify -- --main-dir release-staging/main --platforms-dir release-staging/platforms
+      - name: Pack every npm package
+        run: pnpm release:pack -- --main-dir release-staging/main --platforms-dir release-staging/platforms --out-dir release-staging/npm
+      - name: Install and execute packed host packages
+        run: pnpm release:smoke -- --release-dir release-staging/npm
+      - uses: actions/upload-artifact@v4
+        with:
+          name: npm-release-set
+          path: release-staging/npm
+          if-no-files-found: error
+      - uses: actions/upload-artifact@v4
+        with:
+          name: native-release-assets
+          path: release-staging/native
+          if-no-files-found: error
+
+  github-release:
+    name: Protected draft GitHub release
+    if: inputs.create_github_release
+    needs: packages
+    runs-on: ubuntu-24.04
+    environment: release
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v5
+        with:
+          name: native-release-assets
+          path: native-release-assets
+      - name: Create draft release or replace its native assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ inputs.tag }}
+        run: |
+          if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
+            gh release upload "$RELEASE_TAG" native-release-assets/* --clobber
+          else
+            gh release create "$RELEASE_TAG" native-release-assets/* --draft --verify-tag --title "pangenome-range $RELEASE_TAG" --generate-notes
+          fi
+
+# npm publishing is intentionally absent. Configure ownership and an npm trusted
+# publisher for this workflow before adding a protected publish job.

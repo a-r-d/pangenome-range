@@ -9,7 +9,7 @@ description = "Storage-independent query and correctness types for pangenome-ran
 
 [dependencies]
 blake3.workspace = true
-pangenome-range-format = { path = "../pangenome-range-format" }
+pangenome-range-format = { version = "0.1.0", path = "../pangenome-range-format" }
 
 [lints]
 workspace = true

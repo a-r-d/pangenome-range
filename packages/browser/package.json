@@ -1,13 +1,38 @@
 {
   "name": "pangenome-range",
   "version": "0.1.0",
-  "description": "Browser and Node range reader plus framework-neutral viewer for pangenome-range archives",
-  "private": true,
+  "description": "Range-addressable pangenome reader, viewer, and native encoder CLI",
+  "private": false,
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/a-r-d/pangenome-range.git"
+  },
+  "homepage": "https://github.com/a-r-d/pangenome-range#readme",
+  "bugs": {
+    "url": "https://github.com/a-r-d/pangenome-range/issues"
+  },
+  "keywords": [
+    "pangenome",
+    "genomics",
+    "gbz",
+    "range-requests",
+    "visualization"
+  ],
+  "engines": {
+    "node": ">=24 <25"
+  },
   "type": "module",
   "sideEffects": false,
   "files": [
-    "dist"
+    "bin",
+    "dist",
+    "LICENSE",
+    "README.md"
   ],
+  "bin": {
+    "pangenome-range": "./bin/pangenome-range.mjs"
+  },
   "exports": {
     ".": {
       "types": "./dist/reader/index.d.ts",
@@ -30,7 +55,7 @@
     "build": "tsup",
     "test:bundle": "node test/bundle-size.mjs",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test": "vitest run"
+    "test": "vitest run && node --test test/launcher.node-test.mjs"
   },
   "devDependencies": {
     "@types/node": "^24.13.3",
@@ -41,5 +66,17 @@
   "dependencies": {
     "@noble/hashes": "2.3.0",
     "fzstd": "0.1.1"
+  },
+  "optionalDependencies": {
+    "@pangenome-range/cli-darwin-arm64": "0.1.0",
+    "@pangenome-range/cli-darwin-x64": "0.1.0",
+    "@pangenome-range/cli-linux-arm64-gnu": "0.1.0",
+    "@pangenome-range/cli-linux-x64-gnu": "0.1.0",
+    "@pangenome-range/cli-linux-x64-musl": "0.1.0",
+    "@pangenome-range/cli-win32-x64": "0.1.0"
+  },
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
   }
 }

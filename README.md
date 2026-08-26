@@ -6,15 +6,19 @@ range-addressable layouts for pangenome graphs. The target is a static immutable
 interactive genomic-region queries with few byte-range reads and no custom
 query server.
 
-The repository contains two separately distributed products under one name:
+The primary public npm package combines browser-safe TypeScript libraries with
+an isolated launcher for the native Rust CLI:
 
-- the native Rust `pangenome-range` CLI for encoding, verification, and
-  research measurements;
-- the private TypeScript `pangenome-range` workspace package for browser/Node
-  range reading and framework-neutral viewing.
+- `pangenome-range` and `/reader` provide portable range reading;
+- `/viewer` provides the framework-neutral viewer;
+- `/node` provides positioned local-file reads;
+- `npx pangenome-range` launches an exact-version, platform-specific optional
+  native package containing the encoder and research CLI.
 
-The Rust binary is not shipped through npm. See
-[`docs/DISTRIBUTION.md`](docs/DISTRIBUTION.md) for the intended release boundary.
+The browser exports do not import the launcher, Node built-ins, or native code.
+Standalone native archives remain a second installation form through GitHub
+Releases, and a future crates.io route is prepared separately. See
+[`docs/DISTRIBUTION.md`](docs/DISTRIBUTION.md) for the release topology.
 
 The only current on-disk format is pre-release file-format v1: archive magic
 `PNGRNG01` and regional magic `PNGRGN01`. Its complete normative contract is
@@ -24,6 +28,27 @@ encoder; npm/Cargo package versions are independent of the file-format number.
 
 
 ## Quick start
+
+Install the complete npm product when consuming a release:
+
+```bash
+npm install pangenome-range
+npx pangenome-range --version
+npx pangenome-range encode input.gbz output.pngr
+```
+
+Application imports remain reader/viewer focused:
+
+```ts
+import { openPangenome } from "pangenome-range";
+import { createPangenomeViewer } from "pangenome-range/viewer";
+```
+
+Installing with `npm install --omit=optional` intentionally installs only the
+JavaScript libraries. If the CLI is then invoked, its shim names the exact
+missing native package and explains how to reinstall it.
+
+From a source checkout:
 
 ```bash
 ./scripts/fetch-test-data.sh
@@ -86,8 +111,7 @@ CDN performance.
 
 ## TypeScript reader
 
-The package is private while naming, ownership, and release policy remain under
-review. Browser code can open a URL or a local `File`/`Blob` directly:
+Browser code can open a URL or a local `File`/`Blob` directly:
 
 ```ts
 import { openPangenome } from "pangenome-range";
@@ -181,11 +205,12 @@ opt-in; the default test suite uses synthetic bytes and stays fast.
   BLAKE3 comparison hash for local graph semantics.
 - `pangenome-range-cli`: the direct-write v1 encoder, GBZ inspection, source
   tracing, and retained research benchmarks.
-- `packages/browser`: private ESM package with isolated reader, viewer, and Node
-  exports, strict HTTP/Blob/memory/file range sources, v1-only archive and
-  record-preserving regional decoding, canonical graph assembly, and optional
-  query traces. The bounded progressive Canvas 2D viewer lives only under the
-  `/viewer` export.
+- `packages/browser`: primary public ESM package with isolated reader, viewer,
+  Node, and native-CLI launcher surfaces, strict HTTP/Blob/memory/file range
+  sources, v1-only archive and record-preserving regional decoding, canonical
+  graph assembly, and optional query traces. The launcher lives only under
+  `bin/`; browser bundles do not reach it. The bounded progressive Canvas 2D
+  viewer lives only under the `/viewer` export.
 - `packages/benchmark`: private Node/Playwright benchmark CLI, strict local
   range origin with controlled faults, versioned shared workloads, immutable
   result writer, origin validator, Rust-vs-runtime comparison report, and

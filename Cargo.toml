@@ -13,6 +13,7 @@ version = "0.1.0"
 edition = "2024"
 license = "MIT"
 repository = "https://github.com/a-r-d/pangenome-range"
+homepage = "https://a-r-d.github.io/pangenome-range/"
 rust-version = "1.85"
 
 [workspace.dependencies]
