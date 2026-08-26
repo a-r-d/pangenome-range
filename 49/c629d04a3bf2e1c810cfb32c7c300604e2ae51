@@ -1,0 +1,111 @@
+docs/.vitepress/config.ts
+  s_e18f25a7dcf767::t_4d9e2481abb038 13,30
+docs/BENCHMARKS.md
+  s_e18f25a7dcf767::t_7f840847bf0b02 165,173-174,176,178-179
+  s_e18f25a7dcf767::t_eb374d3151eab9 68,86,96,192
+packages/browser/test/reader.test.ts
+  s_e18f25a7dcf767::t_76f9f633ae86d3 16,28-29,73,81,90,145-158,201-202,227,258,349,368,373,608,658,675-678
+  s_e18f25a7dcf767::t_b88254c0349e74 428
+  s_e18f25a7dcf767::t_61239edd4a6c6c 33-38,50,169,185-194,203-226
+test-data/golden/record-region-v1.expected.json
+  s_e18f25a7dcf767::t_ccac6fbec0f8e7 5
+  s_e18f25a7dcf767::t_9b64bce7a4e216 1-4,6-26
+docs/FILE_FORMAT_V1.md
+  s_e18f25a7dcf767::t_4d0ec2ad69daab 1-60,63-439
+  s_e18f25a7dcf767::t_c467553f303412 61-62
+crates/pangenome-range-build/src/experiment.rs
+  s_e18f25a7dcf767::t_7ac6ac259690df 227,244,277,1227,1390,1707
+test-data/golden/record-region-v1.hex
+  s_e18f25a7dcf767::t_9b64bce7a4e216 1
+test-data/golden/record-region-v1.zstd3.hex
+  s_e18f25a7dcf767::t_9b64bce7a4e216 1
+docs/OPTIMIZATION_LOG.md
+  s_e18f25a7dcf767::t_0361854b889db2 296-312
+  s_e18f25a7dcf767::t_b2a35088b6a7ee 215-216,244-247,264,277-278,280
+crates/pangenome-range-query/src/lib.rs
+  s_e18f25a7dcf767::t_be2ffbdb479d6d 100,105,155
+docs/FIXED_WINDOW_ARCHIVE.md
+  s_e18f25a7dcf767::t_1181b649631c05 1,3,5-6,8,10,13-16,19-107
+packages/benchmark/scripts/browser-range.mjs
+  s_e18f25a7dcf767::t_705a0567c7a86c 267
+  s_e18f25a7dcf767::t_9e242b983420ec 91,231,237,253
+  s_e18f25a7dcf767::t_8c8b9594b3026c 92
+docs/demo.md
+  s_e18f25a7dcf767::t_eb374d3151eab9 10
+packages/browser/src/reader/types.ts
+  s_e18f25a7dcf767::t_746e2ff122183e 112
+  s_e18f25a7dcf767::t_73c9e232abf448 74
+test-data/README.md
+  s_e18f25a7dcf767::t_39800b188db1b1 70,72-75,78,80-82,84,92,96,98,100-101,103-105,107-111
+README.md
+  s_e18f25a7dcf767::t_be07cde2ac237e 19-24,129,132-133,167-168
+packages/browser/src/reader/archive.ts
+  s_e18f25a7dcf767::t_c79e467f72b680 20-21,286,340-341,645,671
+docs/HAPLOTYPE_SEMANTICS.md
+  s_e18f25a7dcf767::t_faea1dbcfbbc75 3,7-10,12-14,18-20,23-25,27-30,32,34-38,40-42,49,51-52,54-55,61-62,65-66
+packages/browser/src/reader/index.ts
+  s_e18f25a7dcf767::t_746e2ff122183e 68,78-79
+test-data/conformance/micb-kir3dl1-reader-v1.json
+  s_e18f25a7dcf767::t_08d67987ef2747 1-26,33-40,47-49
+  s_e18f25a7dcf767::t_dc8ef6d154ff2a 27-32,41-46
+docs/ARCHITECTURE.md
+  s_e18f25a7dcf767::t_bf7650939f49de 16-17,21,63,65-70,143
+docs/index.md
+  s_e18f25a7dcf767::t_eb374d3151eab9 22,31-32
+  s_e18f25a7dcf767::t_4d9e2481abb038 40-41
+crates/pangenome-range-build/src/fixed.rs
+  s_e18f25a7dcf767::t_773a42ccc92df8 2511,3178,3181,3188
+  s_e18f25a7dcf767::t_8bd8d5875ce53c 3925-3926,4341,4395
+  s_e18f25a7dcf767::t_ccac6fbec0f8e7 4994
+  s_e18f25a7dcf767::t_00706a10ef91d0 4722-4729,4756,4768,4795-4796,4823-4829,4833-4834
+  s_e18f25a7dcf767::t_5b851f11ec9790 3965-3966,5152,5312
+  s_e18f25a7dcf767::t_e26ccff28291c0 500
+  s_e18f25a7dcf767::t_b7007b3f108a4d 4975
+  s_e18f25a7dcf767::t_cd50397471c49f 4661,4696
+  s_e18f25a7dcf767::t_8dcd17b436b2ea 5547
+  s_e18f25a7dcf767::t_15c43aadfccca1 35,3863-3866,3967
+  s_e18f25a7dcf767::t_21256bd721bb0a 3990-3992,4121-4130,4309-4310
+  s_e18f25a7dcf767::t_176b021354ff90 3751
+  s_e18f25a7dcf767::t_be2ffbdb479d6d 23-26
+  s_e18f25a7dcf767::t_1f0a04ad5cac95 5033-5048,5127-5133
+  s_e18f25a7dcf767::t_1b0b392e06d6b1 3591
+  s_e18f25a7dcf767::t_2cdd7c54bdf503 4967,4970,4978,5029,5063,5066,5122,5155
+  s_e18f25a7dcf767::t_6ca03caf934920 5134
+packages/browser/src/reader/regional.ts
+  s_e18f25a7dcf767::t_84ba71fc91a58e 3-4,137,140
+  s_e18f25a7dcf767::t_552a3b3823b1c5 589,594
+test-data/conformance/manifest.json
+  s_e18f25a7dcf767::t_3804a172d08a82 4,6,54,56,58,60,62,64,66-68,70-72,74-76,78-80,82,87-88,95,98
+packages/benchmark/scripts/node-range.mjs
+  s_e18f25a7dcf767::t_9e242b983420ec 18
+packages/browser/src/reader/canonical.ts
+  s_e18f25a7dcf767::t_c81d18dac26284 137
+  s_e18f25a7dcf767::t_55cc5575e72df9 374,388-395
+docs/FORMAT_GOALS.md
+  s_e18f25a7dcf767::t_d64914b66da24d 3-7,9,11-21,23,25-33
+crates/pangenome-range-cli/src/main.rs
+  s_e18f25a7dcf767::t_7ac6ac259690df 439,498
+AGENTS.md
+  s_e18f25a7dcf767::t_b02485c5d564ab 271
+  s_e18f25a7dcf767::t_d293a226083e57 50,57,60-62,123-125,143-145,254-255,257,260,264,266-267
+crates/pangenome-range-build/src/scale.rs
+  s_e18f25a7dcf767::t_7ac6ac259690df 180,227-228,290
+test-data/golden/record-archive-v1.json
+  s_e18f25a7dcf767::t_769aaa6a0bbd65 1-17
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.24",
+  "base_commit_sha": "49c629d04a3bf2e1c810cfb32c7c300604e2ae51",
+  "prompts": {},
+  "sessions": {
+    "s_e18f25a7dcf767": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a03aa5-78bd-7070-bfcd-8b3978af06b8",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "aaron decker <aaron@ard.ninja>"
+    }
+  }
+}
