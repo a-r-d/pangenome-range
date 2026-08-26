@@ -1,0 +1,99 @@
+crates/pangenome-range-cli/src/main.rs
+  s_e18f25a7dcf767::t_800c06bd827326 255-262
+  s_e18f25a7dcf767::t_b294e6da81563f 5,7,34-37,220,267,274,287,309-327,339-350,358,363,365-370
+  s_e18f25a7dcf767::t_c6916ef5ef8c98 275,288,351-352,359-362,364
+  s_e18f25a7dcf767::t_b779247462fbfb 353-357
+docs/OPTIMIZATION_LOG.md
+  s_e18f25a7dcf767::t_3496b6418fc7c7 238-270
+packages/browser/src/reader/sources.ts
+  s_e18f25a7dcf767::t_da0f8b7cd220f1 195-196
+  s_e18f25a7dcf767::t_5985fd2a9fefe9 67-69,97-99,101-103,129-131,178-180,217-219
+  s_e18f25a7dcf767::t_4fe9019757a836 197-198
+  s_e18f25a7dcf767::t_c9f15e5e5c3869 1-66,70-96,100,104-128,132-161,163-177,181-194,199-216,220-230,239-291,293-310,313-326
+  s_e18f25a7dcf767::t_800c06bd827326 162,231-238,292,311-312
+docs/demo.md
+  s_e18f25a7dcf767::t_800c06bd827326 9-12,14-17
+docs/index.md
+  s_e18f25a7dcf767::t_800c06bd827326 22,35-37
+packages/browser/src/reader/types.ts
+  s_e18f25a7dcf767::t_c2219d100343bf 48-49
+docs/BENCHMARKS.md
+  s_e18f25a7dcf767::t_27d1a714dffdf3 50-52,144-159
+  s_e18f25a7dcf767::t_821e66ed0f2b65 160
+packages/benchmark/scripts/range-origin.mjs
+  s_e18f25a7dcf767::t_35799f1d750a17 1,3-29,32-96,98-129,133-135
+  s_e18f25a7dcf767::t_5985fd2a9fefe9 30-31,130-132
+  s_e18f25a7dcf767::t_8dd07a41a0a987 2,97
+packages/browser/package.json
+  s_e18f25a7dcf767::t_77ff434435b26c 39-41
+docs/FORMAT_GOALS.md
+  s_e18f25a7dcf767::t_27d1a714dffdf3 1,3-8,28-32
+results/2026-08-25-record-preserving-v4/remote-range-validation.json
+  s_e18f25a7dcf767::t_3496b6418fc7c7 1-93
+crates/pangenome-range-build/src/lib.rs
+  s_e18f25a7dcf767::t_582197fdcebf3d 16-17,19
+packages/benchmark/scripts/test-placeholder.mjs
+  s_e18f25a7dcf767::t_4c14bc3f33a6ab 2
+packages/browser/test/reader.test.ts
+  s_e18f25a7dcf767::t_2894fcd0c5ae93 2,8-10,12-13,35-43,107-126,128-197
+  s_e18f25a7dcf767::t_5985fd2a9fefe9 127
+  s_e18f25a7dcf767::t_f2370e661b46d9 198,200,213-223
+  s_e18f25a7dcf767::t_fbc7c28a617d29 201-212
+  s_e18f25a7dcf767::t_a1cd1e1df933ea 199
+packages/benchmark/scripts/browser-range.mjs
+  s_e18f25a7dcf767::t_35799f1d750a17 1-121,125-137,141-295
+  s_e18f25a7dcf767::t_5985fd2a9fefe9 122-124,138-140
+docs/ARCHITECTURE.md
+  s_e18f25a7dcf767::t_27d1a714dffdf3 63-69,73-77,91-95
+packages/browser/src/reader/archive.ts
+  s_e18f25a7dcf767::t_97d9ec3328049b 1-7,9-230,234-277,280-305,313-333,339-347,353-392,397-428,433-499,503-520,534-559,562,565-588,592-608,613-618,624-633,639-655,660-677,683-690,695-701,705-726,728,732-734,736-749,754-755,758-766,769-794,796-814,819-840
+  s_e18f25a7dcf767::t_da0f8b7cd220f1 8,393-396,678-682,727,735,750-753,795,815
+  s_e18f25a7dcf767::t_b85115e895a483 500-502,521-533
+  s_e18f25a7dcf767::t_5985fd2a9fefe9 231-233,278-279,306-312,334-338,348-352,429-432,560-561,563-564,589-591,609-612,619-623,634-638,656-659,691-694,702-704,729-731,756-757,767-768,816-818
+results/2026-08-25-record-preserving-v4/REPORT.md
+  s_e18f25a7dcf767::t_3496b6418fc7c7 31-33,39-41,68-85,103,109-111
+results/2026-08-25-record-preserving-v4/structural-validation.json
+  s_e18f25a7dcf767::t_3496b6418fc7c7 1-15
+packages/browser/tsup.config.ts
+  s_e18f25a7dcf767::t_557fedd90dcb5a 17
+packages/benchmark/package.json
+  s_e18f25a7dcf767::t_35799f1d750a17 10
+results/2026-08-25-record-preserving-v4/verification-workload.json
+  s_e18f25a7dcf767::t_c6916ef5ef8c98 1-83
+docs/FIXED_WINDOW_ARCHIVE.md
+  s_e18f25a7dcf767::t_27d1a714dffdf3 4-7
+results/2026-08-25-record-preserving-v4/summary.json
+  s_e18f25a7dcf767::t_3496b6418fc7c7 54-81
+README.md
+  s_e18f25a7dcf767::t_27d1a714dffdf3 31,55-57,72-77,91-95
+results/2026-08-25-record-preserving-v4/semantic-validation.json
+  s_e18f25a7dcf767::t_36cd09cfaed706 1-340
+crates/pangenome-range-build/src/fixed.rs
+  s_e18f25a7dcf767::t_e07542045f76b7 5549-5560
+  s_e18f25a7dcf767::t_dc1db7e8994e85 4484,4522,4905
+  s_e18f25a7dcf767::t_582197fdcebf3d 424-438,2938,4515,4572-4574,4828-4835,4842-4844,4846-4848,4872-4877,4903-4904,4906-4915
+  s_e18f25a7dcf767::t_a3f28b0bb4b124 5913
+packages/browser/test/export-smoke.mjs
+  s_e18f25a7dcf767::t_b85115e895a483 11-12
+packages/browser/src/reader/index.ts
+  s_e18f25a7dcf767::t_c2219d100343bf 1-6,14-26,124
+  s_e18f25a7dcf767::t_5985fd2a9fefe9 40-43
+pnpm-lock.yaml
+  s_e18f25a7dcf767::t_08869936b6e9e9 51-54,1139-1141,2532-2533
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.24",
+  "base_commit_sha": "6c77634d0295db4e99a196dcb98d04b927aae787",
+  "prompts": {},
+  "sessions": {
+    "s_e18f25a7dcf767": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a03aa5-78bd-7070-bfcd-8b3978af06b8",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "aaron decker <aaron@ard.ninja>"
+    }
+  }
+}
