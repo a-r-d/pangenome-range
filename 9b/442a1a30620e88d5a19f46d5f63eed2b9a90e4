@@ -1,0 +1,53 @@
+results/2026-08-26-unified-workers-whole-hprc/summary.json
+  s_c6adeff06c2400::t_e0c47f53e2bd0d 1-54
+docs/BENCHMARKS.md
+  s_c6adeff06c2400::t_820eaa60568d6c 111-112,121-124
+crates/pangenome-range-build/src/fixed.rs
+  s_c6adeff06c2400::t_7ebb6a9583fe34 38,981-992,994-1009,1011
+  s_c6adeff06c2400::t_9c93f369e391a7 1424,1847,2331-2356,2359-2363,2367-2392,2396,2402,2422,2424-2425,2517-2518,2530-2531,2537-2538,2553
+  s_c6adeff06c2400::t_a466d7a026b8b6 2397-2398,2400-2401,2403-2413,2421,2423,2426,2441,2443-2458,2460-2461,2469-2481,2495-2498,2521-2524,2534-2536
+  s_c6adeff06c2400::t_420b66b8e9c5e8 2414-2420
+  s_c6adeff06c2400::t_4828dcbc23878f 1012,1769-1785,1787-1789,1791-1818
+  s_c6adeff06c2400::t_97620f78c86f6b 1786,1790
+  s_c6adeff06c2400::t_54ead77b939d41 2399,2429-2430
+  s_c6adeff06c2400::t_18092b1688d96e 2432-2440,2442
+  s_c6adeff06c2400::t_adc2f2b8ac4f8a 4984,4993,5007-5009,5022-5024
+  s_c6adeff06c2400::t_835f05260d0f13 1437
+  s_c6adeff06c2400::t_4c076b9e271c24 1822,2015,2050,2083
+  s_c6adeff06c2400::t_08820e60be7975 2324-2330,2540,2558,2571-2572
+  s_c6adeff06c2400::t_73eab04d2ccf0c 2357-2358,2364-2366,2427-2428,2459,2482-2494,2499-2516,2519-2520,2525-2529,2532-2533
+  s_c6adeff06c2400::t_857483687072de 2462-2468
+  s_c6adeff06c2400::t_c63f2425da2bd3 1419-1423,1425-1430,1432-1433,1441-1449,1483-1487,1489,1491-1493,1495-1504
+  s_c6adeff06c2400::t_3a70acdcc982fe 977
+  s_c6adeff06c2400::t_99cf3802d83cc9 2393-2395,2431
+  s_c6adeff06c2400::t_1291338dea6e2a 993,1010,1014-1018,1431,1434-1436,1438-1440,1450-1482,1488,1490,1494
+  s_c6adeff06c2400::t_44612f76f5eab3 1013,2555
+crates/pangenome-range-build/src/scale.rs
+  s_c6adeff06c2400::t_e9a194f4c05ae5 114,269-309,396,409
+docs/OPTIMIZATION_LOG.md
+  s_c6adeff06c2400::t_2961c1d914e681 633-682
+docs/ARCHITECTURE.md
+  s_c6adeff06c2400::t_820eaa60568d6c 43-48,65-70,76-81
+CHANGELOG.md
+  s_c6adeff06c2400::t_c0dbfcbbb0ef27 28-33,45-48
+results/2026-08-26-unified-workers-whole-hprc/REPORT.md
+  s_c6adeff06c2400::t_e0c47f53e2bd0d 1-104
+results/2026-08-26-unified-workers-whole-hprc/config.json
+  s_c6adeff06c2400::t_e0c47f53e2bd0d 1-36
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.24",
+  "base_commit_sha": "9b442a1a30620e88d5a19f46d5f63eed2b9a90e4",
+  "prompts": {},
+  "sessions": {
+    "s_c6adeff06c2400": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a03eda-5280-7641-a2d1-995a448eacdd",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "aaron decker <aaron@ard.ninja>"
+    }
+  }
+}
