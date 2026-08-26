@@ -343,3 +343,105 @@ rate, elapsed time, and ETA at the configured cadence. Interactive terminals
 select readable plain progress automatically; newline-delimited JSON remains
 available for monitors. This is an observability repair, not an encoder-speed
 claim, and it does not change archive bytes or validation semantics.
+
+## 2026-08-26: current-v1 whole-genome encode and local viewer path accepted
+
+The HPRC v2.1 Minigraph-Cactus GRCh38 source was regenerated with the current
+`PNGRNG01` / `PNGRGN01` encoder so the TypeScript reader and viewer could be
+tested against supported bytes rather than the incompatible historical
+research object. The release binary used 16 KiB windows, zstd-3, eight bounded
+workers, a 256 MiB queue cap, and
+`anonymous-distinct-weighted-tile-paths` semantics:
+
+```text
+pangenome-range encode hprc-v2.1-mc-grch38.gbz \
+  hprc-v2.1-mc-grch38-v1-t8-zstd3.pngr \
+  --window-size 16384 --codec zstd-3 \
+  --haplotypes anonymous-distinct-weighted-tile-paths \
+  --threads 8 --max-queued-bytes 268435456 \
+  --progress json --progress-interval-seconds 5 --report REPORT.json
+```
+
+### Current-v1 whole-source encoder result
+
+| Measurement | Current-v1 result |
+|---|---:|
+| Source GBZ | 5,492,627,216 B (5.115 GiB) |
+| Source SHA-256 | `11d6047f79575ffb83757462484bad134ed20928bd2c8171ec52e35a54976e2b` |
+| References / reference bases | 292 / 5,944,255,022 |
+| Archive | 8,828,788,418 B (8.222 GiB; 1.607389x source) |
+| Archive SHA-256 | `9dec2631107557bebc0cef671c72e2ee232f7ae8aa1cd6c7ec3ce3706176b80d` |
+| Directory entries / pages / adaptive splits | 363,105 / 11,559 / 79 |
+| Index / compressed payload | 47,376,617 / 8,781,411,801 B |
+| Source checksum / load / compact path index | 20.828 / 15.445 / 14.842 s |
+| Time from encode start to first payload | 66.740 s |
+| Payload pipeline | 296.047 s |
+| Construction including validation | 552.565 s |
+| Structural validation inside construction | 240.736 s |
+| Terminal-observed whole command | approximately 641.0 s (10m41s) |
+| Processing throughput over construction | 10,757,563 reference bp/s; 657 chunks/s |
+| Peak RSS | 8,776,204 KiB (8.370 GiB) |
+| Peak queued raw / compressed / total | 29,440,657 / 6,121,417 / 35,562,074 B |
+| Occurrence index / payload spool / scratch | 0 / 0 / 0 B |
+
+The JSON report directly accounts for 603.680 seconds through the end of
+construction when source checksum, source load, and compact path-index time are
+included. The terminal session spanned about 641.0 seconds; the approximately
+37.3-second remainder includes the output SHA-256 pass and CLI overhead, which
+this report schema does not time separately. The 800.032-second subgraph
+selection and 222.236-second materialization counters are aggregate worker
+milliseconds, not additional elapsed phases.
+
+After validation-progress reporting was added, an independent `validate` pass
+reread all 11,559 directory pages and all 363,105 physical payloads, including
+35,747,140,299 uncompressed bytes, in 180.879 seconds. A separate source-oracle
+verification for `CHM13#chr1:1,000,000-1,100,000` passed graph correctness and
+all 7/7 tile-local haplotype comparisons with canonical hash
+`b191be02fc2a9556349d8b5b97b268c90c579b1c275cc600355bfaae5b499473`.
+Structural validation and semantic verification remain separate gates.
+
+### Real local HTTP range and viewer result
+
+The same 8.222 GiB archive was served from the external SSD with the benchmark
+package's strict path-backed range origin and opened by the VitePress
+development viewer through its configured external-archive URL. `origin-check`
+passed size, stable content-addressed ETag, identity encoding, `no-transform`,
+CORS/preflight, exposed headers, exact `Content-Range`, and multiple sampled
+`206 Partial Content` reads.
+
+The first viewer load queried
+`CHM13#chr1:1,000,000-1,100,000` with 100 bp context. The application made a
+one-byte `0-0` size-discovery GET followed by this traced query plan:
+
+| Layer | Inclusive byte range | Bytes | Local origin elapsed |
+|---|---:|---:|---:|
+| Bootstrap | `0-16383` | 16,384 | 0.6 ms |
+| Root tail | `16384-30952` | 14,569 | 0.5 ms |
+| Directory | `35049-43240` | 8,192 | 0.4 ms |
+| Coalesced payload | `50914188-51169240` | 255,053 | 1.3 ms |
+
+The query trace therefore contains four reads, four dependency rounds, and
+294,198 unique bytes with zero duplicate bytes. Including size discovery, the
+browser fetched 294,199 bytes, or 0.00333227% of the archive. Every application
+GET was an exact `206`; there was no full-object `200 GET`. Origin elapsed times
+measure the local Node/file response path with uncontrolled OS cache state, not
+public-network latency or a cold-SSD benchmark.
+
+The configured-archive open took 27.3 ms, query wall time was 1,678.3 ms, and
+the complete UI action took 1,717.3 ms. The reader selected seven tiles and the
+viewer observed 8,592 decoded tile-node occurrences, 11,908 decoded edges, and
+2,196 weighted local traversals. Rendering correctly applied its explicit
+budget: 2,000 nodes, 2,759 edges, and 24 traversal lanes. The browser result
+produced the same canonical hash as the Rust source-oracle verification, and
+the page reported no console warnings or errors.
+
+The trace also reported 1,352.8 ms of regional decode work and 3,696.4 ms for
+decompression. The decompression value is not an elapsed phase and must not be
+added to query wall time: current per-tile timers span suspended promises while
+other tile work advances, so their accumulated durations overlap and can exceed
+the 1,678.3 ms end-to-end wall clock. Until that instrumentation is repaired,
+the defensible conclusion is that range transfer is already small and local
+origin service is sub-millisecond to low-millisecond, while browser
+decompression/decode/reconstruction dominates the remaining query wall. A
+public origin benchmark and corrected non-overlapping phase timings are the
+next gates before choosing JavaScript, WASM, SIMD, or worker optimizations.
