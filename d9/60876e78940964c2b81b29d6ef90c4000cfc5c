@@ -1,0 +1,151 @@
+docs/FILE_FORMAT_V1.md
+  s_c6adeff06c2400::t_6a8cb99e7b4c61 810-841
+  s_c6adeff06c2400::t_6ea145828399c3 118-242
+  s_c6adeff06c2400::t_d8a87bb63c01e3 678-691,695-697,709-711
+docs/OPTIMIZATION_LOG.md
+  s_c6adeff06c2400::t_794d37ed84a4a2 597-632
+docs/adr/0001-v1-extension-directory.md
+  s_c6adeff06c2400::t_bc8d25565de3bb 102-109,118-123
+crates/pangenome-range-format/src/lib.rs
+  s_c6adeff06c2400::t_39ddd06158a651 30-33
+  s_c6adeff06c2400::t_4323a313961e4f 36
+  s_c6adeff06c2400::t_521042aa51a2b9 7,27-29,34-35
+  s_c6adeff06c2400::t_ba42812515a1a4 37
+CHANGELOG.md
+  s_c6adeff06c2400::t_bed6eecdfd90a4 7-14,17,42-46
+  s_c6adeff06c2400::t_bd434683b0bd0f 15-16
+  s_c6adeff06c2400::t_794d37ed84a4a2 35-38
+docs/FORMAT_RELEASE_CHECKLIST.md
+  s_c6adeff06c2400::t_a3f4e6a27a328a 26-29,135-136
+test-data/golden/record-annotations-v1.gff3
+  s_c6adeff06c2400::t_cef14f27fc366a 1-2
+crates/pangenome-range-build/src/lib.rs
+  s_c6adeff06c2400::t_5f6f6f7be1379f 12
+crates/pangenome-range-format/src/features.rs
+  s_c6adeff06c2400::t_521042aa51a2b9 1,4,6-52,70-133,139,141-146,151,153-187,193-198,202-259,265-306,312-344,348-368,374,379-411,417-474,480-496,498-512,518-570,572-699
+  s_c6adeff06c2400::t_39ddd06158a651 2-3,152,199-201,345-347,375-378
+  s_c6adeff06c2400::t_6c25ec73baca9c 134
+  s_c6adeff06c2400::t_4323a313961e4f 5,53-55,61-69
+  s_c6adeff06c2400::t_f3a2cac30caf63 135-138,140
+  s_c6adeff06c2400::t_01cc141466d2ef 56-60,147-150,188-192,260-264,307-311,369-373,412-416,475-479,497,513-517,571
+packages/browser/src/reader/types.ts
+  s_c6adeff06c2400::t_1ec7aa7e4572b3 57,180-263,270-272
+docs/FIXED_WINDOW_ARCHIVE.md
+  s_c6adeff06c2400::t_bed6eecdfd90a4 15,18,34-49,91,97-98,123-125
+results/2026-08-26-default-viewer-indexes-whole-hprc/config.json
+  s_c6adeff06c2400::t_794d37ed84a4a2 1-36
+test-data/golden/record-archive-v1.json
+  s_c6adeff06c2400::t_d49431decc2a3a 8-11,45
+  s_c6adeff06c2400::t_93135fd6c09dbd 12-38
+results/2026-08-26-default-viewer-indexes-v1/config.json
+  s_c6adeff06c2400::t_73c46056ea81d6 1-28
+packages/browser/src/reader/features.ts
+  s_c6adeff06c2400::t_40f14097e6b551 1-94,97-123,127-139,141-147,186-190,193-215,218-242,248-293,296-368,374-450,453-464
+  s_c6adeff06c2400::t_2de51f3c5276d2 148-157,160-185
+  s_c6adeff06c2400::t_eb06c13868efd4 140
+  s_c6adeff06c2400::t_ca2199c46282e8 95-96,124-126,191-192,216-217,243-247,294-295,369-373,451-452
+  s_c6adeff06c2400::t_fb298410d1b3ad 158-159
+crates/pangenome-range-build/src/features.rs
+  s_c6adeff06c2400::t_d8313db77ede04 492-493,507-512
+  s_c6adeff06c2400::t_dca0171bdc2171 151-154,219-222
+  s_c6adeff06c2400::t_5f6f6f7be1379f 1-112,115-131,135-150,155-186,194-208,211-218,223-267,297-299,305,316-330,334-410,420-425,432-452,543-568,570-656,659-665,682-686,690-694,697-700
+  s_c6adeff06c2400::t_39ddd06158a651 113-114,132-134,187-193,279-280,300-304,306-315,331-333,411-419,569,657-658
+  s_c6adeff06c2400::t_9198f74afae7bb 209-210,268-278,281-296,666-681,687-689,695-696
+  s_c6adeff06c2400::t_d33f1820c302fd 426-431,453-491,494-506,513-542
+crates/pangenome-range-build/src/fixed.rs
+  s_c6adeff06c2400::t_1da8d4dccc1ddf 4586-4589,4591-4592,4616-4620
+  s_c6adeff06c2400::t_39ddd06158a651 10-15,41,2115-2121,2392-2400
+  s_c6adeff06c2400::t_428e9e29b0d9aa 2021-2023,2082-2092,2135-2139,2372,2375-2389,2402,2521-2526
+  s_c6adeff06c2400::t_d33f1820c302fd 4438
+  s_c6adeff06c2400::t_86a502e4d37905 4443-4450,4464,4482-4505
+  s_c6adeff06c2400::t_cef14f27fc366a 4451-4452,4476-4477
+  s_c6adeff06c2400::t_5787e89fd639ed 4571-4585,4590,4593-4615,4621-4632
+  s_c6adeff06c2400::t_201b944fcfad57 40,42,89-90,106-107,407-412,549-552,571-572,949-952,1354-1357,1369-1372,1815-1826,1913-1916
+  s_c6adeff06c2400::t_3f7e36f7e0b973 4570
+packages/browser/src/reader/index.ts
+  s_c6adeff06c2400::t_8b42c699a9b3d9 34,37-38,40-42,46,58-59
+  s_c6adeff06c2400::t_ca2199c46282e8 157
+docs/ARCHITECTURE.md
+  s_c6adeff06c2400::t_bed6eecdfd90a4 176-177,184-190
+  s_c6adeff06c2400::t_c541a8e964ed19 191
+crates/pangenome-range-format/src/validation.rs
+  s_c6adeff06c2400::t_39ddd06158a651 235-239,247-248,251-252,261
+  s_c6adeff06c2400::t_a0c1f17e30be6f 4-7,228-231,246,249-250,253-260,262-326,328-332,334,452-487
+  s_c6adeff06c2400::t_01cc141466d2ef 327
+  s_c6adeff06c2400::t_be5ddfd674d23d 488
+crates/pangenome-range-cli/src/main.rs
+  s_c6adeff06c2400::t_ed8abe7fdce37f 262-263,729-734
+crates/pangenome-range-build/src/scale.rs
+  s_c6adeff06c2400::t_1b95b12fa66b6d 216-220,222-231
+  s_c6adeff06c2400::t_c2661c58c552f4 379
+  s_c6adeff06c2400::t_1da8d4dccc1ddf 221
+  s_c6adeff06c2400::t_ed8abe7fdce37f 60-61,87-88,132-133,336-337,410-411
+packages/browser/src/reader/archive.ts
+  s_c6adeff06c2400::t_1c2759d5ad8687 642,644-690,694-737
+  s_c6adeff06c2400::t_fb298410d1b3ad 16
+  s_c6adeff06c2400::t_50229b393090bd 4-8,11,14-15,17,22,24-25,28,30,40-41,53,109-118,578,593,595,597,602,615-618,622-630,633-641
+  s_c6adeff06c2400::t_39484816fa3904 1017-1018
+  s_c6adeff06c2400::t_de30b1e3b32d05 9-10,12-13,27
+  s_c6adeff06c2400::t_1ea26003caf910 2011-2012,2020,2094-2097,2114
+  s_c6adeff06c2400::t_3f18316ed43e97 26,1068-1094,1096-1229,1233-1301
+  s_c6adeff06c2400::t_2de51f3c5276d2 1095
+  s_c6adeff06c2400::t_ca2199c46282e8 691-693,738,1230-1232,1431-1433,1469-1471,1504-1514,1531-1534,2098-2107
+  s_c6adeff06c2400::t_4dbafa5ebf381a 1048,1302,1409-1410,1418-1420,1430,1434-1468,1472-1503,1515-1530,1535-1596
+  s_c6adeff06c2400::t_3253833b6deba5 242-278,1008,1011,1027,1039,1046-1047
+  s_c6adeff06c2400::t_a4faf3c9b4ee48 643,1303,1597
+results/2026-08-26-default-viewer-indexes-v1/summary.json
+  s_c6adeff06c2400::t_73c46056ea81d6 1-2,4-43,60-67,69,78-79,82-83
+  s_c6adeff06c2400::t_3e2e10cd3d9181 70-77
+  s_c6adeff06c2400::t_794d37ed84a4a2 3,44-59,80-81
+  s_c6adeff06c2400::t_8f26ffffcf6887 68
+results/2026-08-26-default-viewer-indexes-v1/REPORT.md
+  s_c6adeff06c2400::t_8f26ffffcf6887 61
+  s_c6adeff06c2400::t_794d37ed84a4a2 64,66-71,75-77
+  s_c6adeff06c2400::t_3e2e10cd3d9181 62
+  s_c6adeff06c2400::t_73c46056ea81d6 1-60,63,65,72-74
+results/2026-08-26-default-viewer-indexes-whole-hprc/REPORT.md
+  s_c6adeff06c2400::t_794d37ed84a4a2 1-90
+packages/browser/test/reader.test.ts
+  s_c6adeff06c2400::t_fb298410d1b3ad 5-7
+  s_c6adeff06c2400::t_9ce3abc11a0d97 702-705
+  s_c6adeff06c2400::t_03101759716b14 146-183,625-626,630,632-634,638-644,646-649,651,664-666,669,671
+  s_c6adeff06c2400::t_aeba32bef98bfb 239
+  s_c6adeff06c2400::t_161cf740a851e5 673-676
+  s_c6adeff06c2400::t_54d5465a2de1ab 210-238,240-241
+  s_c6adeff06c2400::t_8a52523e0d170e 620-624,627-629,631,635-637,645,650,652-663,667-668,672
+  s_c6adeff06c2400::t_cef14f27fc366a 713-714
+  s_c6adeff06c2400::t_ca2199c46282e8 670
+  s_817f77158752b7::t_e4ac9f5326d60d 4
+README.md
+  s_c6adeff06c2400::t_bed6eecdfd90a4 133,147-156,164-175
+  s_c6adeff06c2400::t_1fefc4034e8c2c 176
+results/2026-08-26-default-viewer-indexes-whole-hprc/summary.json
+  s_c6adeff06c2400::t_794d37ed84a4a2 1-76
+packages/browser/test/viewer.test.ts
+  s_c6adeff06c2400::t_39484816fa3904 206-207
+  s_c6adeff06c2400::t_4d51ece4851685 184-190
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.24",
+  "base_commit_sha": "d960876e78940964c2b81b29d6ef90c4000cfc5c",
+  "prompts": {},
+  "sessions": {
+    "s_817f77158752b7": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a03a49-32a9-7c01-a90e-639f8e78a147",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "aaron decker <aaron@ard.ninja>"
+    },
+    "s_c6adeff06c2400": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a03eda-5280-7641-a2d1-995a448eacdd",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "aaron decker <aaron@ard.ninja>"
+    }
+  }
+}
