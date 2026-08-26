@@ -1,0 +1,47 @@
+[package]
+name = "pangenome-range-fuzz"
+version = "0.0.0"
+publish = false
+edition = "2024"
+
+[package.metadata]
+cargo-fuzz = true
+
+[dependencies]
+libfuzzer-sys = "0.4"
+pangenome-range-format = { path = "../crates/pangenome-range-format" }
+
+[[bin]]
+name = "archive_header"
+path = "fuzz_targets/archive_header.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "root_index"
+path = "fuzz_targets/root_index.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "directory_page"
+path = "fuzz_targets/directory_page.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "regional_payload"
+path = "fuzz_targets/regional_payload.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "packed_record"
+path = "fuzz_targets/packed_record.rs"
+test = false
+doc = false
+bench = false

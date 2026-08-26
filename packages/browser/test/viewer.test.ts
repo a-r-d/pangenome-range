@@ -213,6 +213,7 @@ function makeTrace(start: number): QueryTrace {
     directoryBytes: 0,
     payloadBytes: 0,
     cacheHits: { bootstrap: 0, directory: 0, payload: 0 },
+    integrityMs: 0,
     decompressionMs: 0,
     decodeMs: 0,
     mergeMs: 0,

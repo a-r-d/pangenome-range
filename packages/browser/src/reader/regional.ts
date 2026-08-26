@@ -174,6 +174,9 @@ function decodeBytecode(
       throw corrupt("GBWT bytecode integer overflow");
     }
     if ((byte & 0x80) === 0) {
+      if (shift > 0n && (byte & 0x7f) === 0) {
+        throw corrupt("non-minimal GBWT bytecode integer");
+      }
       return result;
     }
     shift += 7n;

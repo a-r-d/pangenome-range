@@ -4,6 +4,10 @@ export {
   UnsupportedArchiveVersionError,
   UnsupportedChunkCodecError,
 } from "./archive.js";
+export {
+  canonicalGraphHash,
+  canonicalHaplotypeTileHash,
+} from "./canonical.js";
 export type { DecodeRegionalPayloadOptions } from "./regional.js";
 export {
   CorruptRegionalPayloadError,

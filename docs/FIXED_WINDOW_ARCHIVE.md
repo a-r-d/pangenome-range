@@ -12,6 +12,7 @@ A v1 object is one immutable static `.pngr` file:
 ```text
 64-byte PNGRNG01 header
 variable root manifest
+optional versioned extension directory and payloads
 contiguous fixed 4 KiB arithmetic directory pages
 independently compressed PNGRGN01 regional payloads
 ```
@@ -20,7 +21,9 @@ Each reference manifest records its real sample and contig, coordinate span,
 base window size, arithmetic bucket span, directory-page range, entry count,
 and one payload codec. A query computes the necessary page numbers directly
 from its coordinates. Adaptive subchunks remain inside their parent bucket, so
-one page can name up to 102 payloads without another index level.
+one page can name up to 72 payloads without another index level. Each entry
+contains BLAKE3-128 over the exact encoded payload for verification before
+decompression.
 
 The root and some first directory pages normally fit in the 16 KiB bootstrap.
 After directory lookup, selected compressed payloads are fetched in one parallel
@@ -71,7 +74,7 @@ Rust and TypeScript both:
 1. validate the v1 header and root;
 2. compute fixed directory pages arithmetically;
 3. reject invalid counts, offsets, codecs, padding, or object ranges;
-4. decompress selected payloads to their exact declared lengths;
+4. verify encoded payload BLAKE3-128, then decompress to the exact declared length;
 5. decode local records and reconstruct weighted traversal evidence;
 6. assemble selected topology and the real reference traversal;
 7. produce the same domain-separated v1 canonical result hash.
@@ -90,7 +93,8 @@ versions. The most relevant reports are:
 - [arithmetic directory and streaming writer smoke](https://github.com/a-r-d/pangenome-range/blob/main/results/2026-08-25-mhc-v3-streaming-smoke-final/REPORT.md);
 - [tile-local haplotype semantics smoke](https://github.com/a-r-d/pangenome-range/blob/main/results/2026-08-25-mhc-v4-local-haplotypes-smoke-final/REPORT.md);
 - [record-preserving encoder and full-source run](https://github.com/a-r-d/pangenome-range/blob/main/results/2026-08-25-record-preserving-v4/REPORT.md);
-- [TypeScript/Rust reader conformance](https://github.com/a-r-d/pangenome-range/blob/main/results/2026-08-25-typescript-reader-conformance/REPORT.md).
+- [TypeScript/Rust reader conformance](https://github.com/a-r-d/pangenome-range/blob/main/results/2026-08-25-typescript-reader-conformance/REPORT.md);
+- [v1 release-candidate audit and whole-HPRC rerun](https://github.com/a-r-d/pangenome-range/blob/main/results/2026-08-26-format-v1-release-candidate/REPORT.md).
 
 The format reset changes magic/version bytes and canonical hash domain strings,
 not the recorded performance conclusions. Old research archives are
@@ -99,7 +103,8 @@ intentionally unsupported and must be regenerated.
 ## Current limitations
 
 - The upstream `gbz` source is still fully deserialized before tile work.
-- The 102-entry dense-bucket limit needs broader pathological-locus testing.
+- The 72-entry dense-bucket limit has exact 72/73 tests; broader
+  pathological-locus and retained fuzz campaigns remain release gates.
 - The current regional occurrence safety limit is 16,777,216 per tile; adaptive
   splitting must keep tiles below it.
 - Anonymous haplotypes have no cross-tile sample identity.

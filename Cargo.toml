@@ -5,6 +5,7 @@ members = [
     "crates/pangenome-range-format",
     "crates/pangenome-range-query",
 ]
+exclude = ["fuzz"]
 default-members = ["crates/pangenome-range-cli"]
 resolver = "3"
 

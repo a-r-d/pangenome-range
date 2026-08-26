@@ -9,12 +9,15 @@ pangenome-range-cli ──> pangenome-range-build ──> pangenome-range-query
                                └────────> pangenome-range-format
 ```
 
-`pangenome-range-format` contains the storage seam and network cost model, but no
-graph semantics. `pangenome-range-query` contains the canonical semantic result
-types. `pangenome-range-build` contains the GBZ/GBZ-base source adapters and the
-first concrete candidate layout and its external-memory encoder. The current
-object is normatively specified in [File Format v1](FILE_FORMAT_V1.md) and
-summarized in [Fixed-window archive v1](FIXED_WINDOW_ARCHIVE.md).
+`pangenome-range-format` owns the normative v1 header/root/directory and
+regional codecs, corruption checks, reader primitives, structural validation,
+storage seam, and network cost model. It has no GBZ dependency.
+`pangenome-range-query` owns canonical graph/tile semantics, comparison, and
+hashing. `pangenome-range-build` owns the GBZ/GBZ-base source adapters,
+reference anchoring, tile selection, bounded encoder pipeline, build metrics,
+and candidate-layout experiments. The current object is normatively specified
+in [File Format v1](FILE_FORMAT_V1.md) and summarized in
+[Fixed-window archive v1](FIXED_WINDOW_ARCHIVE.md).
 
 ## Direct archive construction
 
@@ -39,9 +42,12 @@ by `--threads` and `--max-queued-bytes`; the CLI defaults to available
 parallelism capped at eight and a 256 MiB queue cap. Results are consumed in
 input order, and adaptive children precede later completed work, so worker
 completion order cannot change archive offsets or bytes. The completed
-temporary object is flushed, every physical payload is decompressed and
-structurally bounds-checked, and then it is atomically renamed. Failed temporary
-objects are removed unless `--keep-partial` is set.
+temporary object is flushed, then the standard gate validates directory/range
+structure, BLAKE3-128 over every unique encoded payload, exact decompression,
+and regional structural decoding with bounded workers. Only then is it
+atomically renamed. `validate --mode full` additionally reconstructs every
+physical tile traversal; `verify` remains the independent selected-query source
+oracle. Failed temporary objects are removed unless `--keep-partial` is set.
 
 The encoder computes exact total selected reference bases before payload work.
 Progress snapshots report current reference/coordinate, accepted and physical
@@ -60,6 +66,21 @@ compressed bytes reread, percentage, rate, elapsed time, and ETA. Interactive
 terminals select readable plain progress by default; JSON mode emits stable
 newline-delimited events, while redirected commands remain quiet unless a mode
 is selected explicitly.
+
+Wall phases in encoder reports are non-overlapping through the output SHA-256
+pass. Aggregate selection, encoding, compression, decode, and reconstruction
+worker milliseconds are labeled separately and must not be added to the wall
+critical path.
+
+## Source access seam
+
+`PangenomeSource` isolates reference discovery, borrowed node/record access,
+and reference-position lookup from the encoder pipeline. `LoadedGbzSource` is
+the current correctness baseline and still fully deserializes GBZ before tile
+work. The CLI performs an explicit source-memory preflight and reports
+`source_access_is_bounded: false`; interval filters do not imply bounded source
+RAM. Lazy or mmap-backed simple-sds/GBZ access can be prototyped behind this
+seam without changing the accepted writer or recreating a global visit index.
 
 ## Primary npm product boundary
 

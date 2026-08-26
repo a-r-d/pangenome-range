@@ -113,6 +113,8 @@ It also retains input/output SHA-256, time to first payload, archive/index/paylo
 bytes, queue peaks, scratch/temp bytes, throughput, and process RSS. A filtered
 pilot still pays the current full GBZ deserialization and `PathIndex` costs, but
 reference-length discovery is restricted before walking reference paths.
+The schema-3 report times the final output SHA-256 and records the complete
+pre-report wall critical path; worker CPU milliseconds remain separate.
 
 For long runs, use `--progress json --progress-interval-seconds 5`. The initial
 `encoding_plan` records the exact selected reference count/base total and the
@@ -149,7 +151,10 @@ matched canonical hash
 For a full structural reread and a multi-query semantic workload:
 
 ```bash
-cargo run --release -p pangenome-range-cli -- validate OUTPUT.pngr
+cargo run --release -p pangenome-range-cli -- validate OUTPUT.pngr \
+  --mode standard --workers 8 --max-queued-bytes 536870912
+cargo run --release -p pangenome-range-cli -- validate OUTPUT.pngr \
+  --mode full --workers 8 --max-queued-bytes 536870912
 cargo run --release -p pangenome-range-cli -- verify OUTPUT.pngr \
   --against INPUT.gbz --workload verification-workload.json \
   --report semantic-validation.json
@@ -164,6 +169,14 @@ cross-origin fixture through `pnpm test:browser`. Loopback timing is retained as
 functional evidence only. The 11-request large-object observation predates the
 current TypeScript coalescing and cache tranche and remains historical evidence,
 not a prediction of the current request plan.
+
+The release-candidate whole-HPRC rerun is retained in
+[`results/2026-08-26-format-v1-release-candidate/REPORT.md`](https://github.com/a-r-d/pangenome-range/blob/main/results/2026-08-26-format-v1-release-candidate/REPORT.md).
+On the same source/options/host, the standard pre-rename gate fell from
+240.736 s to 28.123 s with eight bounded workers. The archive and index sizes
+remained exactly 8,828,788,418 and 47,376,617 bytes. This is structural and
+integrity evidence; the separate nine-query GBZ oracle supplied semantic
+evidence.
 
 ## TypeScript reader conformance result
 

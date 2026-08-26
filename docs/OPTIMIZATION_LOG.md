@@ -445,3 +445,59 @@ origin service is sub-millisecond to low-millisecond, while browser
 decompression/decode/reconstruction dominates the remaining query wall. A
 public origin benchmark and corrected non-overlapping phase timings are the
 next gates before choosing JavaScript, WASM, SIMD, or worker optimizations.
+
+## 2026-08-26: release-candidate integrity and bounded validation accepted
+
+This pre-stable tranche changed v1 directory entries from 40 to 56 bytes by
+placing BLAKE3-128 over each exact encoded regional payload in the arithmetic
+directory. It also assigned header bytes 48..63 to an optional bounded extension
+directory. Both decisions have ADRs; there is no old-research-archive decoder.
+
+The integrity placement study scanned the accepted whole-HPRC archive:
+
+| Measurement | Result |
+| --- | ---: |
+| Physical payloads | 363,105 |
+| Encoded payload bytes | 8,781,411,801 |
+| Maximum entries in one 4 KiB page | 52 |
+| Directory scan | 81.316 ms |
+| Payload reads | 3,915.411 ms |
+| BLAKE3 | 2,334.885 ms / 3,586.7 MiB/s |
+
+The 128-bit directory placement reduced theoretical page capacity from 102 to
+72, but no observed page exceeded 52. It therefore modeled zero index/archive
+growth and zero extra page reads, while detecting corruption before
+decompression. Header placement could not do that; an extension table added
+5.8-8.7 MB and at least one uncached lookup.
+
+The default atomic gate is now `standard`: validate directory/offset structure,
+deduplicate exact physical ranges, verify BLAKE3-128, decompress exactly, and
+decode the regional structure. `full` additionally reconstructs every physical
+tile traversal. Both use byte-bounded workers; aggregate worker milliseconds
+are separate from wall time.
+
+On MHC, standard validation measured 85.550, 44.236, 22.534, and 12.049 ms at
+1, 2, 4, and 8 workers. A new same-source/options/host whole-HPRC run then
+produced exactly the prior archive and index byte lengths:
+
+| Measurement | Previous v1 | Release candidate |
+| --- | ---: | ---: |
+| Archive | 8,828,788,418 B | 8,828,788,418 B |
+| Index | 47,376,617 B | 47,376,617 B |
+| Construction including validation | 552.565 s | 354.481 s |
+| Pre-rename validation | 240.736 s | 28.123 s |
+| Final output SHA-256 | not separated | 32.520 s |
+| Whole command | about 641 s | 438.720 s |
+| Peak RSS | 8,776,204 KiB | 8,775,928 KiB |
+
+The candidate archive SHA-256 is
+`76ae6616d296af1c270420ecbaa1fdb1dfa80f28645d72df589a31d2f0f0121e`.
+All nine retained source-oracle queries passed graph and tile-local haplotype
+comparison. One- and four-worker MHC encodes remained byte-identical at SHA-256
+`164d18c254cae1e52bfed5a6cd53ea9d48c8d14ab50dbcc85d5e3b54f5569c70`.
+
+Source access remains the independent limitation. The new `PangenomeSource`
+seam and memory preflight report `fully-loaded-gbz` / unbounded access. A
+two-chunk HPRC pilot still peaked at 8,776,080 KiB. This rejects any claim that
+filtering makes source memory bounded and leaves a whole 1000GP attempt
+unauthorized pending lazy/mmap upstream work.

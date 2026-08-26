@@ -30,6 +30,19 @@ resolved by `Cargo.lock`:
 
 GBZ 0.7.0 itself uses `simple-sds` 0.4.2 and `zstd` 0.13.3 in this lockfile.
 
+## Lazy source-access issue draft
+
+The release-candidate encoder now has a `PangenomeSource` seam, but the
+`LoadedGbzSource` baseline still calls `simple_sds::serialize::load_from` and
+fully deserializes the object. On the 5,492,627,216-byte HPRC source, a two-tile
+filtered pilot still reached 8,776,080 KiB peak RSS. Filtering therefore does
+not bound source memory.
+
+A focused upstream prototype/issue is retained in
+[`UPSTREAM_LAZY_GBZ_ACCESS.md`](UPSTREAM_LAZY_GBZ_ACCESS.md). It asks for
+borrowed/mmap or section-lazy metadata, sequence, GBWT record, and reference
+position access—not a global occurrence table or SQLite visit index.
+
 ## JavaScript benchmark dependencies
 
 The private benchmark package uses `fzstd` 0.1.1 (MIT) through the public

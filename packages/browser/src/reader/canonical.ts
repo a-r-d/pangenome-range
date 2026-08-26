@@ -367,6 +367,70 @@ function hex(bytes: Uint8Array): string {
   );
 }
 
+interface CanonicalWeightedTraversal {
+  readonly weight: bigint;
+  readonly handles: readonly bigint[];
+}
+
+function compareBigint(left: bigint, right: bigint): number {
+  return left < right ? -1 : left > right ? 1 : 0;
+}
+
+function compareWeightedTraversal(
+  left: CanonicalWeightedTraversal,
+  right: CanonicalWeightedTraversal,
+): number {
+  const weight = compareBigint(left.weight, right.weight);
+  if (weight !== 0) return weight;
+  const sharedLength = Math.min(left.handles.length, right.handles.length);
+  for (let index = 0; index < sharedLength; index += 1) {
+    const handle = compareBigint(
+      left.handles[index] as bigint,
+      right.handles[index] as bigint,
+    );
+    if (handle !== 0) return handle;
+  }
+  return left.handles.length - right.handles.length;
+}
+
+/**
+ * Stable BLAKE3 digest shared with CanonicalHaplotypeTile::canonical_hash in
+ * Rust. The hash covers tile provenance and weighted local traversals, not a
+ * cross-tile sample identity.
+ */
+export function canonicalHaplotypeTileHash(tile: RegionTile): string {
+  const traversals = Array.from(
+    { length: tile.haplotypes.weights.length },
+    (_, index): CanonicalWeightedTraversal => {
+      const start = tile.haplotypes.traversalOffsets[index];
+      const end = tile.haplotypes.traversalOffsets[index + 1];
+      const weight = tile.haplotypes.weights[index];
+      if (start === undefined || end === undefined || weight === undefined) {
+        throw corrupt("tile-local traversal table is truncated");
+      }
+      return {
+        weight,
+        handles: Array.from(tile.haplotypes.orientedNodes.subarray(start, end)),
+      };
+    },
+  ).sort(compareWeightedTraversal);
+  const hasher = blake3.create();
+  hasher.update(
+    textEncoder.encode("pangenome-range canonical haplotype tile v1\0"),
+  );
+  putBytes(hasher, textEncoder.encode(tile.reference.sample));
+  putBytes(hasher, textEncoder.encode(tile.reference.contig));
+  putU64(hasher, BigInt(tile.coreStart));
+  putU64(hasher, BigInt(tile.coreEnd));
+  putU64(hasher, BigInt(traversals.length));
+  for (const traversal of traversals) {
+    putU64(hasher, traversal.weight);
+    putU64(hasher, BigInt(traversal.handles.length));
+    for (const handle of traversal.handles) putOriented(hasher, handle);
+  }
+  return hex(hasher.digest());
+}
+
 /** Stable BLAKE3 digest shared with CanonicalSubgraph::canonical_hash in Rust. */
 export function canonicalGraphHash(graph: RegionGraph): string {
   const hasher = blake3.create();

@@ -1,0 +1,103 @@
+{
+  "schemaVersion": 1,
+  "verdict": "release-candidate-not-stable",
+  "byteFormatChange": {
+    "extensionDirectoryPointer": true,
+    "payloadIntegrity": "blake3-128-in-directory-entry",
+    "directoryEntryBytesBefore": 40,
+    "directoryEntryBytesAfter": 56,
+    "entriesPerDirectoryPageBefore": 102,
+    "entriesPerDirectoryPageAfter": 72,
+    "oldResearchArchivesRequireRegeneration": true
+  },
+  "wholeHprc": {
+    "sourceBytes": 5492627216,
+    "sourceSha256": "11d6047f79575ffb83757462484bad134ed20928bd2c8171ec52e35a54976e2b",
+    "archiveBytesBefore": 8828788418,
+    "archiveBytesAfter": 8828788418,
+    "archiveSha256Before": "9dec2631107557bebc0cef671c72e2ee232f7ae8aa1cd6c7ec3ce3706176b80d",
+    "archiveSha256After": "76ae6616d296af1c270420ecbaa1fdb1dfa80f28645d72df589a31d2f0f0121e",
+    "expansionRatio": 1.6073889726726358,
+    "indexBytesBefore": 47376617,
+    "indexBytesAfter": 47376617,
+    "directoryPages": 11559,
+    "directoryEntries": 363105,
+    "maximumObservedEntriesPerPage": 52,
+    "payloadBytes": 8781411801,
+    "constructionWallMsBefore": 552565.224015,
+    "constructionWallMsAfter": 354480.984139,
+    "standardValidationWallMsBefore": 240735.867156,
+    "standardValidationWallMsAfter": 28123.45976,
+    "outputSha256WallMsAfter": 32519.614862,
+    "wholeCommandWallMsAfter": 438720,
+    "peakRssKiBBefore": 8776204,
+    "peakRssKiBAfter": 8775928,
+    "occurrenceScratchBytes": 0,
+    "payloadSpoolBytes": 0,
+    "generalScratchBytes": 0,
+    "sourceOracleQueries": 9,
+    "sourceOracleGraphMatches": 9,
+    "sourceOracleHaplotypeMatches": 9
+  },
+  "mhcDeterminism": {
+    "archiveBytes": 4806677,
+    "sha256Threads1": "164d18c254cae1e52bfed5a6cd53ea9d48c8d14ab50dbcc85d5e3b54f5569c70",
+    "sha256Threads4": "164d18c254cae1e52bfed5a6cd53ea9d48c8d14ab50dbcc85d5e3b54f5569c70",
+    "byteIdentical": true,
+    "constructionWallMsThreads1": 671.75991,
+    "constructionWallMsThreads4": 266.748283,
+    "validationWallMsThreads1": 84.972571,
+    "validationWallMsThreads4": 21.719692,
+    "sourceOracleCorrect": true,
+    "tileLocalHaplotypesCorrect": true
+  },
+  "validationWorkerSweepMhc": [
+    { "requestedWorkers": 1, "effectiveWorkers": 1, "standardWallMs": 85.55 },
+    { "requestedWorkers": 2, "effectiveWorkers": 2, "standardWallMs": 44.236 },
+    { "requestedWorkers": 4, "effectiveWorkers": 4, "standardWallMs": 22.534 },
+    { "requestedWorkers": 8, "effectiveWorkers": 8, "standardWallMs": 12.049 }
+  ],
+  "fullValidationMhc": {
+    "requestedWorkers": 8,
+    "effectiveWorkers": 1,
+    "wallMs": 237.976,
+    "reason": "the conservative reconstruction memory estimate reduced concurrency under the 512 MiB queue budget"
+  },
+  "integrityStudy": {
+    "physicalPayloads": 363105,
+    "bytesHashed": 8781411801,
+    "directoryScanWallMs": 81.316284,
+    "payloadReadWallMs": 3915.410884,
+    "blake3WallMs": 2334.884598,
+    "blake3MiBPerSecond": 3586.732682,
+    "modeledArchiveGrowthBytes": 0,
+    "modeledIndexGrowthBytes": 0,
+    "extraDirectoryPageReads": 0,
+    "detectsBeforeDecompression": true
+  },
+  "sourceAccessPilot": {
+    "filter": "GRCh38 chr6 first two 16 KiB chunks",
+    "wallSeconds": 51.37,
+    "peakRssKiB": 8776080,
+    "sourceAccessMode": "fully-loaded-gbz",
+    "sourceAccessIsBounded": false,
+    "archiveBytes": 4807,
+    "archiveSha256": "23342b919d933a19002ac97aac8d8ce3495ed5f4d3fcb27c9e194aeba76f70ca"
+  },
+  "conformance": {
+    "manifestSchemaVersion": 2,
+    "noExtensionFixtureSha256": "f703e99934e52c906d9f10971328dd947a6196da0c38c1aed31e24ba31c98f89",
+    "optionalExtensionFixtureSha256": "03d3f08bebe9cd8490def1fef4ad13aced7362dc94412c84dcd72c3c5ff2be74",
+    "graphHash": "bf984cbc5b106306ab848fdb3c00e8b4124370006d3601c9d4873ae3a6fa1724",
+    "tileLocalHaplotypeHash": "283a80ba58d2841b5dc39b91b6623698f84aeec100938793db7bb39f65f6aabb",
+    "rustAndTypeScriptPass": true,
+    "malformedManifestCases": 13,
+    "fuzzTargets": 5
+  },
+  "stableV1Blockers": [
+    "standardize an archive provenance extension payload or a SHA-256-bound external sidecar contract",
+    "close the remaining cross-language zstd and merge-order adversarial checklist rows",
+    "run retained opt-in fuzz campaigns for the five parser targets"
+  ],
+  "whole1000GpResponsible": false
+}

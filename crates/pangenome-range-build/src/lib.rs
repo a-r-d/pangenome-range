@@ -10,6 +10,7 @@ use std::path::Path;
 mod experiment;
 mod fixed;
 mod scale;
+mod source;
 
 pub use experiment::{ExperimentMode, ExperimentOptions, run_fixed_window_experiment};
 pub use fixed::{
@@ -17,10 +18,14 @@ pub use fixed::{
     ChunkCodec, FixedArchiveConfig, FixedArchiveReader, OracleResult, QueryMeasurement, QuerySpec,
     build_fixed_archive_with_options, export_conformance_fixtures, internal_gbz_base_query,
     query_fixed_archive, source_oracle, validate_fixed_archive,
-    validate_fixed_archive_with_progress,
+    validate_fixed_archive_with_options, validate_fixed_archive_with_progress,
 };
 pub use scale::{
     EncodeOptions, EncodeSummary, EncoderScaleOptions, run_encode, run_encoder_scale_experiment,
+};
+pub use source::{
+    LoadedGbzSource, PangenomeSource, SourceMemoryPreflight, SourceReference,
+    SourceReferencePosition, source_memory_preflight,
 };
 
 #[derive(Clone, Debug, PartialEq, Eq)]

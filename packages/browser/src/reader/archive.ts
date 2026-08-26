@@ -1,3 +1,4 @@
+import { blake3 } from "@noble/hashes/blake3.js";
 import { decompress as fzstdDecompress } from "fzstd";
 import { assembleCanonicalGraph, canonicalGraphHash } from "./canonical.js";
 import { decodeRegionalPayload } from "./regional.js";
@@ -22,11 +23,12 @@ const ARCHIVE_VERSION = 1;
 const HEADER_BYTES = 64;
 const BOOTSTRAP_BYTES = 16 * 1024;
 const DIRECTORY_PAGE_BYTES = 4 * 1024;
-const DIRECTORY_ENTRY_BYTES = 40;
-const DIRECTORY_ENTRY_CAPACITY = 102;
+const DIRECTORY_ENTRY_BYTES = 56;
+const DIRECTORY_ENTRY_CAPACITY = 72;
 const DEFAULT_DIRECTORY_CACHE_BYTES = 1024 * 1024;
 const DEFAULT_PAYLOAD_CACHE_BYTES = 32 * 1024 * 1024;
 const DEFAULT_MAX_ROOT_BYTES = 16 * 1024 * 1024;
+const MAX_EXTENSION_DIRECTORY_BYTES = 1024 * 1024;
 const DEFAULT_MAX_CHUNK_BYTES = 64 * 1024 * 1024;
 const DEFAULT_PAYLOAD_COALESCING_GAP_BYTES = 64 * 1024;
 const CONSTRUCTION_CONTEXT = 100;
@@ -52,6 +54,8 @@ interface Header {
   rootLength: bigint;
   entryCount: bigint;
   dataOffset: bigint;
+  extensionDirectoryOffset: bigint;
+  extensionDirectoryLength: bigint;
 }
 
 interface Manifest {
@@ -75,6 +79,7 @@ interface DirectoryEntry {
   offset: bigint;
   compressedLength: bigint;
   uncompressedLength: bigint;
+  integrity: Uint8Array;
 }
 
 class BinaryReader {
@@ -193,6 +198,7 @@ interface MutableQueryTrace {
   bootstrapHits: number;
   directoryHits: number;
   payloadHits: number;
+  integrityMs: number;
   decompressionMs: number;
   decodeMs: number;
   directoryRoundRecorded: boolean;
@@ -209,6 +215,7 @@ function traceState(
     bootstrapHits: 1,
     directoryHits: 0,
     payloadHits: 0,
+    integrityMs: 0,
     decompressionMs: 0,
     decodeMs: 0,
     directoryRoundRecorded: false,
@@ -278,6 +285,7 @@ function finishTrace(
       payload: state.payloadHits,
     },
     decompressionMs: state.decompressionMs,
+    integrityMs: state.integrityMs,
     decodeMs: state.decodeMs,
     mergeMs,
     selectedChunks: tiles.length,
@@ -335,7 +343,8 @@ function decodeHeader(bytes: Uint8Array): Header {
   const rootLength = reader.u64();
   const entryCount = reader.u64();
   const dataOffset = reader.u64();
-  assertZero(reader.take(16), "archive header reserved bytes");
+  const extensionDirectoryOffset = reader.u64();
+  const extensionDirectoryLength = reader.u64();
   if (
     magic !== ARCHIVE_MAGIC ||
     version !== ARCHIVE_VERSION ||
@@ -346,7 +355,37 @@ function decodeHeader(bytes: Uint8Array): Header {
       `unsupported archive magic ${JSON.stringify(magic)}, version ${version}, header length ${headerLength}, or root offset ${rootOffset}`,
     );
   }
-  return { version, rootLength, entryCount, dataOffset };
+  if (
+    (extensionDirectoryOffset === 0n) !== (extensionDirectoryLength === 0n) ||
+    extensionDirectoryLength > BigInt(MAX_EXTENSION_DIRECTORY_BYTES)
+  ) {
+    throw corrupt("invalid extension directory pointer");
+  }
+  if (
+    extensionDirectoryLength !== 0n &&
+    extensionDirectoryOffset !==
+      checkedAdd(BigInt(HEADER_BYTES), rootLength, "root end")
+  ) {
+    throw corrupt("invalid extension directory pointer");
+  }
+  return {
+    version,
+    rootLength,
+    entryCount,
+    dataOffset,
+    extensionDirectoryOffset,
+    extensionDirectoryLength,
+  };
+}
+
+function directoryStart(header: Header): bigint {
+  return header.extensionDirectoryLength === 0n
+    ? checkedAdd(BigInt(HEADER_BYTES), header.rootLength, "root end")
+    : checkedAdd(
+        header.extensionDirectoryOffset,
+        header.extensionDirectoryLength,
+        "extension directory end",
+      );
 }
 
 function codecLabel(
@@ -378,13 +417,9 @@ function decodeRoot(bytes: Uint8Array, header: Header): Manifest[] {
     throw corrupt("reference manifest count exceeds root bytes");
   }
   const manifests: Manifest[] = [];
-  const rootEnd = checkedAdd(
-    BigInt(HEADER_BYTES),
-    header.rootLength,
-    "root end",
-  );
-  let previousPageEnd = rootEnd;
+  let previousPageEnd = directoryStart(header);
   let totalEntries = 0n;
+  const identities = new Set<string>();
   for (let index = 0; index < count; index += 1) {
     const manifest: Manifest = {
       sample: reader.string(),
@@ -403,6 +438,11 @@ function decodeRoot(bytes: Uint8Array, header: Header): Manifest[] {
     if (manifest.sample.length === 0 || manifest.contig.length === 0) {
       throw corrupt("reference manifest identity is empty");
     }
+    const identity = `${manifest.sample.length}:${manifest.sample}${manifest.contig.length}:${manifest.contig}:${manifest.start}:${manifest.end}`;
+    if (identities.has(identity)) {
+      throw corrupt("duplicate reference manifest interval");
+    }
+    identities.add(identity);
     if (
       manifest.start >= manifest.end ||
       manifest.gridStart > manifest.start ||
@@ -452,6 +492,62 @@ function decodeRoot(bytes: Uint8Array, header: Header): Manifest[] {
   return manifests;
 }
 
+function compareBytes(left: Uint8Array, right: Uint8Array): number {
+  for (let index = 0; index < left.byteLength; index += 1) {
+    const difference = (left[index] as number) - (right[index] as number);
+    if (difference !== 0) return difference;
+  }
+  return left.byteLength - right.byteLength;
+}
+
+function decodeExtensionDirectory(
+  bytes: Uint8Array,
+  header: Header,
+  sourceSize: bigint,
+): void {
+  const reader = new BinaryReader(bytes);
+  if (
+    textDecoder.decode(reader.take(8)) !== "PNGEXT01" ||
+    reader.u32() !== 1 ||
+    reader.u32() !== 64
+  ) {
+    throw corrupt("invalid extension directory header");
+  }
+  const count = safeNumber(reader.u64(), "extension entry count");
+  assertZero(reader.take(8), "extension directory reserved bytes");
+  if (count > Math.floor(reader.remaining / 64)) {
+    throw corrupt("extension entry count exceeds directory bytes");
+  }
+  let previousType: Uint8Array | undefined;
+  for (let index = 0; index < count; index += 1) {
+    const typeId = reader.take(16);
+    const flags = reader.u32();
+    decodeCodec(reader.u8());
+    assertZero(reader.take(3), "extension entry reserved bytes");
+    const offset = reader.u64();
+    const encodedLength = reader.u64();
+    const decodedLength = reader.u64();
+    reader.take(16);
+    const end = checkedAdd(offset, encodedLength, "extension payload end");
+    if (
+      typeId.every((byte) => byte === 0) ||
+      (previousType !== undefined && compareBytes(typeId, previousType) <= 0) ||
+      (flags & ~1) !== 0 ||
+      encodedLength === 0n ||
+      decodedLength === 0n ||
+      offset < header.dataOffset ||
+      end > sourceSize
+    ) {
+      throw corrupt("invalid extension entry");
+    }
+    if ((flags & 1) !== 0) {
+      throw corrupt("archive contains an unknown required extension");
+    }
+    previousType = typeId;
+  }
+  reader.finish();
+}
+
 function decodeDirectoryPage(
   bytes: Uint8Array,
   manifest: Manifest,
@@ -489,12 +585,14 @@ function decodeDirectoryPage(
     "directory bucket end",
   );
   const entries: DirectoryEntry[] = [];
+  let previousKey: readonly bigint[] | undefined;
   for (let index = 0; index < count; index += 1) {
     const start = reader.u64();
     const end = reader.u64();
     const offset = reader.u64();
     const compressedLength = reader.u64();
     const uncompressedLength = reader.u64();
+    const integrity = reader.take(16);
     const payloadEnd = checkedAdd(offset, compressedLength, "payload end");
     if (
       start >= end ||
@@ -509,6 +607,36 @@ function decodeDirectoryPage(
     ) {
       throw corrupt("invalid fixed directory entry");
     }
+    const integrityHigh = new DataView(
+      integrity.buffer,
+      integrity.byteOffset,
+      integrity.byteLength,
+    ).getBigUint64(0, true);
+    const integrityLow = new DataView(
+      integrity.buffer,
+      integrity.byteOffset,
+      integrity.byteLength,
+    ).getBigUint64(8, true);
+    const key = [
+      start,
+      end,
+      offset,
+      compressedLength,
+      uncompressedLength,
+      integrityHigh,
+      integrityLow,
+    ];
+    if (previousKey !== undefined) {
+      for (let keyIndex = 0; keyIndex < key.length; keyIndex += 1) {
+        const value = key[keyIndex] as bigint;
+        const previous = previousKey[keyIndex] as bigint;
+        if (value < previous) {
+          throw corrupt("directory entries are not ordered");
+        }
+        if (value > previous) break;
+      }
+    }
+    previousKey = key;
     entries.push({
       manifest,
       start,
@@ -516,6 +644,7 @@ function decodeDirectoryPage(
       offset,
       compressedLength,
       uncompressedLength,
+      integrity,
     });
   }
   assertZero(reader.take(reader.remaining), "directory page padding");
@@ -574,7 +703,11 @@ export class FzstdDecompressor implements ChunkDecompressor {
       "expected decompressed length",
     );
     options?.signal?.throwIfAborted();
-    const declaredLength = zstdFrameContentSize(compressed);
+    const frame = zstdFrameMetadata(compressed);
+    const declaredLength = frame.contentSize;
+    if (frame.encodedLength !== compressed.byteLength) {
+      throw corrupt("zstd payload must contain exactly one frame");
+    }
     if (declaredLength !== BigInt(expectedLength)) {
       throw corrupt(
         `zstd frame declares ${declaredLength} bytes, expected ${expectedLength}`,
@@ -596,7 +729,10 @@ export class FzstdDecompressor implements ChunkDecompressor {
   }
 }
 
-function zstdFrameContentSize(compressed: Uint8Array): bigint {
+function zstdFrameMetadata(compressed: Uint8Array): {
+  contentSize: bigint;
+  encodedLength: number;
+} {
   if (
     compressed.byteLength < 6 ||
     compressed[0] !== 0x28 ||
@@ -612,6 +748,9 @@ function zstdFrameContentSize(compressed: Uint8Array): bigint {
   }
   const singleSegment = (descriptor & 0x20) !== 0;
   const dictionaryFlag = descriptor & 0x03;
+  if (dictionaryFlag !== 0) {
+    throw corrupt("zstd dictionaries are not supported");
+  }
   const dictionaryBytes = [0, 1, 2, 4][dictionaryFlag] as number;
   const sizeFlag = descriptor >>> 6;
   const contentSizeBytes =
@@ -637,7 +776,35 @@ function zstdFrameContentSize(compressed: Uint8Array): bigint {
       BigInt(compressed[contentSizeOffset + index] as number) <<
       BigInt(index * 8);
   }
-  return contentSizeBytes === 2 ? value + 256n : value;
+  const contentSize = contentSizeBytes === 2 ? value + 256n : value;
+  let position = contentSizeOffset + contentSizeBytes;
+  let lastBlock = false;
+  while (!lastBlock) {
+    if (position + 3 > compressed.byteLength) {
+      throw corrupt("zstd block header is truncated");
+    }
+    const blockHeader =
+      (compressed[position] as number) |
+      ((compressed[position + 1] as number) << 8) |
+      ((compressed[position + 2] as number) << 16);
+    position += 3;
+    lastBlock = (blockHeader & 1) !== 0;
+    const blockType = (blockHeader >>> 1) & 0x03;
+    const blockSize = blockHeader >>> 3;
+    if (blockType === 3) throw corrupt("zstd frame uses a reserved block type");
+    const encodedBlockSize = blockType === 1 ? 1 : blockSize;
+    if (position + encodedBlockSize > compressed.byteLength) {
+      throw corrupt("zstd block is truncated");
+    }
+    position += encodedBlockSize;
+  }
+  if ((descriptor & 0x04) !== 0) {
+    if (position + 4 > compressed.byteLength) {
+      throw corrupt("zstd content checksum is truncated");
+    }
+    position += 4;
+  }
+  return { contentSize, encodedLength: position };
 }
 
 class ArchiveReader implements PangenomeArchive {
@@ -989,17 +1156,18 @@ class ArchiveReader implements PangenomeArchive {
   ): Promise<Array<Promise<RegionTile>>> {
     signal?.throwIfAborted();
     const compressedByKey = new Map<string, Uint8Array>();
-    const missing: DirectoryEntry[] = [];
+    const missingByKey = new Map<string, DirectoryEntry>();
     for (const entry of entries) {
       const key = `${entry.offset}:${entry.compressedLength}`;
       const cached = this.#payloadCache.get(key);
       if (cached === undefined) {
-        missing.push(entry);
+        missingByKey.set(key, entry);
       } else {
         compressedByKey.set(key, cached);
         if (trace !== undefined) trace.payloadHits += 1;
       }
     }
+    const missing = [...missingByKey.values()];
 
     const ranges: Array<{ start: bigint; end: bigint }> = [];
     for (const entry of [...missing].sort((left, right) =>
@@ -1061,6 +1229,7 @@ class ArchiveReader implements PangenomeArchive {
       );
       const compressed = stored.bytes.slice(start, start + length);
       const key = `${entry.offset}:${entry.compressedLength}`;
+      this.#verifyPayloadIntegrity(entry, compressed, trace);
       compressedByKey.set(key, compressed);
       this.#payloadCache.set(key, compressed);
     }
@@ -1129,6 +1298,23 @@ class ArchiveReader implements PangenomeArchive {
       );
     }
     return tile;
+  }
+
+  #verifyPayloadIntegrity(
+    entry: DirectoryEntry,
+    compressed: Uint8Array,
+    trace?: MutableQueryTrace,
+  ): void {
+    const started = performance.now();
+    const actual = blake3(compressed).subarray(0, 16);
+    if (
+      actual.some((byte, index) => byte !== (entry.integrity[index] as number))
+    ) {
+      throw corrupt("regional payload integrity mismatch");
+    }
+    if (trace !== undefined) {
+      trace.integrityMs += performance.now() - started;
+    }
   }
 
   async #readStored(
@@ -1260,13 +1446,21 @@ export async function openPangenomeArchive(
       header.rootLength,
       "root end",
     );
-    if (rootEnd > header.dataOffset || header.dataOffset > sourceSize) {
+    const metadataEnd = directoryStart(header);
+    if (
+      rootEnd > metadataEnd ||
+      metadataEnd > header.dataOffset ||
+      header.dataOffset > sourceSize
+    ) {
       throw corrupt("archive root/directory offsets are inconsistent");
     }
-    if (rootEnd > BigInt(bootstrap.byteLength)) {
+    if (metadataEnd > BigInt(bootstrap.byteLength)) {
       const remainder = await source.read(
         BigInt(bootstrap.byteLength),
-        safeNumber(rootEnd - BigInt(bootstrap.byteLength), "root remainder"),
+        safeNumber(
+          metadataEnd - BigInt(bootstrap.byteLength),
+          "metadata remainder",
+        ),
         signalOptions(options.signal),
       );
       openRanges.push({
@@ -1286,6 +1480,19 @@ export async function openPangenomeArchive(
       bootstrap.slice(HEADER_BYTES, safeNumber(rootEnd, "root end")),
       header,
     );
+    if (header.extensionDirectoryLength !== 0n) {
+      decodeExtensionDirectory(
+        bootstrap.slice(
+          safeNumber(
+            header.extensionDirectoryOffset,
+            "extension directory offset",
+          ),
+          safeNumber(metadataEnd, "extension directory end"),
+        ),
+        header,
+        sourceSize,
+      );
+    }
     return new ArchiveReader(
       source,
       sourceSize,

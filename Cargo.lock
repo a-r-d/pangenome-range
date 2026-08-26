@@ -452,6 +452,11 @@ dependencies = [
 [[package]]
 name = "pangenome-range-format"
 version = "0.1.0"
+dependencies = [
+ "blake3",
+ "serde",
+ "zstd",
+]
 
 [[package]]
 name = "pangenome-range-query"

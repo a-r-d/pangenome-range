@@ -189,6 +189,106 @@ impl CanonicalSubgraph {
 
         hasher.finalize()
     }
+
+    /// Describes the first high-information semantic differences from another
+    /// canonical result without depending on an archive representation.
+    #[must_use]
+    pub fn mismatch_summary(&self, expected: &Self) -> String {
+        let missing_nodes = expected
+            .nodes
+            .keys()
+            .filter(|id| !self.nodes.contains_key(id))
+            .copied()
+            .collect::<Vec<_>>();
+        let extra_nodes = self
+            .nodes
+            .keys()
+            .filter(|id| !expected.nodes.contains_key(id))
+            .copied()
+            .collect::<Vec<_>>();
+        let conflicting_sequences = self
+            .nodes
+            .iter()
+            .filter_map(|(id, sequence)| {
+                expected
+                    .nodes
+                    .get(id)
+                    .is_some_and(|expected| expected != sequence)
+                    .then_some(*id)
+            })
+            .collect::<Vec<_>>();
+        let missing_edges = expected
+            .edges
+            .difference(&self.edges)
+            .copied()
+            .collect::<Vec<_>>();
+        let extra_edges = self
+            .edges
+            .difference(&expected.edges)
+            .copied()
+            .collect::<Vec<_>>();
+        let candidate = self.normalized();
+        let expected = expected.normalized();
+        let first_path_mismatch = candidate
+            .paths
+            .iter()
+            .zip(&expected.paths)
+            .position(|(left, right)| left != right)
+            .or_else(|| {
+                (candidate.paths.len() != expected.paths.len())
+                    .then_some(candidate.paths.len().min(expected.paths.len()))
+            });
+        let path_detail = first_path_mismatch.map_or_else(
+            || "none".into(),
+            |index| {
+                format!(
+                    "index {index}: candidate {}, expected {}",
+                    path_summary(candidate.paths.get(index)),
+                    path_summary(expected.paths.get(index))
+                )
+            },
+        );
+        format!(
+            "nodes {}/{} (missing {} {:?}, extra {} {:?}, conflicting sequences {} {:?}); edges {}/{} (missing {} {:?}, extra {} {:?}); paths {}/{} (first mismatch {}); reference intervals match={}",
+            candidate.nodes.len(),
+            expected.nodes.len(),
+            missing_nodes.len(),
+            missing_nodes.iter().take(8).collect::<Vec<_>>(),
+            extra_nodes.len(),
+            extra_nodes.iter().take(8).collect::<Vec<_>>(),
+            conflicting_sequences.len(),
+            conflicting_sequences.iter().take(8).collect::<Vec<_>>(),
+            candidate.edges.len(),
+            expected.edges.len(),
+            missing_edges.len(),
+            missing_edges.iter().take(4).collect::<Vec<_>>(),
+            extra_edges.len(),
+            extra_edges.iter().take(4).collect::<Vec<_>>(),
+            candidate.paths.len(),
+            expected.paths.len(),
+            path_detail,
+            candidate.reference_intervals == expected.reference_intervals,
+        )
+    }
+}
+
+fn path_summary(path: Option<&CanonicalPath>) -> String {
+    path.map_or_else(
+        || "<absent>".into(),
+        |path| {
+            format!(
+                "{}#{} haplotype={} fragment={} reference={} visits={} first={:?} last={:?}",
+                path.sample,
+                path.contig,
+                path.haplotype,
+                path.fragment,
+                path.is_reference,
+                path.traversal.len(),
+                path.traversal.first(),
+                path.traversal.last(),
+            )
+        },
+    )
 }
 
 fn put_u64(hasher: &mut blake3::Hasher, value: u64) {

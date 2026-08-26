@@ -5,6 +5,9 @@ use super::fixed::{
     QuerySpec, build_fixed_archive, build_fixed_archive_with_options, query_fixed_archive,
     reference_paths, source_oracle,
 };
+use super::source::{
+    LoadedGbzSource, PangenomeSource, SourceMemoryPreflight, source_memory_preflight,
+};
 use gbz::GBZ;
 use gbz_base::PathIndex;
 use serde::Serialize;
@@ -84,6 +87,9 @@ pub struct EncodeSummary {
     pub regional_payload_version: u32,
     pub source_path: PathBuf,
     pub source_gbz_bytes: u64,
+    pub source_access_mode: &'static str,
+    pub source_access_is_bounded: bool,
+    pub source_memory_preflight: SourceMemoryPreflight,
     pub source_sha256: String,
     pub source_checksum_wall_ms: f64,
     pub source_load_wall_ms: f64,
@@ -93,6 +99,11 @@ pub struct EncodeSummary {
     pub process_peak_rss_kib: Option<u64>,
     pub output_path: PathBuf,
     pub output_sha256: String,
+    pub prebuild_wall_ms: f64,
+    pub output_checksum_wall_ms: f64,
+    pub encode_wall_ms_before_report: f64,
+    pub accounted_critical_path_wall_ms: f64,
+    pub unattributed_critical_path_wall_ms: f64,
     pub sample: Option<String>,
     pub contig: Option<String>,
     pub start: Option<u64>,
@@ -159,6 +170,7 @@ pub fn run_encode(options: &EncodeOptions) -> ExperimentResult<EncodeSummary> {
         fs::create_dir_all(scratch_dir)?;
     }
     let source_gbz_bytes = fs::metadata(&options.input)?.len();
+    let source_memory_preflight = source_memory_preflight(source_gbz_bytes)?;
     let checksum_started = Instant::now();
     let source_sha256 = file_sha256_with_progress(
         &options.input,
@@ -176,6 +188,7 @@ pub fn run_encode(options: &EncodeOptions) -> ExperimentResult<EncodeSummary> {
         options.progress_interval_ms,
         || serialize::load_from(&options.input),
     )?;
+    let source_access_mode = LoadedGbzSource::new(&graph, None).access_mode();
     let source_load_wall_ms = elapsed_ms(load_started);
     let rss_after_source_load_kib = process_current_rss_kib();
     let index_started = Instant::now();
@@ -222,6 +235,7 @@ pub fn run_encode(options: &EncodeOptions) -> ExperimentResult<EncodeSummary> {
         &config,
         &build_options,
     )?;
+    let output_checksum_started = Instant::now();
     let output_sha256 = file_sha256_with_progress(
         &options.output,
         options.progress,
@@ -229,6 +243,12 @@ pub fn run_encode(options: &EncodeOptions) -> ExperimentResult<EncodeSummary> {
         "hashing completed archive",
         options.progress_interval_ms,
     )?;
+    let output_checksum_wall_ms = elapsed_ms(output_checksum_started);
+    let encode_wall_ms_before_report = elapsed_ms(encode_started);
+    let accounted_critical_path_wall_ms =
+        prebuild_wall_ms + build.construction_wall_ms + output_checksum_wall_ms;
+    let unattributed_critical_path_wall_ms =
+        (encode_wall_ms_before_report - accounted_critical_path_wall_ms).max(0.0);
     let seconds = build.construction_wall_ms / 1_000.0;
     let chunks_per_second = if seconds > 0.0 {
         build.directory_entries as f64 / seconds
@@ -241,11 +261,14 @@ pub fn run_encode(options: &EncodeOptions) -> ExperimentResult<EncodeSummary> {
         0.0
     };
     let summary = EncodeSummary {
-        schema_version: 2,
+        schema_version: 3,
         archive_version: 1,
         regional_payload_version: 1,
         source_path: options.input.clone(),
         source_gbz_bytes,
+        source_access_mode,
+        source_access_is_bounded: false,
+        source_memory_preflight,
         source_sha256,
         source_checksum_wall_ms,
         source_load_wall_ms,
@@ -255,6 +278,11 @@ pub fn run_encode(options: &EncodeOptions) -> ExperimentResult<EncodeSummary> {
         process_peak_rss_kib: process_peak_rss_kib(),
         output_path: options.output.clone(),
         output_sha256,
+        prebuild_wall_ms,
+        output_checksum_wall_ms,
+        encode_wall_ms_before_report,
+        accounted_critical_path_wall_ms,
+        unattributed_critical_path_wall_ms,
         sample: options.sample.clone(),
         contig: options.contig.clone(),
         start: options.start,

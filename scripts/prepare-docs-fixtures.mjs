@@ -13,7 +13,7 @@ const destination = join(
   "format-v1.pngr",
 );
 const expectedSha256 =
-  "b952efedc2274d91f0ff3e8979203a9221ef5f4d81d7eb3465afd90e7fbb0984";
+  "f703e99934e52c906d9f10971328dd947a6196da0c38c1aed31e24ba31c98f89";
 
 const bytes = await readFile(source);
 const sha256 = createHash("sha256").update(bytes).digest("hex");

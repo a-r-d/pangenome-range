@@ -5,7 +5,12 @@ edition.workspace = true
 license.workspace = true
 repository.workspace = true
 rust-version.workspace = true
-description = "Low-level range I/O and experimental format primitives for pangenome-range"
+description = "Normative v1 archive codecs, validation, and range I/O for pangenome-range"
+
+[dependencies]
+blake3.workspace = true
+serde.workspace = true
+zstd.workspace = true
 
 [lints]
 workspace = true

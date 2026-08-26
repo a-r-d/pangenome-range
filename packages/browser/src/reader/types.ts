@@ -153,6 +153,7 @@ export interface QueryTrace {
   readonly directoryBytes: number;
   readonly payloadBytes: number;
   readonly cacheHits: QueryCacheHits;
+  readonly integrityMs: number;
   readonly decompressionMs: number;
   readonly decodeMs: number;
   readonly mergeMs: number;

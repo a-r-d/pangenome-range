@@ -198,11 +198,14 @@ opt-in; the default test suite uses synthetic bytes and stays fast.
 
 ## Workspace
 
-- `pangenome-range-format`: `RangeSource`, local positioned reads, exact trace metrics,
-  and an idealized network-cost model. It deliberately defines no archive.
-- `pangenome-range-build`: an interface for replaceable candidate-layout experiments.
-- `pangenome-range-query`: storage-independent query/correctness types and a canonical
-  BLAKE3 comparison hash for local graph semantics.
+- `pangenome-range-format`: normative v1 header/root/directory and regional
+  codecs, corruption checks, archive validation, `RangeSource`, local
+  positioned reads, exact trace metrics, and the network-cost model.
+- `pangenome-range-build`: GBZ source adapters, reference anchoring, tile
+  selection, the bounded encoder pipeline, build metrics, and candidate-layout
+  experiments.
+- `pangenome-range-query`: storage-independent graph/tile semantics, comparison,
+  and canonical BLAKE3 hashes.
 - `pangenome-range-cli`: the direct-write v1 encoder, GBZ inspection, source
   tracing, and retained research benchmarks.
 - `packages/browser`: primary public ESM package with isolated reader, viewer,

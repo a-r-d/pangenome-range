@@ -4,9 +4,12 @@ use pangenome_range_build::{
     BuildProgressMode, ChunkCodec, EncodeOptions, EncoderScaleOptions, ExperimentMode,
     ExperimentOptions, FixedArchiveConfig, FixedArchiveReader, QueryMeasurement, QuerySpec,
     export_conformance_fixtures, internal_gbz_base_query, run_encode, run_encoder_scale_experiment,
-    run_fixed_window_experiment, source_oracle, validate_fixed_archive_with_progress,
+    run_fixed_window_experiment, source_oracle, validate_fixed_archive_with_options,
 };
-use pangenome_range_format::{FileRangeSource, NetworkProfile, RangeSource, TracingRangeSource};
+use pangenome_range_format::{
+    FileRangeSource, NetworkProfile, RangeSource, TracingRangeSource, ValidationMode,
+    ValidationOptions, evaluate_integrity_options,
+};
 use serde::Deserialize;
 use sha2::{Digest, Sha256};
 use simple_sds::serialize;
@@ -34,6 +37,7 @@ fn run(mut args: impl Iterator<Item = String>) -> AppResult<()> {
         "encode" => encode(&mut args),
         "verify" => verify(&mut args),
         "validate" => validate_archive(&mut args),
+        "evaluate-integrity" => evaluate_integrity(&mut args),
         "fixtures" => fixtures(&mut args),
         "inspect" => {
             let path = one_path_argument(&mut args, "inspect")?;
@@ -222,6 +226,7 @@ fn print_help() {
     println!("Usage:");
     println!("  pangenome-range encode <input.gbz> <output.pngr> [options]");
     println!("  pangenome-range validate <input.pngr>");
+    println!("  pangenome-range evaluate-integrity <input.pngr> [--report PATH]");
     println!("  pangenome-range fixtures export <directory>");
     println!(
         "  pangenome-range verify <input.pngr> --against <input.gbz> --sample NAME --contig NAME --start BP --end BP [options]"
@@ -267,10 +272,32 @@ fn print_help() {
     println!("  --coalescing-gap BYTES     archive read coalescing gap");
     println!();
     println!("Validate options:");
+    println!("  --mode standard|full       default integrity gate or exhaustive reconstruction");
+    println!("  --workers N                bounded payload-validation workers (default: up to 8)");
+    println!("  --max-queued-bytes N       validation memory budget (default: 512 MiB)");
     println!("  --progress auto|plain|json|off");
     println!("  --progress-interval-seconds N  validation progress cadence (default: 5)");
     println!();
     println!("Reserved experiment commands: build, query, benchmark");
+}
+
+fn evaluate_integrity(args: &mut impl Iterator<Item = String>) -> AppResult<()> {
+    let usage = "usage: pangenome-range evaluate-integrity <input.pngr> [--report PATH]";
+    let archive = PathBuf::from(args.next().ok_or(usage)?);
+    let mut report_path = None;
+    while let Some(flag) = args.next() {
+        match flag.as_str() {
+            "--report" => report_path = Some(PathBuf::from(option_value(args, &flag)?)),
+            _ => return Err(format!("unknown evaluate-integrity option '{flag}'").into()),
+        }
+    }
+    let report = evaluate_integrity_options(&archive)?;
+    let encoded = serde_json::to_vec_pretty(&report)?;
+    if let Some(path) = report_path {
+        std::fs::write(path, &encoded)?;
+    }
+    println!("{}", String::from_utf8(encoded)?);
+    Ok(())
 }
 
 fn print_version() {
@@ -589,7 +616,7 @@ fn sha256_path(path: &Path) -> AppResult<String> {
 }
 
 fn validate_archive(args: &mut impl Iterator<Item = String>) -> AppResult<()> {
-    let usage = "usage: pangenome-range validate <input.pngr> [--progress auto|plain|json|off] [--progress-interval-seconds N]";
+    let usage = "usage: pangenome-range validate <input.pngr> [--mode standard|full] [--workers N] [--max-queued-bytes N] [--progress auto|plain|json|off] [--progress-interval-seconds N]";
     let first = args.next().ok_or(usage)?;
     if matches!(first.as_str(), "--help" | "-h") {
         println!("{usage}");
@@ -598,11 +625,25 @@ fn validate_archive(args: &mut impl Iterator<Item = String>) -> AppResult<()> {
     let path = PathBuf::from(first);
     let mut progress = automatic_progress_mode();
     let mut progress_interval_ms = 5_000_u64;
+    let mut mode = ValidationMode::Standard;
+    let mut workers = std::thread::available_parallelism()
+        .map_or(1, std::num::NonZeroUsize::get)
+        .min(8);
+    let mut max_queued_bytes = 512 * 1024 * 1024_u64;
     while let Some(flag) = args.next() {
         match flag.as_str() {
             "--progress" => {
                 progress = parse_progress_mode(&option_value(args, &flag)?)?;
             }
+            "--mode" => {
+                mode = match option_value(args, &flag)?.as_str() {
+                    "standard" => ValidationMode::Standard,
+                    "full" => ValidationMode::Full,
+                    value => return Err(format!("unknown validation mode '{value}'").into()),
+                };
+            }
+            "--workers" => workers = parse_option(args, &flag)?,
+            "--max-queued-bytes" => max_queued_bytes = parse_option(args, &flag)?,
             "--progress-interval-seconds" => {
                 let seconds: u64 = parse_option(args, &flag)?;
                 progress_interval_ms = seconds
@@ -621,7 +662,16 @@ fn validate_archive(args: &mut impl Iterator<Item = String>) -> AppResult<()> {
         "archive_validation",
         "validating all directory entries and physical payloads",
     );
-    let summary = validate_fixed_archive_with_progress(&path, progress, progress_interval_ms)?;
+    let summary = validate_fixed_archive_with_options(
+        &path,
+        progress,
+        ValidationOptions {
+            mode,
+            workers,
+            max_queued_bytes,
+            progress_interval_ms,
+        },
+    )?;
     emit_cli_progress(
         progress,
         "archive_validation_complete",

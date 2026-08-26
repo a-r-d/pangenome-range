@@ -1,7 +1,10 @@
+import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { describe, expect, it, vi } from "vitest";
 import {
   CorruptRegionalPayloadError,
+  canonicalGraphHash,
+  canonicalHaplotypeTileHash,
   decodeRegionalPayload,
   detectArchiveVersion,
   detectRegionalPayloadVersion,
@@ -30,6 +33,8 @@ interface ConformanceFixture {
   semantics: string;
   expected: {
     canonicalHash: string;
+    graphHash: string;
+    tileLocalHaplotypeHash: string;
     references: Array<{
       sample: string;
       contig: string;
@@ -54,11 +59,61 @@ interface ConformanceFixture {
       weightedTraversals: Array<{ weight: string; nodes: string[] }>;
     };
   };
+  files: Record<string, { bytes: number; sha256: string }>;
+  sections: {
+    archiveHeader: { offset: number; length: number };
+    rootIndex: { offset: number; length: number };
+    directoryPages: { offset: number; length: number; pageCount: number };
+    regionalPayload: {
+      offset: number;
+      encodedLength: number;
+      decodedLength: number;
+      codec: string;
+    };
+    extensionDirectory: null | {
+      offset: number;
+      length: number;
+      entryCount: number;
+    };
+    extensionPayload: null | {
+      offset: number;
+      encodedLength: number;
+      decodedLength: number;
+      codec: string;
+      required: boolean;
+    };
+  };
 }
 
 const conformanceManifest = JSON.parse(
   readFileSync(new URL("manifest.json", conformanceDirectory), "utf8"),
-) as { fixtures: ConformanceFixture[] };
+) as {
+  schemaVersion: number;
+  format: {
+    archiveMagic: string;
+    archiveVersion: number;
+    regionalMagic: string;
+    regionalVersion: number;
+    headerBytes: number;
+    directoryPageBytes: number;
+    directoryEntryBytes: number;
+    maximumDirectoryEntriesPerPage: number;
+  };
+  fixtures: ConformanceFixture[];
+  expectedFailures: Array<{
+    id: string;
+    file: string;
+    inputKind: "archive" | "regional-payload";
+    expected: "reject";
+    rejectionStage: string;
+    bytes: number;
+    sha256: string;
+  }>;
+};
+
+function sha256(bytes: Uint8Array): string {
+  return createHash("sha256").update(bytes).digest("hex");
+}
 
 function decodeHex(value: string): Uint8Array {
   const normalized = value.trim();
@@ -110,6 +165,59 @@ const recordRegionalExpected = JSON.parse(
 };
 
 describe("reader contract validation", () => {
+  it("consumes the normative machine-readable format constants and checksums", () => {
+    expect(conformanceManifest).toMatchObject({
+      schemaVersion: 2,
+      format: {
+        archiveMagic: "PNGRNG01",
+        archiveVersion: 1,
+        regionalMagic: "PNGRGN01",
+        regionalVersion: 1,
+        headerBytes: 64,
+        directoryPageBytes: 4096,
+        directoryEntryBytes: 56,
+        maximumDirectoryEntriesPerPage: 72,
+      },
+    });
+    for (const fixture of conformanceManifest.fixtures) {
+      for (const [name, metadata] of Object.entries(fixture.files)) {
+        const bytes = new Uint8Array(
+          readFileSync(new URL(name, conformanceDirectory)),
+        );
+        expect(bytes.byteLength, name).toBe(metadata.bytes);
+        expect(sha256(bytes), name).toBe(metadata.sha256);
+      }
+      expect(fixture.sections.archiveHeader).toEqual({ offset: 0, length: 64 });
+      expect(fixture.sections.rootIndex).toEqual({ offset: 64, length: 106 });
+      const extensionLength = fixture.sections.extensionDirectory?.length ?? 0;
+      expect(fixture.sections.directoryPages).toEqual({
+        offset: 170 + extensionLength,
+        length: 4096,
+        pageCount: 1,
+      });
+      expect(fixture.sections.regionalPayload).toEqual({
+        offset: 4266 + extensionLength,
+        encodedLength: 122,
+        decodedLength: 316,
+        codec: "zstd-3",
+      });
+      if (fixture.id === "format-v1") {
+        expect(fixture.sections.extensionDirectory).toBeNull();
+        expect(fixture.sections.extensionPayload).toBeNull();
+      } else {
+        expect(fixture.sections.extensionDirectory).toMatchObject({
+          offset: 170,
+          entryCount: 1,
+        });
+        expect(fixture.sections.extensionPayload).toMatchObject({
+          offset: fixture.sections.regionalPayload.offset + 122,
+          codec: "none",
+          required: false,
+        });
+      }
+    }
+  });
+
   it("accepts safe genomic coordinates and bigint archive offsets", () => {
     expect(() =>
       validateRegionQuery({
@@ -172,6 +280,7 @@ describe("reader contract validation", () => {
         trace: true,
       });
       expect(result.trace?.canonicalHash).toBe(fixture.expected.canonicalHash);
+      expect(canonicalGraphHash(result.graph)).toBe(fixture.expected.graphHash);
       expect(result.tiles).toHaveLength(1);
       const tile = result.tiles[0] as (typeof result.tiles)[number];
       expect(tile.semantics).toBe(fixture.expected.tile.semantics);
@@ -225,7 +334,39 @@ describe("reader contract validation", () => {
       expect(Array.from(result.graph.referenceTraversal, String)).toEqual(
         fixture.expected.tile.referenceTraversal,
       );
+      expect(canonicalHaplotypeTileHash(tile)).toBe(
+        fixture.expected.tileLocalHaplotypeHash,
+      );
       await archive.close();
+    }
+  });
+
+  it("rejects every corrupt fixture declared by the shared manifest", async () => {
+    const query = conformanceManifest.fixtures[0]?.expected.query;
+    if (query === undefined) throw new Error("conformance query is absent");
+    for (const failure of conformanceManifest.expectedFailures) {
+      const bytes = new Uint8Array(
+        readFileSync(new URL(failure.file, conformanceDirectory)),
+      );
+      expect(bytes.byteLength, failure.id).toBe(failure.bytes);
+      expect(sha256(bytes), failure.id).toBe(failure.sha256);
+      let rejected = false;
+      try {
+        if (failure.inputKind === "regional-payload") {
+          decodeRegionalPayload(bytes);
+        } else {
+          const archive = await openPangenome(new MemoryRangeSource(bytes));
+          try {
+            await archive.query(query);
+          } finally {
+            await archive.close();
+          }
+        }
+      } catch (error) {
+        expect(error, `${failure.id} must reject`).toBeInstanceOf(Error);
+        rejected = true;
+      }
+      expect(rejected, `${failure.id} unexpectedly decoded`).toBe(true);
     }
   });
 
@@ -249,6 +390,29 @@ describe("reader contract validation", () => {
         expect(() =>
           decompressor.decompress(compressed, raw.byteLength + 1),
         ).toThrow("declares");
+        const trailing = new Uint8Array(compressed.byteLength + 1);
+        trailing.set(compressed);
+        expect(() => decompressor.decompress(trailing, raw.byteLength)).toThrow(
+          "exactly one frame",
+        );
+
+        const dictionary = compressed.slice();
+        dictionary[4] = (dictionary[4] as number) | 0x01;
+        expect(() =>
+          decompressor.decompress(dictionary, raw.byteLength),
+        ).toThrow("dictionaries");
+
+        const reserved = compressed.slice();
+        reserved[4] = (reserved[4] as number) | 0x08;
+        expect(() => decompressor.decompress(reserved, raw.byteLength)).toThrow(
+          "reserved descriptor",
+        );
+
+        const skippable = compressed.slice();
+        skippable.set([0x50, 0x2a, 0x4d, 0x18]);
+        expect(() =>
+          decompressor.decompress(skippable, raw.byteLength),
+        ).toThrow("standard frame");
       }
     }
   });
@@ -429,18 +593,60 @@ describe("reader contract validation", () => {
     await blobArchive.close();
   });
 
-  it("rejects archive reserved bytes and truncated stored ranges", async () => {
-    const reserved = recordArchiveFixture.slice();
-    reserved[48] = 1;
+  it("rejects incomplete extension pointers and truncated stored ranges", async () => {
+    const incompleteExtension = recordArchiveFixture.slice();
+    incompleteExtension[48] = 1;
     await expect(
-      openPangenome({ source: new MemoryRangeSource(reserved) }),
-    ).rejects.toThrow("reserved bytes");
+      openPangenome({ source: new MemoryRangeSource(incompleteExtension) }),
+    ).rejects.toThrow("extension directory pointer");
 
     await expect(
       openPangenome({
         source: new MemoryRangeSource(recordArchiveFixture.subarray(0, 128)),
       }),
     ).rejects.toThrow();
+  });
+
+  it("skips unknown optional extensions and rejects unknown required extensions", async () => {
+    const fixture = conformanceManifest.fixtures.find(
+      ({ id }) => id === "format-v1-optional-extension",
+    ) as ConformanceFixture;
+    const bytes = new Uint8Array(
+      readFileSync(new URL(`${fixture.id}.pngr`, conformanceDirectory)),
+    );
+    const optional = await openPangenome(new MemoryRangeSource(bytes));
+    expect(optional.references()).toEqual(
+      fixture.expected.references.map((reference) =>
+        expect.objectContaining(reference),
+      ),
+    );
+    await optional.close();
+
+    const required = bytes.slice();
+    const view = new DataView(required.buffer);
+    const extensionOffset = Number(view.getBigUint64(48, true));
+    view.setUint32(extensionOffset + 32 + 16, 1, true);
+    await expect(
+      openPangenome(new MemoryRangeSource(required)),
+    ).rejects.toThrow("unknown required extension");
+  });
+
+  it("verifies stored payload integrity once before caching", async () => {
+    const archive = await openPangenome(
+      new MemoryRangeSource(recordArchiveFixture),
+    );
+    const query = {
+      sample: "CHM13",
+      contig: "chr6",
+      start: 31_350_872,
+      end: 31_351_896,
+      trace: true,
+    } as const;
+    const cold = await archive.query(query);
+    const warm = await archive.query(query);
+    expect(cold.trace?.integrityMs).toBeGreaterThan(0);
+    expect(warm.trace?.integrityMs).toBe(0);
+    await archive.close();
   });
 
   it("validates strict HTTP 206 ranges and stable object identity", async () => {

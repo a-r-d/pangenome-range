@@ -9,7 +9,7 @@
   "archive": {
     "path": "test-data/conformance/micb-kir3dl1-reader-v1.pngr",
     "bytes": 164259,
-    "sha256": "31f30622c44d71e54a07e0edc61f2ade3c1521b2f5a7092e56334a44b6c85565",
+    "sha256": "ebc29b430c9102e04b157e8a8850b12312ae7c6bda7605ba3154f3c61253de6b",
     "archiveVersion": 1,
     "regionalVersion": 1,
     "codec": "zstd-3",
