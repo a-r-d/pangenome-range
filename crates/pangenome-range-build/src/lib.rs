@@ -13,9 +13,10 @@ mod scale;
 
 pub use experiment::{ExperimentMode, ExperimentOptions, run_fixed_window_experiment};
 pub use fixed::{
-    ArchiveBuildMetrics, ArchiveBuildOptions, BuildProgressMode, ChunkCodec, FixedArchiveConfig,
-    FixedArchiveReader, OracleResult, QueryMeasurement, QuerySpec,
+    ArchiveBuildMetrics, ArchiveBuildOptions, ArchiveValidationSummary, BuildProgressMode,
+    ChunkCodec, FixedArchiveConfig, FixedArchiveReader, OracleResult, QueryMeasurement, QuerySpec,
     build_fixed_archive_with_options, internal_gbz_base_query, query_fixed_archive, source_oracle,
+    validate_fixed_archive,
 };
 pub use scale::{
     EncodeOptions, EncodeSummary, EncoderScaleOptions, run_encode, run_encoder_scale_experiment,

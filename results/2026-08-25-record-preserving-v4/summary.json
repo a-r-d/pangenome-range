@@ -51,5 +51,33 @@
     "correctness": true,
     "haplotypeTilesChecked": 7,
     "haplotypeTilesCorrect": true
+  },
+  "independentStructuralRevalidation": {
+    "archiveSha256Recomputed": "f9966387ae140607017d45d5c9a2923ac428682a1a1331865773b87729709066",
+    "directoryPages": 11559,
+    "directoryEntries": 363105,
+    "physicalPayloads": 363105,
+    "uncompressedPayloadBytes": 35747140299,
+    "validationSeconds": 169.418142446,
+    "result": "pass"
+  },
+  "semanticValidationWorkload": {
+    "queries": 9,
+    "correctQueries": 9,
+    "haplotypeCorrectQueries": 9,
+    "tilesChecked": 58,
+    "selectedNodes": 105213,
+    "result": "pass"
+  },
+  "remoteRangeValidation": {
+    "browser": "chromium",
+    "query": "CHM13#chr1:1000000-1100000",
+    "requests": 11,
+    "fetchedBytes": 294190,
+    "tiles": 7,
+    "nodesAcrossTiles": 8592,
+    "weightedTraversalsAcrossTiles": 2196,
+    "totalMs": 1237.7000000476837,
+    "result": "pass"
   }
 }

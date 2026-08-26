@@ -45,6 +45,8 @@ export interface OpenPangenomeOptions {
   fetch?: typeof globalThis.fetch;
   directoryCacheBytes?: number;
   payloadCacheBytes?: number;
+  maxRootBytes?: number;
+  maxChunkBytes?: number;
   decompressor?: ChunkDecompressor;
   signal?: AbortSignal;
 }

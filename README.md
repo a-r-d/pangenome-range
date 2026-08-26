@@ -28,6 +28,7 @@ cargo run --release -- encode test-data/mhc-10.gbz /tmp/mhc.pngr \
 cargo run --release -- verify /tmp/mhc.pngr \
   --against test-data/mhc-10.gbz --sample MHC-GRCh38 --contig MHC \
   --start 100000 --end 200000
+cargo run --release -- validate /tmp/mhc.pngr
 ```
 
 Development checks:
@@ -51,8 +52,9 @@ pnpm docs:dev
 `pnpm check` uses Biome for lint and format verification, then runs strict
 TypeScript checking and tests. `pnpm format` applies Biome formatting.
 
-`pnpm test:browser` currently exits with an explicit placeholder message. It
-does not claim that browser benchmarks exist yet.
+`pnpm test:browser` builds the public reader and exercises real cross-origin
+HTTP `206` bootstrap, directory, zstd payload, and decode paths in Chromium,
+Firefox, and WebKit against a deterministic transport fixture.
 
 Run measurements with `--release`. Large data and benchmarks will remain
 opt-in; the default test suite uses synthetic bytes and stays fast.
@@ -67,10 +69,12 @@ opt-in; the default test suite uses synthetic bytes and stays fast.
 - `pangenome-range-cli`: the direct-write v4 encoder, GBZ inspection, source
   tracing, and retained research benchmarks.
 - `packages/browser`: private ESM package with isolated reader, viewer, and Node
-  exports plus the cross-language record-preserving regional decoder. Full
-  archive opening and rendering are not implemented.
-- `packages/benchmark`: private browser/Node benchmark scaffold; no benchmark
-  suite is implemented yet.
+  exports, strict HTTP/Blob/memory/file range sources, archive-v4 opening, and
+  the cross-language record-preserving regional decoder. Rendering is not
+  implemented.
+- `packages/benchmark`: private browser/Node benchmark tools with a real
+  cross-origin range-origin smoke test; a full latency corpus remains future
+  work.
 - `docs`: the existing research Markdown plus a VitePress shell and demo
   placeholder deployed under `/pangenome-range/`.
 
@@ -84,9 +88,11 @@ five-second snapshots and is configurable with
 `--progress-interval-seconds`. Run
 `pangenome-range help` for the complete option list. `verify` compares an
 archive query against an independently extracted GBZ source oracle, including
-tile-local weighted traversal evidence. The planned CLI names `build`, `query`,
-and `benchmark` remain reserved until there is a real experiment behind each
-one.
+tile-local weighted traversal evidence; `--workload` reuses one source load for
+a retained JSON query array. `validate` rereads every directory page and
+decompresses and structurally checks every physical archive payload. The
+planned CLI names `build`, `query`, and `benchmark` remain reserved until there
+is a real experiment behind each one.
 
 ## Data tiers
 

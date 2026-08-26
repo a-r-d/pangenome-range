@@ -28,11 +28,17 @@ metrics are retained in `summary.json`.
   deterministic `.pngr` rebuilt from the pinned MICB/KIR3DL1 source.
 - The full archive passed decompression and structural validation for all
   363,105 physical payloads before atomic rename.
+- An independent at-rest rerun recomputed the same archive SHA-256 and again
+  validated all 11,559 directory pages and 363,105 physical payloads (35.75 GB
+  uncompressed) in 169.418 seconds.
 - A post-build query for `CHM13#chr1:1,000,000-1,100,000` independently
   extracted the source oracle, checked all seven selected tile-local haplotype
   results, and matched the archive canonical result. Its hash was
   `cbf983e845fcd6adcb1504089aba3c80fae85cd0c3998bcc90ba02f8fac8c5b4`.
   Structural validation and this semantic verification remain separate gates.
+- A retained nine-query workload spanning CHM13 and GRCh38, chromosomes 1, 6,
+  19, and X, a fragment start, and two reference termini passed all graph and
+  tile-local haplotype comparisons: 9/9 queries and 58/58 tiles.
 
 ## Whole-source result
 
@@ -59,6 +65,24 @@ bytes. Regional decode took 374.759 ms and the full local query, including
 seven independent source-tile comparisons, took 2.273 seconds. Both
 `correctness` and `haplotype_tiles_correct` were true.
 
+## Remote range gate
+
+The browser package now opens archive v4, performs arithmetic directory lookup,
+uses bounded directory/payload caches, decompresses zstd with a pure-JavaScript
+decoder, and decodes `PNGRGN04` tiles. `HttpRangeSource` requires exact `206`,
+matching exposed `Content-Range`/`Content-Length`, `Accept-Ranges: bytes`, and a
+stable exposed `ETag`; it rejects a `200` whole-object fallback.
+
+A real cross-origin loopback server exercised the golden transport fixture in
+Chromium, Firefox, and WebKit. The full archive was then served unchanged to
+Chromium. The source-verified `CHM13#chr1:1,000,000-1,100,000` query opened 292
+reference manifests, selected seven tiles, and decoded 8,592 tile nodes plus
+2,196 weighted traversals. It issued 11 strict range responses and fetched
+294,190 bytes from the 8,828,856,533-byte archive in 1.238 seconds locally.
+The exact ranges are retained in `remote-range-validation.json`. This proves the
+static-object range path; loopback timing is not claimed as internet/CDN
+performance.
+
 The prior stopped writer measured 70,148 bp/s and projected 84,556 seconds
 (23.49 hours). The completed command is 151.65x faster than that ETA;
 construction including validation is 177.71x faster, while the payload pipeline
@@ -76,12 +100,12 @@ the authoritative elapsed pipeline value for this run.
 
 - Upstream GBZ deserialization still requires the complete source and dominates
   the 8.37 GiB RSS. This work did not claim lazy or memory-mapped source access.
-- Structural validation now costs 202 seconds because it rereads, decompresses,
+- Structural validation costs 169-202 seconds because it rereads, decompresses,
   and checks every payload. It is the clearest next construction optimization,
   provided corruption coverage and fail-closed behavior remain equivalent.
 - The archive is 1.607x the compressed GBZ. Layout/query benchmarks must decide
   whether faster codec settings, dictionaries, or record sharing improve size
   without harming independent range access.
-- The TypeScript package decodes the current regional payload but does not yet
-  open the archive bootstrap/directory over HTTP. No browser latency claim is
-  made here.
+- Remote validation used a correct loopback origin. Public CDN/Tunnel cache
+  behavior, TLS, cold/warm origin state, and latency distributions still need a
+  separately configured deployment benchmark.

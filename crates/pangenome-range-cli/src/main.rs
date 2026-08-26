@@ -2,8 +2,9 @@ use gbz::GBZ;
 use gbz_base::PathIndex;
 use pangenome_range_build::{
     BuildProgressMode, ChunkCodec, EncodeOptions, EncoderScaleOptions, ExperimentMode,
-    ExperimentOptions, FixedArchiveConfig, QuerySpec, internal_gbz_base_query, query_fixed_archive,
+    ExperimentOptions, FixedArchiveConfig, FixedArchiveReader, QuerySpec, internal_gbz_base_query,
     run_encode, run_encoder_scale_experiment, run_fixed_window_experiment, source_oracle,
+    validate_fixed_archive,
 };
 use pangenome_range_format::{FileRangeSource, NetworkProfile, RangeSource, TracingRangeSource};
 use simple_sds::serialize;
@@ -30,6 +31,10 @@ fn run(mut args: impl Iterator<Item = String>) -> AppResult<()> {
     match command.as_str() {
         "encode" => encode(&mut args),
         "verify" => verify(&mut args),
+        "validate" => {
+            let path = one_path_argument(&mut args, "validate")?;
+            validate_archive(&path)
+        }
         "inspect" => {
             let path = one_path_argument(&mut args, "inspect")?;
             inspect_gbz(&path)
@@ -212,6 +217,7 @@ fn print_help() {
     println!();
     println!("Usage:");
     println!("  pangenome-range encode <input.gbz> <output.pngr> [options]");
+    println!("  pangenome-range validate <input.pngr>");
     println!(
         "  pangenome-range verify <input.pngr> --against <input.gbz> --sample NAME --contig NAME --start BP --end BP [options]"
     );
@@ -246,17 +252,27 @@ fn print_help() {
     println!("  --max-chunks N             bounded single-reference research guard");
     println!("  --report PATH              JSON build report path");
     println!();
+    println!("Verify options:");
+    println!("  --against PATH             independent source GBZ oracle");
+    println!("  --sample NAME --contig NAME --start BP --end BP");
+    println!("  --workload PATH            retained JSON array of query specifications");
+    println!("  --report PATH              write the JSON verification result");
+    println!("  --context BP               source-oracle context (default: 100)");
+    println!("  --coalescing-gap BYTES     archive read coalescing gap");
+    println!();
     println!("Reserved experiment commands: build, query, benchmark");
 }
 
 fn verify(args: &mut impl Iterator<Item = String>) -> AppResult<()> {
-    let usage = "usage: pangenome-range verify <input.pngr> --against <input.gbz> --sample NAME --contig NAME --start BP --end BP [options]";
+    let usage = "usage: pangenome-range verify <input.pngr> --against <input.gbz> (--workload queries.json | --sample NAME --contig NAME --start BP --end BP) [options]";
     let archive = PathBuf::from(args.next().ok_or(usage)?);
     let mut against = None;
     let mut sample = None;
     let mut contig = None;
     let mut start = None;
     let mut end = None;
+    let mut workload = None;
+    let mut report = None;
     let mut context = 100_u64;
     let mut coalescing_gap = 65_536_u64;
     let mut window_size = 16_384_u64;
@@ -268,6 +284,8 @@ fn verify(args: &mut impl Iterator<Item = String>) -> AppResult<()> {
             "--contig" => contig = Some(option_value(args, &flag)?),
             "--start" => start = Some(parse_option(args, &flag)?),
             "--end" => end = Some(parse_option(args, &flag)?),
+            "--workload" => workload = Some(PathBuf::from(option_value(args, &flag)?)),
+            "--report" => report = Some(PathBuf::from(option_value(args, &flag)?)),
             "--context" => context = parse_option(args, &flag)?,
             "--coalescing-gap" => coalescing_gap = parse_option(args, &flag)?,
             "--window-size" => window_size = parse_option(args, &flag)?,
@@ -288,18 +306,28 @@ fn verify(args: &mut impl Iterator<Item = String>) -> AppResult<()> {
         }
     }
     let against = against.ok_or("verify requires --against <input.gbz>")?;
-    let query = QuerySpec {
-        id: "cli-verify".into(),
-        class: "post-build-verification".into(),
-        sample: sample.ok_or("verify requires --sample")?,
-        contig: contig.ok_or("verify requires --contig")?,
-        start: start.ok_or("verify requires --start")?,
-        end: end.ok_or("verify requires --end")?,
-        context,
+    let queries = if let Some(workload) = &workload {
+        if sample.is_some() || contig.is_some() || start.is_some() || end.is_some() {
+            return Err("--workload cannot be combined with a single-query coordinate".into());
+        }
+        let queries: Vec<QuerySpec> = serde_json::from_slice(&std::fs::read(workload)?)?;
+        if queries.is_empty() {
+            return Err("verification workload contains no queries".into());
+        }
+        queries
+    } else {
+        vec![QuerySpec {
+            id: "cli-verify".into(),
+            class: "post-build-verification".into(),
+            sample: sample.ok_or("verify requires --sample or --workload")?,
+            contig: contig.ok_or("verify requires --contig or --workload")?,
+            start: start.ok_or("verify requires --start or --workload")?,
+            end: end.ok_or("verify requires --end or --workload")?,
+            context,
+        }]
     };
     let graph: GBZ = serialize::load_from(&against)?;
     let path_index = PathIndex::new(&graph, 1_000, false)?;
-    let oracle = source_oracle(&graph, &path_index, &query)?;
     let archive_config = FixedArchiveConfig {
         experiment_id: "cli-verify".into(),
         window_size,
@@ -308,16 +336,38 @@ fn verify(args: &mut impl Iterator<Item = String>) -> AppResult<()> {
         max_uncompressed_chunk_bytes: 8 * 1024 * 1024,
         min_window_size: 1_024,
     };
-    let measurement = query_fixed_archive(
-        &archive,
-        &archive_config,
-        &query,
-        coalescing_gap,
-        &oracle,
-        &graph,
-        &path_index,
-    )?;
-    println!("{}", serde_json::to_string_pretty(&measurement)?);
+    let mut reader = FixedArchiveReader::open(&archive)?;
+    let mut measurements = Vec::with_capacity(queries.len());
+    for query in &queries {
+        let oracle = source_oracle(&graph, &path_index, query)?;
+        measurements.push(reader.query(
+            &archive_config,
+            query,
+            coalescing_gap,
+            &oracle,
+            Some((&graph, &path_index)),
+        )?);
+    }
+    let output = if workload.is_some() {
+        serde_json::to_string_pretty(&serde_json::json!({
+            "schema_version": 1,
+            "archive": archive,
+            "against": against,
+            "measurements": measurements,
+        }))?
+    } else {
+        serde_json::to_string_pretty(&measurements[0])?
+    };
+    if let Some(report) = report {
+        std::fs::write(report, output.as_bytes())?;
+    }
+    println!("{output}");
+    Ok(())
+}
+
+fn validate_archive(path: impl AsRef<Path>) -> AppResult<()> {
+    let summary = validate_fixed_archive(path.as_ref())?;
+    println!("{}", serde_json::to_string_pretty(&summary)?);
     Ok(())
 }
 

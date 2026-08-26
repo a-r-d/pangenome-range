@@ -1,9 +1,10 @@
 # Fixed-window archive v4 (Candidate 1)
 
 Status: research prototype. This is the format currently emitted by
-`pangenome-range-build`. Rust reads the complete archive and Rust/TypeScript
-share the current regional decoder and golden fixtures, but the browser archive
-transport is not yet a stable interchange implementation.
+`pangenome-range-build`. Rust validates and queries the complete archive;
+Rust/TypeScript share the current regional decoder and golden fixtures; and the
+TypeScript reader opens local or strict HTTP-range archive-v4 objects. The
+format remains a research candidate rather than a stable release contract.
 
 ## Design goals
 

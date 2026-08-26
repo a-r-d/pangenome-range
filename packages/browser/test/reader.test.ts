@@ -1,12 +1,16 @@
 import { readFileSync } from "node:fs";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
   CorruptRegionalPayloadError,
   decodeRegionalPayload,
   detectArchiveVersion,
   detectRegionalPayloadVersion,
-  NotImplementedError,
+  HttpRangeResponseError,
+  HttpRangeSource,
+  MemoryRangeSource,
   openPangenome,
+  RemoteObjectChangedError,
+  TracingRangeSource,
   UnsupportedArchiveVersionError,
   UnsupportedRegionalPayloadVersionError,
   validateArchiveRange,
@@ -25,6 +29,15 @@ const recordRegionalFixture = decodeHex(
   readFileSync(
     new URL("../../../test-data/golden/record-region-v4.hex", import.meta.url),
     "utf8",
+  ),
+);
+
+const recordArchiveFixture = new Uint8Array(
+  readFileSync(
+    new URL(
+      "../../../test-data/golden/record-archive-v4.pngr",
+      import.meta.url,
+    ),
   ),
 );
 
@@ -77,17 +90,6 @@ describe("reader contract validation", () => {
     ).toThrow(RangeError);
   });
 
-  it("states clearly that archive decoding is not implemented", async () => {
-    await expect(
-      openPangenome({
-        source: {
-          size: () => Promise.resolve(0n),
-          read: () => Promise.resolve(new Uint8Array()),
-        },
-      }),
-    ).rejects.toBeInstanceOf(NotImplementedError);
-  });
-
   it("dispatches v4 and clearly rejects legacy v3 semantics", () => {
     const v4 = new Uint8Array(12);
     v4.set(new TextEncoder().encode("PNGRNG04"));
@@ -100,6 +102,123 @@ describe("reader contract validation", () => {
     expect(() => detectArchiveVersion(v3)).toThrow(
       UnsupportedArchiveVersionError,
     );
+  });
+
+  it("opens and queries the deterministic Rust v4 archive", async () => {
+    const source = new TracingRangeSource(
+      new MemoryRangeSource(recordArchiveFixture),
+    );
+    const archive = await openPangenome({ source });
+    expect(archive.formatVersion).toBe(4);
+    expect(archive.references()).toEqual([
+      expect.objectContaining({
+        sample: "CHM13",
+        contig: "chr6",
+        start: 31_350_872,
+        end: 31_351_896,
+      }),
+    ]);
+    const result = await archive.query({
+      sample: "CHM13",
+      contig: "chr6",
+      start: 31_350_872,
+      end: 31_351_896,
+    });
+    expect(result.semantics).toBe("anonymous-distinct-weighted-tile-paths");
+    expect(result.tiles).toHaveLength(1);
+    expect(result.tiles[0]).toMatchObject({
+      start: 31_350_872,
+      end: 31_351_896,
+      semantics: "anonymous-distinct-weighted-tile-paths",
+    });
+    expect(result.tiles[0]?.nodeIds.length).toBeGreaterThan(0);
+    expect(result.tiles[0]?.traversalWeights.length).toBeGreaterThan(0);
+    expect(source.reads).toEqual([
+      expect.objectContaining({
+        offset: 0n,
+        length: recordArchiveFixture.byteLength,
+        succeeded: true,
+      }),
+    ]);
+    await archive.close();
+  });
+
+  it("rejects archive reserved bytes and truncated stored ranges", async () => {
+    const reserved = recordArchiveFixture.slice();
+    reserved[48] = 1;
+    await expect(
+      openPangenome({ source: new MemoryRangeSource(reserved) }),
+    ).rejects.toThrow("reserved bytes");
+
+    await expect(
+      openPangenome({
+        source: new MemoryRangeSource(recordArchiveFixture.subarray(0, 128)),
+      }),
+    ).rejects.toThrow();
+  });
+
+  it("validates strict HTTP 206 ranges and stable object identity", async () => {
+    const object = Uint8Array.from({ length: 32 }, (_, index) => index);
+    let etag = '"fixture-v1"';
+    const fetch = vi.fn<typeof globalThis.fetch>(async (_input, init) => {
+      const range = new Headers(init?.headers).get("range");
+      const match = /^bytes=(\d+)-(\d+)$/.exec(range ?? "");
+      if (match === null) throw new Error("test request has no exact range");
+      const start = Number(match[1]);
+      const end = Number(match[2]);
+      const body = object.slice(start, end + 1);
+      return new Response(body, {
+        status: 206,
+        headers: {
+          "Accept-Ranges": "bytes",
+          "Content-Range": `bytes ${start}-${end}/${object.length}`,
+          "Content-Length": String(body.length),
+          ETag: etag,
+        },
+      });
+    });
+    const source = new HttpRangeSource("https://example.test/archive.pngr", {
+      fetch,
+    });
+    expect(await source.size()).toBe(32n);
+    expect(Array.from(await source.read(8n, 4))).toEqual([8, 9, 10, 11]);
+    expect(source.requests).toHaveLength(2);
+
+    etag = '"fixture-v2"';
+    await expect(source.read(12n, 2)).rejects.toBeInstanceOf(
+      RemoteObjectChangedError,
+    );
+  });
+
+  it("refuses an origin that ignores Range", async () => {
+    const source = new HttpRangeSource("https://example.test/archive.pngr", {
+      fetch: async () => new Response(new Uint8Array(1024), { status: 200 }),
+    });
+    await expect(source.size()).rejects.toBeInstanceOf(HttpRangeResponseError);
+  });
+
+  it("reports malformed range metadata and uniquely traces parallel reads", async () => {
+    const malformed = new HttpRangeSource("https://example.test/archive.pngr", {
+      fetch: async () =>
+        new Response(Uint8Array.of(0), {
+          status: 206,
+          headers: {
+            "Accept-Ranges": "bytes",
+            "Content-Range": "bytes 0-0/32",
+            "Content-Length": "invalid",
+            ETag: '"fixture-v1"',
+          },
+        }),
+    });
+    await expect(malformed.size()).rejects.toBeInstanceOf(
+      HttpRangeResponseError,
+    );
+
+    const traced = new TracingRangeSource(
+      new MemoryRangeSource(Uint8Array.of(0, 1, 2, 3)),
+    );
+    await Promise.all([traced.read(0n, 1), traced.read(1n, 1)]);
+    expect(traced.reads.map(({ sequence }) => sequence).sort()).toEqual([0, 1]);
   });
 
   it("decodes the Rust record-preserving regional golden fixture", () => {

@@ -1,0 +1,83 @@
+[
+  {
+    "id": "chm13-chr1-fragment-start-1k",
+    "class": "reference-fragment-boundary",
+    "sample": "CHM13",
+    "contig": "chr1",
+    "start": 12668,
+    "end": 13668,
+    "context": 100
+  },
+  {
+    "id": "chm13-chr1-100k",
+    "class": "record-preserving-remote",
+    "sample": "CHM13",
+    "contig": "chr1",
+    "start": 1000000,
+    "end": 1100000,
+    "context": 100
+  },
+  {
+    "id": "chm13-chr6-100k",
+    "class": "record-preserving-stratified",
+    "sample": "CHM13",
+    "contig": "chr6",
+    "start": 31000000,
+    "end": 31100000,
+    "context": 100
+  },
+  {
+    "id": "chm13-chr19-100k",
+    "class": "record-preserving-stratified",
+    "sample": "CHM13",
+    "contig": "chr19",
+    "start": 54800000,
+    "end": 54900000,
+    "context": 100
+  },
+  {
+    "id": "chm13-chrx-100k",
+    "class": "record-preserving-stratified",
+    "sample": "CHM13",
+    "contig": "chrX",
+    "start": 1000000,
+    "end": 1100000,
+    "context": 100
+  },
+  {
+    "id": "grch38-chr1-terminal-100k",
+    "class": "reference-terminal-boundary",
+    "sample": "GRCh38",
+    "contig": "chr1",
+    "start": 248856422,
+    "end": 248956422,
+    "context": 100
+  },
+  {
+    "id": "grch38-chr6-100k",
+    "class": "record-preserving-stratified",
+    "sample": "GRCh38",
+    "contig": "chr6",
+    "start": 31000000,
+    "end": 31100000,
+    "context": 100
+  },
+  {
+    "id": "grch38-chr19-100k",
+    "class": "record-preserving-stratified",
+    "sample": "GRCh38",
+    "contig": "chr19",
+    "start": 54800000,
+    "end": 54900000,
+    "context": 100
+  },
+  {
+    "id": "grch38-chrx-terminal-100k",
+    "class": "reference-terminal-boundary",
+    "sample": "GRCh38",
+    "contig": "chrX",
+    "start": 155940895,
+    "end": 156040895,
+    "context": 100
+  }
+]

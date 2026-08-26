@@ -1,3 +1,3 @@
 console.log(
-  "Benchmark tests are not implemented in this scaffolding tranche; no benchmark tests ran.",
+  "Benchmark unit tests are not implemented; pnpm test:browser owns the real HTTP range integration gate.",
 );

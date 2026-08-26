@@ -1,3 +1,9 @@
+export {
+  CorruptArchiveError,
+  FzstdDecompressor,
+  UnsupportedArchiveVersionError,
+  UnsupportedChunkCodecError,
+} from "./archive.js";
 export type { DecodeRegionalPayloadOptions } from "./regional.js";
 export {
   CorruptRegionalPayloadError,
@@ -5,6 +11,19 @@ export {
   detectRegionalPayloadVersion,
   UnsupportedRegionalPayloadVersionError,
 } from "./regional.js";
+export type {
+  HttpRangeRequest,
+  HttpRangeSourceOptions,
+  TracedRangeRead,
+} from "./sources.js";
+export {
+  BlobRangeSource,
+  HttpRangeResponseError,
+  HttpRangeSource,
+  MemoryRangeSource,
+  RemoteObjectChangedError,
+  TracingRangeSource,
+} from "./sources.js";
 export type {
   ChunkDecompressor,
   HaplotypeSemantics,
@@ -18,6 +37,10 @@ export type {
   RegionTile,
 } from "./types.js";
 
+import {
+  openPangenomeArchive,
+  UnsupportedArchiveVersionError,
+} from "./archive.js";
 import type {
   OpenPangenomeOptions,
   PangenomeArchive,
@@ -25,14 +48,6 @@ import type {
 } from "./types.js";
 
 export const PANGENOME_RANGE_API_VERSION = "0.1.0" as const;
-
-export class NotImplementedError extends Error {
-  override readonly name = "NotImplementedError";
-}
-
-export class UnsupportedArchiveVersionError extends Error {
-  override readonly name = "UnsupportedArchiveVersionError";
-}
 
 const textDecoder = new TextDecoder();
 
@@ -106,9 +121,5 @@ export function openPangenome(
   validateOptionalCacheSize(options.directoryCacheBytes, "directoryCacheBytes");
   validateOptionalCacheSize(options.payloadCacheBytes, "payloadCacheBytes");
 
-  return Promise.reject(
-    new NotImplementedError(
-      "The pangenome-range archive decoder is not implemented in this scaffolding release",
-    ),
-  );
+  return openPangenomeArchive(options);
 }

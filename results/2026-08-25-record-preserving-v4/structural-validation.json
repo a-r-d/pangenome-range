@@ -1,0 +1,15 @@
+{
+  "schemaVersion": 1,
+  "command": "target/release/pangenome-range validate OUTPUT.pngr",
+  "archiveVersion": 4,
+  "archiveBytes": 8828856533,
+  "archiveSha256Recomputed": "f9966387ae140607017d45d5c9a2923ac428682a1a1331865773b87729709066",
+  "referenceManifests": 292,
+  "directoryPages": 11559,
+  "directoryEntries": 363105,
+  "physicalPayloads": 363105,
+  "compressedPayloadBytes": 8781479916,
+  "uncompressedPayloadBytes": 35747140299,
+  "validationWallMs": 169418.14244599998,
+  "result": "pass"
+}

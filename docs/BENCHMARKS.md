@@ -47,8 +47,9 @@ serial index walk.
 - **End-to-end query time:** request start through verified canonical result.
 - **Estimated network cost:** the bootstrap model's optimistic request-wave plus
   transfer estimate. Label it simulated and report profile parameters.
-- **Browser benchmark:** a future real browser run with HTTP evidence. Never use
-  the simulator as a substitute.
+- **Browser benchmark:** a real browser run with raw HTTP request/range evidence,
+  cache state, and origin configuration. The deterministic smoke is a
+  functional gate; do not call its loopback timing a CDN benchmark.
 
 Report median, p95, maximum, sample count, and failures for a corpus; keep raw
 per-query results under `results/` in a documented machine-readable form once a
@@ -139,6 +140,23 @@ cargo run --release -p pangenome-range-cli -- verify OUTPUT.pngr \
 The accepted run checked all seven selected tile-local haplotype results and
 matched canonical hash
 `cbf983e845fcd6adcb1504089aba3c80fae85cd0c3998bcc90ba02f8fac8c5b4`.
+
+For a full structural reread and a multi-query semantic workload:
+
+```bash
+cargo run --release -p pangenome-range-cli -- validate OUTPUT.pngr
+cargo run --release -p pangenome-range-cli -- verify OUTPUT.pngr \
+  --against INPUT.gbz --workload verification-workload.json \
+  --report semantic-validation.json
+```
+
+The accepted full archive independently passed all 363,105 physical payloads,
+then 9/9 source-oracle queries and 58/58 tile-local haplotype comparisons. The
+browser range gate used the same source-verified CHM13 query: Chromium fetched
+294,190 bytes in 11 strict `206` responses and decoded seven tiles from the
+8.23 GiB object. Chromium, Firefox, and WebKit also pass the deterministic
+cross-origin fixture through `pnpm test:browser`. Loopback timing is retained as
+functional evidence only.
 
 The full comparative matrix remains:
 

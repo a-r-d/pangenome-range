@@ -235,3 +235,36 @@ matched canonical hash
 `cbf983e845fcd6adcb1504089aba3c80fae85cd0c3998bcc90ba02f8fac8c5b4`.
 That semantic check is intentionally distinct from the full structural payload
 validation performed before rename.
+
+The 100x change came from changing the unit of work, not from a faster sort.
+The rejected writer repeatedly expanded every selected GBWT occurrence into
+explicit local paths and then sorted/deduplicated those materialized paths for
+each tile. Population-scale occurrence count and path length made that work
+explode, and larger supertiles made it worse. `PNGRGN04` instead copies the
+source's already compressed GBWT record bytes, forward sequences, and canonical
+topology, plus one real reference occurrence anchor. Path reconstruction and
+weight aggregation move to the few tiles selected by a query. Eight bounded
+workers construct deterministic ordered tile batches and compress them while
+the direct writer appends to the atomic temporary archive. No global visit
+index, payload spool, second copy, or source-global sort remains.
+
+## 2026-08-25: full validation and browser HTTP range path accepted
+
+The completed archive was reread independently after construction. Its
+SHA-256 remained
+`f9966387ae140607017d45d5c9a2923ac428682a1a1331865773b87729709066`.
+`pangenome-range validate` checked 292 manifests, 11,559 directory pages, and
+all 363,105 physical payloads (35,747,140,299 uncompressed bytes) in 169.418
+seconds. A retained nine-query source-oracle workload then passed 9/9 canonical
+graph comparisons and 58/58 exact weighted tile comparisons across CHM13,
+GRCh38, chromosomes 1/6/19/X, and fragment/terminal boundaries.
+
+The TypeScript product path now includes strict `HttpRangeSource`, archive-v4
+bootstrap/root parsing, arithmetic fixed-page lookup, byte-bounded caches,
+pure-JavaScript zstd decompression, and regional-v4 decoding. A synthetic
+cross-origin origin passed in Chromium, Firefox, and WebKit. Chromium then
+queried the unchanged 8.23 GiB archive over real HTTP `206` responses: 11
+requests, 294,190 fetched bytes, seven tiles, 8,592 tile nodes, and 2,196
+weighted traversals in 1.238 seconds on loopback. Every response carried exact
+range headers and a stable ETag; the reader rejects `200` fallback. This is
+accepted functional range evidence, not a public-network latency benchmark.

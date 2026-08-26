@@ -1,0 +1,93 @@
+{
+  "schemaVersion": 1,
+  "transport": {
+    "kind": "cross-origin loopback HTTP",
+    "status": 206,
+    "cors": "Access-Control-Allow-Origin: *",
+    "exposedHeaders": [
+      "Accept-Ranges",
+      "Content-Range",
+      "Content-Length",
+      "ETag"
+    ],
+    "cacheControl": "public, max-age=31536000, immutable, no-transform",
+    "contentEncoding": null,
+    "timingScope": "local integration evidence, not internet or CDN performance"
+  },
+  "crossBrowserFixture": {
+    "archiveBytes": 70024,
+    "query": {
+      "sample": "GRCh38",
+      "contig": "chr1",
+      "start": 100,
+      "end": 102
+    },
+    "browsers": [
+      {
+        "name": "chromium",
+        "requests": 4,
+        "fetchedBytes": 20604,
+        "tiles": 1,
+        "nodes": 2,
+        "traversals": 1,
+        "result": "pass"
+      },
+      {
+        "name": "firefox",
+        "requests": 4,
+        "fetchedBytes": 20605,
+        "tiles": 1,
+        "nodes": 2,
+        "traversals": 1,
+        "result": "pass"
+      },
+      {
+        "name": "webkit",
+        "requests": 4,
+        "fetchedBytes": 20605,
+        "tiles": 1,
+        "nodes": 2,
+        "traversals": 1,
+        "result": "pass"
+      }
+    ]
+  },
+  "fullArchiveChromium": {
+    "archiveBytes": 8828856533,
+    "archiveSha256": "f9966387ae140607017d45d5c9a2923ac428682a1a1331865773b87729709066",
+    "query": {
+      "sample": "CHM13",
+      "contig": "chr1",
+      "start": 1000000,
+      "end": 1100000
+    },
+    "formatVersion": 4,
+    "referenceManifests": 292,
+    "semantics": "anonymous-distinct-weighted-tile-paths",
+    "tiles": 7,
+    "nodesAcrossTiles": 8592,
+    "weightedTraversalsAcrossTiles": 2196,
+    "encodedPayloadBytes": 255045,
+    "requests": 11,
+    "fetchedBytes": 294190,
+    "openMs": 9.700000047683716,
+    "totalMs": 1237.7000000476837,
+    "ranges": [
+      "bytes=0-0",
+      "bytes=1-16383",
+      "bytes=16384-30952",
+      "bytes=35049-43240",
+      "bytes=50914180-50943714",
+      "bytes=50943715-50986203",
+      "bytes=50986204-51017068",
+      "bytes=51017069-51041486",
+      "bytes=51041487-51077713",
+      "bytes=51077714-51128842",
+      "bytes=51128843-51169224"
+    ],
+    "sourceOracleCanonicalHash": "cbf983e845fcd6adcb1504089aba3c80fae85cd0c3998bcc90ba02f8fac8c5b4",
+    "sourceOracleCorrect": true,
+    "sourceOracleHaplotypeTilesCorrect": true,
+    "result": "pass"
+  }
+}

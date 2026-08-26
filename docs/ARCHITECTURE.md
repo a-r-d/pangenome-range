@@ -60,19 +60,21 @@ DOM or Node built-ins; `/viewer` owns the framework-neutral rendering contract,
 and `/node` owns Node-only range sources. `packages/benchmark` is private and
 will own Node and real-browser measurements.
 
-The public contracts, range-source implementations, and the current
-record-preserving regional payload decoder exist. Rust and TypeScript decode the
-same raw golden payload into typed-array-oriented nodes, sequences, topology,
-reference traversal, and weighted local paths. Archive bootstrap/directory
-opening, HTTP range transport, rendering, and real browser benchmarks remain
-explicitly unimplemented.
+The public contracts, strict HTTP/Blob/memory/file range sources, archive-v4
+bootstrap/root and arithmetic directory reader, byte-bounded caches,
+pure-JavaScript zstd decompressor, and record-preserving regional payload
+decoder exist. Rust and TypeScript decode the same raw golden payload into
+typed-array-oriented nodes, sequences, topology, reference traversal, and
+weighted local paths. Rendering and a public-network browser benchmark corpus
+remain explicitly unimplemented.
 
 ## Range sources and traces
 
-`RangeSource` exposes a 64-bit source length and exact reads by `(u64 offset,
-usize length)`. `FileRangeSource` uses positioned file reads, so it does not
-depend on or mutate a shared seek cursor. `TracingRangeSource<T>` is a generic
-decorator and records all attempted reads, including failures.
+Both languages expose a 64-bit source length and exact offset/length reads.
+Rust `FileRangeSource` uses positioned file reads, so it does not depend on or
+mutate a shared seek cursor. TypeScript keeps offsets as `bigint` and implements
+`HttpRangeSource`, `BlobRangeSource`, `MemoryRangeSource`,
+`TracingRangeSource`, and the Node-only `FileRangeSource`.
 
 Trace summaries retain raw call order, offsets, lengths, and success, then derive:
 
@@ -86,9 +88,11 @@ Unique-byte accounting is the union of half-open requested intervals. Failed
 reads are still requests and remain in the trace. Zero-length reads count as
 operations but cover no bytes.
 
-An eventual HTTP implementation should satisfy the same exact-read contract and
-add transport evidence separately (status, `Content-Range`, response bytes,
-cache state, and timing). It is intentionally not part of the bootstrap.
+`HttpRangeSource` requires exact `206`, matching exposed `Content-Range` and
+`Content-Length`, `Accept-Ranges: bytes`, and a stable exposed `ETag`. It never
+accepts `200` fallback. The integration origin also supplies CORS, immutable
+`no-transform` cache policy, and raw request evidence. Browser/library and HTTP
+cache effects remain reported separately.
 
 ## Cost simulation
 

@@ -1,7 +1,11 @@
-# Format goals, not a format
+# Format goals and current research candidate
 
-No archive layout, magic bytes, block size, directory key, compression codec, or
-on-disk schema is selected at this stage.
+Archive v4 (`PNGRNG04` with `PNGRGN04` record-preserving regional payloads) is
+the current measured research candidate. It is implemented by Rust and the
+browser reader, has cross-language golden fixtures, and has completed a
+whole-source build plus real HTTP range smoke. It is not yet a stable public
+format: incompatible changes still require an explicit new version and full
+cross-language conformance tranche.
 
 Candidate experiments should pursue and measure:
 
@@ -21,8 +25,8 @@ Candidate experiments should pursue and measure:
 - explicit behavior for absent metadata, fragmented paths, large nodes, and
   pathological/collapsed graph regions.
 
-Questions deliberately left open include whether indexes are hierarchical,
-whether payloads are reference-windowed or graph-structural, how shared
-haplotype information crosses region boundaries, which compression units are
-independent, and whether a small sidecar is worth comparing with a single-object
-layout. Each answer belongs in a named experiment with measurements.
+Questions still open include whether a future candidate should share compressed
+records across tiles, how much archive expansion is acceptable, whether a small
+sidecar is worth comparing with a single object, and whether true sample
+continuation identity merits a separately costed mode. Each answer belongs in a
+named experiment with measurements; old version bytes are never reinterpreted.

@@ -7,7 +7,7 @@
     "build": "tsup",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "node scripts/test-placeholder.mjs",
-    "test:browser": "node scripts/browser-placeholder.mjs"
+    "test:browser": "pnpm --filter pangenome-range build && node scripts/browser-range.mjs"
   },
   "dependencies": {
     "pangenome-range": "workspace:*"

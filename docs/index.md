@@ -19,7 +19,7 @@ features:
   - title: Native construction
     details: The Rust CLI owns encoding, verification, and reproducible research measurements.
   - title: Portable access
-    details: The private TypeScript workspace establishes reader, viewer, and Node entry points while decoding remains under development.
+    details: The private TypeScript package opens local or remote archive-v4 objects, performs strict range reads, and decodes regional tiles.
 ---
 
 <script setup>
@@ -32,9 +32,9 @@ The current archive v4 is a research prototype, not a stable interchange format.
 It removes the rejected global occurrence index and exposes anonymous weighted
 tile-local haplotypes explicitly; see the
 [semantics decision](./HAPLOTYPE_SEMANTICS.md) and
-[optimization log](./OPTIMIZATION_LOG.md). The browser decoder and interactive
-viewer are not implemented yet; this site currently proves the product and
-package boundaries only.
+[optimization log](./OPTIMIZATION_LOG.md). The browser reader and decoder are
+implemented and exercised through real cross-origin range responses; the
+interactive viewer remains future work.
 
 Start with the [architecture](./ARCHITECTURE.md), the
 [fixed-window archive description](./FIXED_WINDOW_ARCHIVE.md), and the

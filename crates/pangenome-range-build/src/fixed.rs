@@ -421,6 +421,21 @@ pub struct QueryMeasurement {
     pub simulated_100ms_ms: f64,
 }
 
+#[derive(Clone, Debug, Serialize)]
+pub struct ArchiveValidationSummary {
+    pub schema_version: u32,
+    pub archive_version: u32,
+    pub archive_path: PathBuf,
+    pub archive_bytes: u64,
+    pub reference_manifests: u64,
+    pub directory_pages: u64,
+    pub directory_entries: u64,
+    pub physical_payloads: u64,
+    pub compressed_payload_bytes: u64,
+    pub uncompressed_payload_bytes: u64,
+    pub validation_wall_ms: f64,
+}
+
 #[derive(Clone, Debug)]
 pub struct OracleResult {
     pub canonical: CanonicalSubgraph,
@@ -2920,7 +2935,7 @@ pub fn build_fixed_archive_with_options(
         "validating all directory entries and physical payloads",
     );
     let validation_started = Instant::now();
-    validate_archive_file(&archive_temp.path)?;
+    let _validation = validate_fixed_archive(&archive_temp.path)?;
     let archive_validation_wall_ms = validation_started.elapsed().as_secs_f64() * 1_000.0;
     archive_temp.persist(output)?;
 
@@ -4466,6 +4481,7 @@ fn directory_page_offset(manifest: &ReferenceManifest, bucket_index: u64) -> io:
 
 #[derive(Clone, Copy, Debug)]
 struct Header {
+    version: u32,
     root_len: u64,
     entry_count: u64,
     data_offset: u64,
@@ -4496,12 +4512,14 @@ fn decode_header(bytes: &[u8]) -> io::Result<Header> {
     if !supported_version
         || usize::try_from(header_len).ok() != Some(HEADER_LEN)
         || root_offset != 64
+        || bytes[48..].iter().any(|&value| value != 0)
     {
         return Err(invalid_data(format!(
             "unsupported archive version {version}, header length {header_len}, or root offset {root_offset}"
         )));
     }
     Ok(Header {
+        version,
         root_len: u64::from_le_bytes(bytes[24..32].try_into().expect("fixed header slice")),
         entry_count: u64::from_le_bytes(bytes[32..40].try_into().expect("fixed header slice")),
         data_offset: u64::from_le_bytes(bytes[40..48].try_into().expect("fixed header slice")),
@@ -4551,7 +4569,9 @@ fn decode_root_index(bytes: &[u8], header: Header) -> ExperimentResult<RootIndex
             entry_count: reader.u64()?,
             codec: ChunkCodec::from_code(reader.u8()?)?,
         };
-        let _reserved = reader.take(7)?;
+        if reader.take(7)? != [0_u8; 7] {
+            return Err(invalid_data("reference manifest reserved bytes are nonzero").into());
+        }
         let page_end = manifest
             .first_page_offset
             .checked_add(
@@ -4805,14 +4825,27 @@ fn decompress(codec: ChunkCodec, bytes: &[u8], expected_len: u64) -> io::Result<
     Ok(result)
 }
 
-fn validate_archive_file(path: &Path) -> ExperimentResult<()> {
+/// Decompresses and structurally validates every physical payload in an archive.
+///
+/// # Errors
+///
+/// Returns an error for malformed metadata, invalid ranges, decompression
+/// failure, corrupt payload bytes, or file I/O failure.
+pub fn validate_fixed_archive(path: &Path) -> ExperimentResult<ArchiveValidationSummary> {
+    let started = Instant::now();
     let source = FileRangeSource::open(path)?;
     let bootstrap = load_bootstrap(&source)?;
     let header = decode_header(&bootstrap.bytes[..HEADER_LEN])?;
     let source_len = source.len()?;
     let mut entry_count = 0_u64;
     let mut decoded_payloads = BTreeSet::new();
+    let mut compressed_payload_bytes = 0_u64;
+    let mut uncompressed_payload_bytes = 0_u64;
+    let mut directory_pages = 0_u64;
     for manifest in &bootstrap.root.manifests {
+        directory_pages = directory_pages
+            .checked_add(manifest.page_count)
+            .ok_or_else(|| invalid_data("validated directory page count overflow"))?;
         for bucket_index in 0..manifest.page_count {
             let page_offset = directory_page_offset(manifest, bucket_index)?;
             let page = source.read_range(page_offset, DIRECTORY_PAGE_BYTES)?;
@@ -4836,6 +4869,12 @@ fn validate_archive_file(path: &Path) -> ExperimentResult<()> {
                 )) {
                     continue;
                 }
+                compressed_payload_bytes = compressed_payload_bytes
+                    .checked_add(entry.compressed_len)
+                    .ok_or_else(|| invalid_data("validated compressed byte count overflow"))?;
+                uncompressed_payload_bytes = uncompressed_payload_bytes
+                    .checked_add(entry.uncompressed_len)
+                    .ok_or_else(|| invalid_data("validated uncompressed byte count overflow"))?;
                 let compressed =
                     source.read_range(entry.offset, u64_to_usize(entry.compressed_len)?)?;
                 let raw = decompress(entry.codec, &compressed, entry.uncompressed_len)?;
@@ -4861,7 +4900,19 @@ fn validate_archive_file(path: &Path) -> ExperimentResult<()> {
     if entry_count != header.entry_count {
         return Err(invalid_data("validated directory count differs from archive header").into());
     }
-    Ok(())
+    Ok(ArchiveValidationSummary {
+        schema_version: 1,
+        archive_version: header.version,
+        archive_path: path.to_path_buf(),
+        archive_bytes: source_len,
+        reference_manifests: usize_to_u64(bootstrap.root.manifests.len())?,
+        directory_pages,
+        directory_entries: entry_count,
+        physical_payloads: usize_to_u64(decoded_payloads.len())?,
+        compressed_payload_bytes,
+        uncompressed_payload_bytes,
+        validation_wall_ms: started.elapsed().as_secs_f64() * 1_000.0,
+    })
 }
 
 fn encode_canonical(graph: &CanonicalSubgraph) -> ExperimentResult<Vec<u8>> {
@@ -5495,6 +5546,18 @@ mod tests {
         .unwrap();
         assert!(measurement.correctness);
         assert!(measurement.haplotype_tiles_correct);
+        let validation = validate_fixed_archive(&fixture).unwrap();
+        assert_eq!(validation.archive_version, 4);
+        assert_eq!(validation.reference_manifests, 1);
+        assert_eq!(validation.directory_entries, 1);
+        assert_eq!(validation.physical_payloads, 1);
+
+        let corrupt = simple_sds::serialize::temp_file_name("pangenome-range-reserved-header");
+        let mut corrupt_bytes = std::fs::read(&fixture).unwrap();
+        corrupt_bytes[48] = 1;
+        std::fs::write(&corrupt, corrupt_bytes).unwrap();
+        assert!(validate_fixed_archive(&corrupt).is_err());
+        std::fs::remove_file(corrupt).unwrap();
         std::fs::remove_file(output).unwrap();
     }
 
@@ -5847,6 +5910,7 @@ mod tests {
         manifests[1].first_page_offset = root_end + 2 * DIRECTORY_PAGE_BYTES as u64;
         let encoded = encode_root_index(&manifests).unwrap();
         let header = Header {
+            version: ARCHIVE_VERSION,
             root_len: u64::try_from(encoded.len()).unwrap(),
             entry_count: 5,
             data_offset: root_end + 3 * DIRECTORY_PAGE_BYTES as u64,
