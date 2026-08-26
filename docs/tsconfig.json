@@ -1,7 +1,12 @@
 {
   "extends": "../tsconfig.base.json",
   "compilerOptions": {
-    "types": ["vitepress/client"]
+    "types": ["node", "vitepress/client"],
+    "baseUrl": ".",
+    "paths": {
+      "pangenome-range/reader": ["../packages/browser/src/reader/index.ts"],
+      "pangenome-range/viewer": ["../packages/browser/src/viewer/index.ts"]
+    }
   },
-  "include": [".vitepress/**/*.ts"]
+  "include": [".vitepress/**/*.ts", "components/**/*.vue"]
 }

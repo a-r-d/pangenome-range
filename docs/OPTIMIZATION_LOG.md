@@ -310,3 +310,36 @@ captured. Their objects are historical and must be regenerated before use with
 the current readers. The authoritative current contract is
 [`FILE_FORMAT_V1.md`](FILE_FORMAT_V1.md), and the conformance directory now
 contains only current v1 fixtures.
+
+## 2026-08-25: optional browser WASM decoder lifecycle
+
+The first full browser benchmark implementation initialized
+`@bokuweb/zstd-wasm` separately for each archive-reader instance in one page.
+The library owns singleton module state: initial queries decoded correctly, but
+later warm/reused scenarios failed with zstd error code `-72`. Reinitialization
+is rejected.
+
+The accepted benchmark adapter initializes the WASM module once per page and
+creates lightweight `ChunkDecompressor` wrappers over that initialized module.
+Separate archive readers and cache scenarios remain isolated without resetting
+the decoder runtime. The default reader is still pure-JavaScript `fzstd`; WASM
+is optional and must be evaluated with initialization, asset, memory,
+per-chunk, whole-query, and correctness evidence rather than steady-state speed
+alone.
+
+## 2026-08-26: validation progress closes the silent-tail gap
+
+The current-v1 whole-source build made the CLI ergonomics failure measurable:
+coordinate-based payload progress reached 100%, then the full structural
+validation ran for 240.736 seconds after emitting only one phase marker. The
+encoder was healthy, but a human operator had no evidence that it was still
+advancing.
+
+The accepted CLI progress contract now covers input/output checksum passes,
+opaque GBZ-load/path-index heartbeats, coordinate-based payload construction,
+and entry-based structural validation. Validation snapshots report directory
+entries/pages, unique physical payloads, compressed bytes reread, percentage,
+rate, elapsed time, and ETA at the configured cadence. Interactive terminals
+select readable plain progress automatically; newline-delimited JSON remains
+available for monitors. This is an observability repair, not an encoder-speed
+claim, and it does not change archive bytes or validation semantics.

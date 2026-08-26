@@ -1,0 +1,21 @@
+{
+  "schemaVersion": 1,
+  "capturedAt": "2026-08-26T03:36:08.910Z",
+  "gitSha": "49c629d04a3bf2e1c810cfb32c7c300604e2ae51",
+  "gitStatus": "M .github/workflows/ci.yml\n M Cargo.lock\n M README.md\n M crates/pangenome-range-cli/Cargo.toml\n M crates/pangenome-range-cli/src/main.rs\n M docs/ARCHITECTURE.md\n M docs/BENCHMARKS.md\n M docs/OPTIMIZATION_LOG.md\n M docs/UPSTREAM.md\n M package.json\n M packages/benchmark/package.json\n D packages/benchmark/scripts/browser-range.mjs\n D packages/benchmark/scripts/node-range.mjs\n D packages/benchmark/scripts/range-origin.mjs\n M packages/benchmark/src/index.ts\n M packages/benchmark/tsconfig.json\n M packages/benchmark/tsup.config.ts\n M pnpm-lock.yaml\n M results/README.md\n?? packages/benchmark/scripts/copy-wasm.mjs\n?? packages/benchmark/src/archive-benchmark.ts\n?? packages/benchmark/src/browser-benchmark.ts\n?? packages/benchmark/src/browser-runtime.ts\n?? packages/benchmark/src/cli.ts\n?? packages/benchmark/src/compare.ts\n?? packages/benchmark/src/decoders.ts\n?? packages/benchmark/src/generate-workload.ts\n?? packages/benchmark/src/metrics.ts\n?? packages/benchmark/src/origin-check.ts\n?? packages/benchmark/src/origin.ts\n?? packages/benchmark/src/reporting.ts\n?? packages/benchmark/src/types.ts\n?? packages/benchmark/src/workload.ts\n?? packages/benchmark/test/\n?? packages/benchmark/tsup.browser.config.ts\n?? packages/benchmark/workloads/\n?? results/2026-08-25-browser-benchmark-harness-smoke/\n?? results/2026-08-25-browser-mhc-benchmark-smoke/",
+  "node": "v24.16.0",
+  "pnpm": "",
+  "platform": "linux 6.17.0-41-generic",
+  "hostname": "apollo",
+  "cpu": "Intel(R) Core(TM) i7-10700 CPU @ 2.90GHz",
+  "logicalCpus": 16,
+  "totalMemoryBytes": 64924504064,
+  "freeMemoryBytesAtStart": 21552975872,
+  "packageVersions": {
+    "benchmark": "0.1.0",
+    "reader": "0.1.0",
+    "playwright": "1.62.1",
+    "wasmZstd": "0.0.27"
+  },
+  "browsers": {}
+}

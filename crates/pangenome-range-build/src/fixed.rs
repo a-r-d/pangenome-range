@@ -143,7 +143,7 @@ impl Default for ArchiveBuildOptions {
 fn emit_progress(mode: BuildProgressMode, phase: &str, message: &str) {
     match mode {
         BuildProgressMode::Off => {}
-        BuildProgressMode::Plain => eprintln!("{phase}: {message}"),
+        BuildProgressMode::Plain => eprintln!("[{phase}] {message}"),
         BuildProgressMode::Json => eprintln!(
             "{}",
             serde_json::json!({ "phase": phase, "message": message })
@@ -178,30 +178,112 @@ struct BuildProgressSnapshot {
     temporary_archive_bytes: u64,
 }
 
+#[derive(Clone, Debug, Serialize)]
+struct ArchiveValidationProgress {
+    phase: &'static str,
+    sequence: u64,
+    percent_complete: f64,
+    directory_pages_validated: u64,
+    directory_pages_total: u64,
+    directory_entries_validated: u64,
+    directory_entries_total: u64,
+    physical_payloads_validated: u64,
+    compressed_payload_bytes_validated: u64,
+    uncompressed_payload_bytes_validated: u64,
+    entries_per_second: f64,
+    estimated_seconds_remaining: Option<f64>,
+    elapsed_seconds: f64,
+}
+
+#[derive(Default)]
+struct ValidationProgressState {
+    sequence: u64,
+    last_emit_ms: f64,
+    last_directory_pages: u64,
+    last_directory_entries: u64,
+}
+
+fn format_integer(value: u64) -> String {
+    let digits = value.to_string();
+    let mut formatted = String::with_capacity(digits.len() + digits.len() / 3);
+    let first_group = digits.len() % 3;
+    for (index, byte) in digits.bytes().enumerate() {
+        if index > 0 && index % 3 == first_group {
+            formatted.push(',');
+        }
+        formatted.push(char::from(byte));
+    }
+    formatted
+}
+
+#[allow(clippy::cast_precision_loss)]
+fn format_bytes(bytes: u64) -> String {
+    const KIB: u64 = 1024;
+    const MIB: u64 = 1024 * KIB;
+    const GIB: u64 = 1024 * MIB;
+    if bytes >= GIB {
+        format!("{:.2} GiB", bytes as f64 / GIB as f64)
+    } else if bytes >= MIB {
+        format!("{:.1} MiB", bytes as f64 / MIB as f64)
+    } else if bytes >= KIB {
+        format!("{:.1} KiB", bytes as f64 / KIB as f64)
+    } else {
+        format!("{bytes} B")
+    }
+}
+
+#[allow(clippy::cast_precision_loss)]
+fn format_bases(bases: u64) -> String {
+    if bases >= 1_000_000_000 {
+        format!("{:.3} Gbp", bases as f64 / 1_000_000_000.0)
+    } else if bases >= 1_000_000 {
+        format!("{:.2} Mbp", bases as f64 / 1_000_000.0)
+    } else if bases >= 1_000 {
+        format!("{:.1} kbp", bases as f64 / 1_000.0)
+    } else {
+        format!("{bases} bp")
+    }
+}
+
+#[allow(clippy::cast_sign_loss, clippy::cast_possible_truncation)]
+fn format_duration(seconds: f64) -> String {
+    if !seconds.is_finite() || seconds < 0.0 {
+        return "unknown".into();
+    }
+    let rounded = seconds.round() as u64;
+    let hours = rounded / 3_600;
+    let minutes = (rounded % 3_600) / 60;
+    let seconds = rounded % 60;
+    if hours > 0 {
+        format!("{hours}h {minutes:02}m {seconds:02}s")
+    } else if minutes > 0 {
+        format!("{minutes}m {seconds:02}s")
+    } else {
+        format!("{seconds}s")
+    }
+}
+
 fn emit_progress_snapshot(mode: BuildProgressMode, snapshot: &BuildProgressSnapshot) {
     match mode {
         BuildProgressMode::Off => {}
         BuildProgressMode::Plain => eprintln!(
-            "chunk_progress: {:.3}% ref={}/{} {}#{}:{}-{} ref={:.2}% bases={}/{} chunks={} physical={} bp/s={:.0} chunks/s={:.2} eta_s={} elapsed_s={:.1} temp_bytes={}",
+            "[encode] {:6.2}% | {}/{} | {} chunks | {:.2} Mbp/s | ETA {} | elapsed {} | output {} | ref {}/{} {}#{}:{}-{}",
             snapshot.percent_complete,
+            format_bases(snapshot.processed_reference_bases),
+            format_bases(snapshot.total_reference_bases),
+            format_integer(snapshot.physical_chunks),
+            snapshot.reference_bp_per_second / 1_000_000.0,
+            snapshot
+                .estimated_seconds_remaining
+                .map_or_else(|| "unknown".into(), format_duration),
+            format_duration(snapshot.processing_elapsed_seconds),
+            format_bytes(snapshot.temporary_archive_bytes),
             snapshot.reference_ordinal,
             snapshot.reference_count,
             snapshot.sample,
             snapshot.contig,
-            snapshot.current_chunk_start,
-            snapshot.current_chunk_end,
-            snapshot.reference_percent_complete,
-            snapshot.processed_reference_bases,
-            snapshot.total_reference_bases,
-            snapshot.accepted_chunks,
-            snapshot.physical_chunks,
-            snapshot.reference_bp_per_second,
-            snapshot.chunks_per_second,
-            snapshot
-                .estimated_seconds_remaining
-                .map_or_else(|| "unknown".into(), |seconds| format!("{seconds:.0}")),
-            snapshot.processing_elapsed_seconds,
-            snapshot.temporary_archive_bytes,
+            format_integer(snapshot.current_chunk_start),
+            format_integer(snapshot.current_chunk_end),
         ),
         BuildProgressMode::Json => eprintln!(
             "{}",
@@ -210,6 +292,32 @@ fn emit_progress_snapshot(mode: BuildProgressMode, snapshot: &BuildProgressSnaps
     }
 }
 
+fn emit_validation_progress(mode: BuildProgressMode, snapshot: &ArchiveValidationProgress) {
+    match mode {
+        BuildProgressMode::Off => {}
+        BuildProgressMode::Plain => eprintln!(
+            "[validate] {:6.2}% | {}/{} entries | {} payloads | {}/{} pages | {:.0} entries/s | ETA {} | elapsed {} | read {}",
+            snapshot.percent_complete,
+            format_integer(snapshot.directory_entries_validated),
+            format_integer(snapshot.directory_entries_total),
+            format_integer(snapshot.physical_payloads_validated),
+            format_integer(snapshot.directory_pages_validated),
+            format_integer(snapshot.directory_pages_total),
+            snapshot.entries_per_second,
+            snapshot
+                .estimated_seconds_remaining
+                .map_or_else(|| "unknown".into(), format_duration),
+            format_duration(snapshot.elapsed_seconds),
+            format_bytes(snapshot.compressed_payload_bytes_validated),
+        ),
+        BuildProgressMode::Json => eprintln!(
+            "{}",
+            serde_json::to_string(snapshot).expect("validation progress is JSON-serializable")
+        ),
+    }
+}
+
+#[allow(clippy::cast_precision_loss)]
 fn emit_encoding_plan(
     mode: BuildProgressMode,
     reference_count: u64,
@@ -221,7 +329,12 @@ fn emit_encoding_plan(
     match mode {
         BuildProgressMode::Off => {}
         BuildProgressMode::Plain => eprintln!(
-            "encoding_plan: references={reference_count} total_bases={total_reference_bases} base_windows={planned_base_windows} temp_prefix_bytes={temporary_archive_prefix_bytes} progress_interval_ms={progress_interval_ms}"
+            "[encode] plan: {} references, {}, {} base windows, {} index prefix; progress every {}",
+            format_integer(reference_count),
+            format_bases(total_reference_bases),
+            format_integer(planned_base_windows),
+            format_bytes(temporary_archive_prefix_bytes),
+            format_duration(progress_interval_ms as f64 / 1_000.0),
         ),
         BuildProgressMode::Json => eprintln!(
             "{}",
@@ -244,11 +357,7 @@ fn emit_reference_start(
     reference: &ReferencePathSpec,
 ) {
     match mode {
-        BuildProgressMode::Off => {}
-        BuildProgressMode::Plain => eprintln!(
-            "reference_start: ref={reference_ordinal}/{reference_count} {}#{} {}-{}",
-            reference.name.sample, reference.name.contig, reference.start, reference.end
-        ),
+        BuildProgressMode::Off | BuildProgressMode::Plain => {}
         BuildProgressMode::Json => eprintln!(
             "{}",
             serde_json::json!({
@@ -2909,8 +3018,22 @@ pub fn build_fixed_archive_with_options(
         "validating all directory entries and physical payloads",
     );
     let validation_started = Instant::now();
-    let _validation = validate_fixed_archive(&archive_temp.path)?;
+    let validation = validate_fixed_archive_with_progress(
+        &archive_temp.path,
+        options.progress,
+        options.progress_interval_ms,
+    )?;
     let archive_validation_wall_ms = validation_started.elapsed().as_secs_f64() * 1_000.0;
+    emit_progress(
+        options.progress,
+        "archive_validation_complete",
+        &format!(
+            "validated {} directory pages and {} physical payloads in {}",
+            format_integer(validation.directory_pages),
+            format_integer(validation.physical_payloads),
+            format_duration(validation.validation_wall_ms / 1_000.0),
+        ),
+    );
     archive_temp.persist(output)?;
 
     let mut chunk_sizes = writer
@@ -4260,6 +4383,101 @@ fn decompress(codec: ChunkCodec, bytes: &[u8], expected_len: u64) -> io::Result<
 /// Returns an error for malformed metadata, invalid ranges, decompression
 /// failure, corrupt payload bytes, or file I/O failure.
 pub fn validate_fixed_archive(path: &Path) -> ExperimentResult<ArchiveValidationSummary> {
+    validate_fixed_archive_with_progress(path, BuildProgressMode::Off, DEFAULT_PROGRESS_INTERVAL_MS)
+}
+
+/// Decompresses and structurally validates every physical payload while
+/// periodically reporting validation progress.
+///
+/// # Errors
+///
+/// Returns an error for malformed metadata, invalid ranges, decompression
+/// failure, corrupt payload bytes, or file I/O failure.
+pub fn validate_fixed_archive_with_progress(
+    path: &Path,
+    progress: BuildProgressMode,
+    progress_interval_ms: u64,
+) -> ExperimentResult<ArchiveValidationSummary> {
+    validate_fixed_archive_impl(path, progress_interval_ms, |snapshot| {
+        emit_validation_progress(progress, snapshot);
+    })
+}
+
+#[allow(clippy::too_many_arguments, clippy::cast_precision_loss)]
+fn maybe_emit_validation_progress(
+    interval_ms: u64,
+    force: bool,
+    started: Instant,
+    state: &mut ValidationProgressState,
+    directory_pages_validated: u64,
+    directory_pages_total: u64,
+    directory_entries_validated: u64,
+    directory_entries_total: u64,
+    physical_payloads_validated: u64,
+    compressed_payload_bytes_validated: u64,
+    uncompressed_payload_bytes_validated: u64,
+    emit: &mut impl FnMut(&ArchiveValidationProgress),
+) -> ExperimentResult<()> {
+    let elapsed_seconds = started.elapsed().as_secs_f64();
+    let elapsed_ms = elapsed_seconds * 1_000.0;
+    if force
+        && state.sequence > 0
+        && state.last_directory_pages == directory_pages_validated
+        && state.last_directory_entries == directory_entries_validated
+    {
+        return Ok(());
+    }
+    if !force && state.sequence == 0 && interval_ms > 0 && elapsed_ms < interval_ms as f64 {
+        return Ok(());
+    }
+    if !force && state.sequence > 0 && elapsed_ms - state.last_emit_ms < interval_ms as f64 {
+        return Ok(());
+    }
+    state.sequence = state
+        .sequence
+        .checked_add(1)
+        .ok_or_else(|| invalid_data("validation progress sequence overflow"))?;
+    state.last_emit_ms = elapsed_ms;
+    state.last_directory_pages = directory_pages_validated;
+    state.last_directory_entries = directory_entries_validated;
+    let entries_per_second = if elapsed_seconds > 0.0 {
+        directory_entries_validated as f64 / elapsed_seconds
+    } else {
+        0.0
+    };
+    let estimated_seconds_remaining = (entries_per_second > 0.0).then(|| {
+        directory_entries_total.saturating_sub(directory_entries_validated) as f64
+            / entries_per_second
+    });
+    let percent_complete = if directory_entries_total == 0 {
+        100.0
+    } else {
+        ratio(directory_entries_validated, directory_entries_total) * 100.0
+    };
+    emit(&ArchiveValidationProgress {
+        phase: "archive_validation_progress",
+        sequence: state.sequence,
+        percent_complete,
+        directory_pages_validated,
+        directory_pages_total,
+        directory_entries_validated,
+        directory_entries_total,
+        physical_payloads_validated,
+        compressed_payload_bytes_validated,
+        uncompressed_payload_bytes_validated,
+        entries_per_second,
+        estimated_seconds_remaining,
+        elapsed_seconds,
+    });
+    Ok(())
+}
+
+#[allow(clippy::too_many_lines)]
+fn validate_fixed_archive_impl(
+    path: &Path,
+    progress_interval_ms: u64,
+    mut emit: impl FnMut(&ArchiveValidationProgress),
+) -> ExperimentResult<ArchiveValidationSummary> {
     let started = Instant::now();
     let source = FileRangeSource::open(path)?;
     let bootstrap = load_bootstrap(&source)?;
@@ -4270,17 +4488,25 @@ pub fn validate_fixed_archive(path: &Path) -> ExperimentResult<ArchiveValidation
     let mut compressed_payload_bytes = 0_u64;
     let mut uncompressed_payload_bytes = 0_u64;
     let mut directory_pages = 0_u64;
+    let directory_pages_total =
+        bootstrap
+            .root
+            .manifests
+            .iter()
+            .try_fold(0_u64, |total, manifest| {
+                total
+                    .checked_add(manifest.page_count)
+                    .ok_or_else(|| invalid_data("validation directory page count overflow"))
+            })?;
+    let mut progress_state = ValidationProgressState::default();
     for manifest in &bootstrap.root.manifests {
-        directory_pages = directory_pages
-            .checked_add(manifest.page_count)
-            .ok_or_else(|| invalid_data("validated directory page count overflow"))?;
         for bucket_index in 0..manifest.page_count {
             let page_offset = directory_page_offset(manifest, bucket_index)?;
             let page = source.read_range(page_offset, DIRECTORY_PAGE_BYTES)?;
             let entries = decode_directory_page(&page, manifest, bucket_index)?.entries;
-            entry_count = entry_count
-                .checked_add(usize_to_u64(entries.len())?)
-                .ok_or_else(|| invalid_data("validated directory entry count overflow"))?;
+            directory_pages = directory_pages
+                .checked_add(1)
+                .ok_or_else(|| invalid_data("validated directory page count overflow"))?;
             for entry in entries {
                 let payload_end = entry
                     .offset
@@ -4289,37 +4515,70 @@ pub fn validate_fixed_archive(path: &Path) -> ExperimentResult<ArchiveValidation
                 if entry.offset < header.data_offset || payload_end > source_len {
                     return Err(invalid_data("payload range is outside the archive").into());
                 }
-                if !decoded_payloads.insert((
+                let is_new_payload = decoded_payloads.insert((
                     entry.offset,
                     entry.compressed_len,
                     entry.uncompressed_len,
                     entry.codec.code(),
-                )) {
-                    continue;
+                ));
+                if is_new_payload {
+                    compressed_payload_bytes = compressed_payload_bytes
+                        .checked_add(entry.compressed_len)
+                        .ok_or_else(|| invalid_data("validated compressed byte count overflow"))?;
+                    uncompressed_payload_bytes = uncompressed_payload_bytes
+                        .checked_add(entry.uncompressed_len)
+                        .ok_or_else(|| {
+                            invalid_data("validated uncompressed byte count overflow")
+                        })?;
+                    let compressed =
+                        source.read_range(entry.offset, u64_to_usize(entry.compressed_len)?)?;
+                    let raw = decompress(entry.codec, &compressed, entry.uncompressed_len)?;
+                    let payload = RecordRegionalPayload::decode(&raw)?;
+                    let (core_start, core_end) = (payload.core_start, payload.core_end);
+                    if core_start != entry.start || core_end != entry.end {
+                        return Err(invalid_data(
+                            "validated payload provenance differs from its directory entry",
+                        )
+                        .into());
+                    }
                 }
-                compressed_payload_bytes = compressed_payload_bytes
-                    .checked_add(entry.compressed_len)
-                    .ok_or_else(|| invalid_data("validated compressed byte count overflow"))?;
-                uncompressed_payload_bytes = uncompressed_payload_bytes
-                    .checked_add(entry.uncompressed_len)
-                    .ok_or_else(|| invalid_data("validated uncompressed byte count overflow"))?;
-                let compressed =
-                    source.read_range(entry.offset, u64_to_usize(entry.compressed_len)?)?;
-                let raw = decompress(entry.codec, &compressed, entry.uncompressed_len)?;
-                let payload = RecordRegionalPayload::decode(&raw)?;
-                let (core_start, core_end) = (payload.core_start, payload.core_end);
-                if core_start != entry.start || core_end != entry.end {
-                    return Err(invalid_data(
-                        "validated payload provenance differs from its directory entry",
-                    )
-                    .into());
-                }
+                entry_count = entry_count
+                    .checked_add(1)
+                    .ok_or_else(|| invalid_data("validated directory entry count overflow"))?;
+                maybe_emit_validation_progress(
+                    progress_interval_ms,
+                    false,
+                    started,
+                    &mut progress_state,
+                    directory_pages,
+                    directory_pages_total,
+                    entry_count,
+                    header.entry_count,
+                    usize_to_u64(decoded_payloads.len())?,
+                    compressed_payload_bytes,
+                    uncompressed_payload_bytes,
+                    &mut emit,
+                )?;
             }
         }
     }
     if entry_count != header.entry_count {
         return Err(invalid_data("validated directory count differs from archive header").into());
     }
+    maybe_emit_validation_progress(
+        progress_interval_ms,
+        true,
+        started,
+        &mut progress_state,
+        directory_pages,
+        directory_pages_total,
+        entry_count,
+        header.entry_count,
+        usize_to_u64(decoded_payloads.len())?,
+        compressed_payload_bytes,
+        uncompressed_payload_bytes,
+        &mut emit,
+    )?;
     Ok(ArchiveValidationSummary {
         schema_version: 1,
         archive_version: header.version,
@@ -5123,6 +5382,20 @@ mod tests {
         assert_eq!(validation.reference_manifests, 1);
         assert_eq!(validation.directory_entries, 1);
         assert_eq!(validation.physical_payloads, 1);
+        let mut validation_progress = Vec::new();
+        let progress_validation = validate_fixed_archive_impl(&fixture, 0, |snapshot| {
+            validation_progress.push(snapshot.clone());
+        })
+        .unwrap();
+        assert_eq!(progress_validation.directory_entries, 1);
+        let final_progress = validation_progress.last().unwrap();
+        assert_eq!(final_progress.phase, "archive_validation_progress");
+        assert!((final_progress.percent_complete - 100.0).abs() < f64::EPSILON);
+        assert_eq!(final_progress.directory_pages_validated, 1);
+        assert_eq!(final_progress.directory_pages_total, 1);
+        assert_eq!(final_progress.directory_entries_validated, 1);
+        assert_eq!(final_progress.directory_entries_total, 1);
+        assert_eq!(final_progress.physical_payloads_validated, 1);
 
         let archive_bytes = std::fs::read(&fixture).unwrap();
         let mut invalid_magic = archive_bytes.clone();

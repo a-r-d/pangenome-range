@@ -2,15 +2,17 @@ use gbz::GBZ;
 use gbz_base::PathIndex;
 use pangenome_range_build::{
     BuildProgressMode, ChunkCodec, EncodeOptions, EncoderScaleOptions, ExperimentMode,
-    ExperimentOptions, FixedArchiveConfig, FixedArchiveReader, QuerySpec,
+    ExperimentOptions, FixedArchiveConfig, FixedArchiveReader, QueryMeasurement, QuerySpec,
     export_conformance_fixtures, internal_gbz_base_query, run_encode, run_encoder_scale_experiment,
-    run_fixed_window_experiment, source_oracle, validate_fixed_archive,
+    run_fixed_window_experiment, source_oracle, validate_fixed_archive_with_progress,
 };
 use pangenome_range_format::{FileRangeSource, NetworkProfile, RangeSource, TracingRangeSource};
+use serde::Deserialize;
+use sha2::{Digest, Sha256};
 use simple_sds::serialize;
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 use std::error::Error;
-use std::io::IsTerminal;
+use std::io::{BufReader, IsTerminal, Read};
 use std::path::{Path, PathBuf};
 
 type AppResult<T> = Result<T, Box<dyn Error + Send + Sync>>;
@@ -31,10 +33,7 @@ fn run(mut args: impl Iterator<Item = String>) -> AppResult<()> {
     match command.as_str() {
         "encode" => encode(&mut args),
         "verify" => verify(&mut args),
-        "validate" => {
-            let path = one_path_argument(&mut args, "validate")?;
-            validate_archive(&path)
-        }
+        "validate" => validate_archive(&mut args),
         "fixtures" => fixtures(&mut args),
         "inspect" => {
             let path = one_path_argument(&mut args, "inspect")?;
@@ -257,10 +256,14 @@ fn print_help() {
     println!("Verify options:");
     println!("  --against PATH             independent source GBZ oracle");
     println!("  --sample NAME --contig NAME --start BP --end BP");
-    println!("  --workload PATH            retained JSON array of query specifications");
+    println!("  --workload PATH            versioned benchmark workload or legacy query array");
     println!("  --report PATH              write the JSON verification result");
     println!("  --context BP               source-oracle context (default: 100)");
     println!("  --coalescing-gap BYTES     archive read coalescing gap");
+    println!();
+    println!("Validate options:");
+    println!("  --progress auto|plain|json|off");
+    println!("  --progress-interval-seconds N  validation progress cadence (default: 5)");
     println!();
     println!("Reserved experiment commands: build, query, benchmark");
 }
@@ -330,11 +333,16 @@ fn verify(args: &mut impl Iterator<Item = String>) -> AppResult<()> {
         }
     }
     let against = against.ok_or("verify requires --against <input.gbz>")?;
+    let mut expected_hashes = BTreeMap::new();
+    let mut skipped_negative_queries = Vec::new();
     let queries = if let Some(workload) = &workload {
         if sample.is_some() || contig.is_some() || start.is_some() || end.is_some() {
             return Err("--workload cannot be combined with a single-query coordinate".into());
         }
-        let queries: Vec<QuerySpec> = serde_json::from_slice(&std::fs::read(workload)?)?;
+        let loaded = load_verification_workload(workload, &archive)?;
+        expected_hashes = loaded.expected_hashes;
+        skipped_negative_queries = loaded.skipped_negative_queries;
+        let queries = loaded.queries;
         if queries.is_empty() {
             return Err("verification workload contains no queries".into());
         }
@@ -361,27 +369,22 @@ fn verify(args: &mut impl Iterator<Item = String>) -> AppResult<()> {
         min_window_size: 1_024,
     };
     let mut reader = FixedArchiveReader::open(&archive)?;
-    let mut measurements = Vec::with_capacity(queries.len());
-    for query in &queries {
-        let oracle = source_oracle(&graph, &path_index, query)?;
-        measurements.push(reader.query(
-            &archive_config,
-            query,
-            coalescing_gap,
-            &oracle,
-            Some((&graph, &path_index)),
-        )?);
-    }
-    let output = if workload.is_some() {
-        serde_json::to_string_pretty(&serde_json::json!({
-            "schema_version": 1,
-            "archive": archive,
-            "against": against,
-            "measurements": measurements,
-        }))?
-    } else {
-        serde_json::to_string_pretty(&measurements[0])?
-    };
+    let measurements = verify_queries(
+        &graph,
+        &path_index,
+        &mut reader,
+        &archive_config,
+        &queries,
+        coalescing_gap,
+        &expected_hashes,
+    )?;
+    let output = verification_output(
+        workload.is_some(),
+        &archive,
+        &against,
+        &measurements,
+        &skipped_negative_queries,
+    )?;
     if let Some(report) = report {
         std::fs::write(report, output.as_bytes())?;
     }
@@ -389,8 +392,237 @@ fn verify(args: &mut impl Iterator<Item = String>) -> AppResult<()> {
     Ok(())
 }
 
-fn validate_archive(path: impl AsRef<Path>) -> AppResult<()> {
-    let summary = validate_fixed_archive(path.as_ref())?;
+fn verification_output(
+    is_workload: bool,
+    archive: &Path,
+    against: &Path,
+    measurements: &[QueryMeasurement],
+    skipped_negative_queries: &[String],
+) -> AppResult<String> {
+    if is_workload {
+        Ok(serde_json::to_string_pretty(&serde_json::json!({
+            "schema_version": 1,
+            "archive": archive,
+            "against": against,
+            "measurements": measurements,
+            "skipped_negative_queries": skipped_negative_queries,
+        }))?)
+    } else {
+        Ok(serde_json::to_string_pretty(&measurements[0])?)
+    }
+}
+
+fn verify_queries(
+    graph: &GBZ,
+    path_index: &PathIndex,
+    reader: &mut FixedArchiveReader,
+    archive_config: &FixedArchiveConfig,
+    queries: &[QuerySpec],
+    coalescing_gap: u64,
+    expected_hashes: &BTreeMap<String, String>,
+) -> AppResult<Vec<QueryMeasurement>> {
+    let mut measurements = Vec::with_capacity(queries.len());
+    for query in queries {
+        let oracle = source_oracle(graph, path_index, query)?;
+        let measurement = reader.query(
+            archive_config,
+            query,
+            coalescing_gap,
+            &oracle,
+            Some((graph, path_index)),
+        )?;
+        if let Some(expected) = expected_hashes.get(&query.id)
+            && measurement.canonical_hash != *expected
+        {
+            return Err(format!(
+                "query {} canonical hash {} does not match workload {}",
+                query.id, measurement.canonical_hash, expected
+            )
+            .into());
+        }
+        measurements.push(measurement);
+    }
+    Ok(measurements)
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(untagged)]
+enum VerificationWorkloadFile {
+    Legacy(Vec<QuerySpec>),
+    Versioned(VersionedVerificationWorkload),
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct VersionedVerificationWorkload {
+    schema_version: u32,
+    archive_sha256: String,
+    queries: Vec<VersionedVerificationQuery>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct VersionedVerificationQuery {
+    id: String,
+    class: String,
+    sample: String,
+    contig: String,
+    start: u64,
+    end: u64,
+    context: u64,
+    expected_canonical_hash: Option<String>,
+    expected_error: Option<String>,
+}
+
+struct LoadedVerificationWorkload {
+    queries: Vec<QuerySpec>,
+    expected_hashes: BTreeMap<String, String>,
+    skipped_negative_queries: Vec<String>,
+}
+
+fn load_verification_workload(
+    workload_path: &Path,
+    archive_path: &Path,
+) -> AppResult<LoadedVerificationWorkload> {
+    let parsed: VerificationWorkloadFile = serde_json::from_slice(&std::fs::read(workload_path)?)?;
+    match parsed {
+        VerificationWorkloadFile::Legacy(queries) => Ok(LoadedVerificationWorkload {
+            queries,
+            expected_hashes: BTreeMap::new(),
+            skipped_negative_queries: Vec::new(),
+        }),
+        VerificationWorkloadFile::Versioned(workload) => {
+            if workload.schema_version != 1 {
+                return Err(format!(
+                    "unsupported verification workload schemaVersion {}",
+                    workload.schema_version
+                )
+                .into());
+            }
+            if workload.archive_sha256.len() != 64
+                || !workload
+                    .archive_sha256
+                    .bytes()
+                    .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
+            {
+                return Err("workload archiveSha256 must be 64 lowercase hex characters".into());
+            }
+            let actual_sha256 = sha256_path(archive_path)?;
+            if actual_sha256 != workload.archive_sha256 {
+                return Err(format!(
+                    "archive SHA-256 {actual_sha256} does not match workload {}",
+                    workload.archive_sha256
+                )
+                .into());
+            }
+            let mut queries = Vec::new();
+            let mut expected_hashes = BTreeMap::new();
+            let mut skipped_negative_queries = Vec::new();
+            for query in workload.queries {
+                match (&query.expected_canonical_hash, &query.expected_error) {
+                    (Some(expected), None) => {
+                        if expected.len() != 64
+                            || !expected
+                                .bytes()
+                                .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
+                        {
+                            return Err(format!(
+                                "query {} expectedCanonicalHash must be 64 lowercase hex characters",
+                                query.id
+                            )
+                            .into());
+                        }
+                        expected_hashes.insert(query.id.clone(), expected.clone());
+                        queries.push(QuerySpec {
+                            id: query.id,
+                            class: query.class,
+                            sample: query.sample,
+                            contig: query.contig,
+                            start: query.start,
+                            end: query.end,
+                            context: query.context,
+                        });
+                    }
+                    (None, Some(expected_error)) => skipped_negative_queries.push(format!(
+                        "{} ({expected_error}; TypeScript reader-specific negative case)",
+                        query.id
+                    )),
+                    _ => {
+                        return Err(format!(
+                            "query {} must declare exactly one of expectedCanonicalHash or expectedError",
+                            query.id
+                        )
+                        .into());
+                    }
+                }
+            }
+            Ok(LoadedVerificationWorkload {
+                queries,
+                expected_hashes,
+                skipped_negative_queries,
+            })
+        }
+    }
+}
+
+fn sha256_path(path: &Path) -> AppResult<String> {
+    let mut reader = BufReader::new(std::fs::File::open(path)?);
+    let mut hasher = Sha256::new();
+    let mut buffer = vec![0_u8; 1024 * 1024];
+    loop {
+        let read = reader.read(&mut buffer)?;
+        if read == 0 {
+            break;
+        }
+        hasher.update(&buffer[..read]);
+    }
+    Ok(format!("{:x}", hasher.finalize()))
+}
+
+fn validate_archive(args: &mut impl Iterator<Item = String>) -> AppResult<()> {
+    let usage = "usage: pangenome-range validate <input.pngr> [--progress auto|plain|json|off] [--progress-interval-seconds N]";
+    let first = args.next().ok_or(usage)?;
+    if matches!(first.as_str(), "--help" | "-h") {
+        println!("{usage}");
+        return Ok(());
+    }
+    let path = PathBuf::from(first);
+    let mut progress = automatic_progress_mode();
+    let mut progress_interval_ms = 5_000_u64;
+    while let Some(flag) = args.next() {
+        match flag.as_str() {
+            "--progress" => {
+                progress = parse_progress_mode(&option_value(args, &flag)?)?;
+            }
+            "--progress-interval-seconds" => {
+                let seconds: u64 = parse_option(args, &flag)?;
+                progress_interval_ms = seconds
+                    .checked_mul(1_000)
+                    .ok_or("progress interval is too large")?;
+            }
+            "--help" | "-h" => {
+                println!("{usage}");
+                return Ok(());
+            }
+            _ => return Err(format!("unknown validate option '{flag}'").into()),
+        }
+    }
+    emit_cli_progress(
+        progress,
+        "archive_validation",
+        "validating all directory entries and physical payloads",
+    );
+    let summary = validate_fixed_archive_with_progress(&path, progress, progress_interval_ms)?;
+    emit_cli_progress(
+        progress,
+        "archive_validation_complete",
+        &format!(
+            "validated {} directory pages and {} physical payloads in {}",
+            format_cli_integer(summary.directory_pages),
+            format_cli_integer(summary.physical_payloads),
+            format_cli_duration(summary.validation_wall_ms / 1_000.0),
+        ),
+    );
     println!("{}", serde_json::to_string_pretty(&summary)?);
     Ok(())
 }
@@ -400,6 +632,7 @@ fn encode(args: &mut impl Iterator<Item = String>) -> AppResult<()> {
     let input = PathBuf::from(args.next().ok_or(usage)?);
     let output = PathBuf::from(args.next().ok_or(usage)?);
     let mut options = EncodeOptions::new(input, output);
+    options.progress = automatic_progress_mode();
     while let Some(flag) = args.next() {
         match flag.as_str() {
             "--sample" => options.sample = Some(option_value(args, &flag)?),
@@ -443,13 +676,7 @@ fn encode(args: &mut impl Iterator<Item = String>) -> AppResult<()> {
             }
             "--progress" => {
                 let value = option_value(args, &flag)?;
-                options.progress = match value.as_str() {
-                    "auto" if std::io::stderr().is_terminal() => BuildProgressMode::Plain,
-                    "auto" | "off" => BuildProgressMode::Off,
-                    "plain" => BuildProgressMode::Plain,
-                    "json" => BuildProgressMode::Json,
-                    _ => return Err(format!("unsupported progress mode '{value}'").into()),
-                };
+                options.progress = parse_progress_mode(&value)?;
             }
             "--progress-interval-seconds" => {
                 let seconds: u64 = parse_option(args, &flag)?;
@@ -465,11 +692,83 @@ fn encode(args: &mut impl Iterator<Item = String>) -> AppResult<()> {
         }
     }
     let summary = run_encode(&options)?;
+    println!("completed successfully");
     println!("archive: {}", summary.output_path.display());
+    println!(
+        "archive bytes: {}",
+        format_cli_integer(summary.build.archive_bytes)
+    );
     println!("archive sha256: {}", summary.output_sha256);
-    println!("chunks: {}", summary.build.directory_entries);
-    println!("construction: {:.3} ms", summary.build.construction_wall_ms);
+    println!(
+        "chunks: {}",
+        format_cli_integer(summary.build.directory_entries)
+    );
+    println!(
+        "construction: {} ({:.3} ms)",
+        format_cli_duration(summary.build.construction_wall_ms / 1_000.0),
+        summary.build.construction_wall_ms,
+    );
     Ok(())
+}
+
+fn automatic_progress_mode() -> BuildProgressMode {
+    if std::io::stderr().is_terminal() {
+        BuildProgressMode::Plain
+    } else {
+        BuildProgressMode::Off
+    }
+}
+
+fn parse_progress_mode(value: &str) -> AppResult<BuildProgressMode> {
+    match value {
+        "auto" => Ok(automatic_progress_mode()),
+        "off" => Ok(BuildProgressMode::Off),
+        "plain" => Ok(BuildProgressMode::Plain),
+        "json" => Ok(BuildProgressMode::Json),
+        _ => Err(format!("unsupported progress mode '{value}'").into()),
+    }
+}
+
+fn emit_cli_progress(mode: BuildProgressMode, phase: &str, message: &str) {
+    match mode {
+        BuildProgressMode::Off => {}
+        BuildProgressMode::Plain => eprintln!("[{phase}] {message}"),
+        BuildProgressMode::Json => eprintln!(
+            "{}",
+            serde_json::json!({ "phase": phase, "message": message })
+        ),
+    }
+}
+
+fn format_cli_integer(value: u64) -> String {
+    let digits = value.to_string();
+    let mut formatted = String::with_capacity(digits.len() + digits.len() / 3);
+    let first_group = digits.len() % 3;
+    for (index, byte) in digits.bytes().enumerate() {
+        if index > 0 && index % 3 == first_group {
+            formatted.push(',');
+        }
+        formatted.push(char::from(byte));
+    }
+    formatted
+}
+
+#[allow(clippy::cast_sign_loss, clippy::cast_possible_truncation)]
+fn format_cli_duration(seconds: f64) -> String {
+    if !seconds.is_finite() || seconds < 0.0 {
+        return "unknown".into();
+    }
+    let rounded = seconds.round() as u64;
+    let hours = rounded / 3_600;
+    let minutes = (rounded % 3_600) / 60;
+    let seconds = rounded % 60;
+    if hours > 0 {
+        format!("{hours}h {minutes:02}m {seconds:02}s")
+    } else if minutes > 0 {
+        format!("{minutes}m {seconds:02}s")
+    } else {
+        format!("{seconds}s")
+    }
 }
 
 fn option_value(args: &mut impl Iterator<Item = String>, flag: &str) -> AppResult<String> {

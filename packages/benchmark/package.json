@@ -4,12 +4,15 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "build": "tsup",
+    "build": "tsup && tsup --config tsup.browser.config.ts && node scripts/copy-wasm.mjs",
+    "bench": "node dist/cli.js",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test": "pnpm --filter pangenome-range build && node scripts/node-range.mjs",
-    "test:browser": "pnpm --filter pangenome-range build && node scripts/browser-range.mjs"
+    "test": "pnpm --filter pangenome-range build && pnpm build && node --test test/*.test.mjs",
+    "test:browser": "pnpm --filter pangenome-range build && pnpm build && node test/browser-smoke.mjs",
+    "test:browser:ci": "pnpm --filter pangenome-range build && pnpm build && PANGENOME_RANGE_BROWSERS=chromium PANGENOME_RANGE_DECODERS=pure-js node test/browser-smoke.mjs"
   },
   "dependencies": {
+    "@bokuweb/zstd-wasm": "0.0.27",
     "pangenome-range": "workspace:*"
   },
   "devDependencies": {

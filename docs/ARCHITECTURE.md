@@ -51,6 +51,16 @@ current temp-final byte length. JSON and plain progress contain the same
 measurements; `--progress-interval-seconds` controls their cadence. Percent is
 coordinate-based rather than inferred from compressed bytes.
 
+Progress covers every potentially long CLI phase. Input and output checksum
+passes report bytes, percentage, transfer rate, elapsed time, and ETA. GBZ load
+and compact path-index construction emit elapsed-time heartbeats because the
+upstream APIs do not expose reliable partial-work counts. The final structural
+validation reports directory entries/pages and unique physical payloads,
+compressed bytes reread, percentage, rate, elapsed time, and ETA. Interactive
+terminals select readable plain progress by default; JSON mode emits stable
+newline-delimited events, while redirected commands remain quiet unless a mode
+is selected explicitly.
+
 ## TypeScript product boundary
 
 The TypeScript workspace is a separate consumer of the static archive, not a
@@ -58,7 +68,7 @@ Rust crate or native-binary wrapper. `packages/browser` publishes isolated
 reader, viewer, and Node entry points. The root and `/reader` entries contain no
 DOM or Node built-ins; `/viewer` owns the framework-neutral rendering contract,
 and `/node` owns Node-only range sources. `packages/benchmark` is private and
-will own Node and real-browser measurements.
+owns Node and real-browser measurements.
 
 The public contracts, strict HTTP/Blob/memory/file range sources, v1
 bootstrap/root and arithmetic directory reader, byte-bounded caches,
@@ -66,8 +76,20 @@ pure-JavaScript zstd decompressor, record-preserving regional decoder, and
 canonical graph assembly exist. Rust and TypeScript decode the same current
 fixture into typed-array-oriented nodes, sequences, topology, real reference
 traversal, and weighted tile-local paths, then produce identical canonical
-hashes. Rendering and a public-network browser benchmark corpus remain
+hashes. A bounded progressive Canvas 2D viewer consumes only `queryTiles()` and
+the query trace contract. A public-network browser benchmark corpus remains
 explicitly unimplemented.
+
+The benchmark package wraps the public reader with a versioned workload, Node
+and Playwright runners, a strict/fault-injectable local range origin, immutable
+raw result retention, an optional WASM decoder, and a remote-origin validator.
+The browser page resolves `pangenome-range/reader` through an import map to the
+built public ESM entry; it does not reach into reader source or substitute Node
+file reads. A separate module origin serves page/reader/optional WASM assets,
+while the archive origin records exact cross-origin `HEAD` and range traffic
+with stable connection identifiers. Planned reader ranges stay separate from
+requests observed at the origin so an HTTP-cache hit cannot be mistaken for a
+library-cache hit.
 
 ## Range sources and traces
 
@@ -107,6 +129,35 @@ parallel dependency round. Optional query traces report exact ranges and layer
 bytes, dependency rounds, cache hits, decode/decompression/merge timings,
 selected counts, and the canonical BLAKE3 result. When tracing is disabled,
 the merge remains required but trace accounting and hashing are skipped.
+
+## Viewer pipeline
+
+The `/viewer` entry is a one-way consumer of the reader API:
+
+```text
+PangenomeArchive.queryTiles()
+  -> bounded incremental view model
+  -> deterministic layout snapshot
+  -> Canvas 2D renderer
+  -> interaction/lifecycle controller
+```
+
+The viewer never opens URLs, reads byte ranges, parses archive bytes, or owns an
+archive. Its controller cancels the previous `queryTiles()` iterator whenever a
+new region is selected. Reference nodes are retained before alternatives when a
+budget is reached; node, edge, and traversal caps are applied before layout so a
+large decoded region cannot create an unbounded render corpus. The current
+bounded main-thread layout did not justify worker-transfer complexity; a worker
+is reserved for a measured interaction failure rather than assumed to help.
+
+Reference topology can merge by node identity. Weighted anonymous traversals
+remain attached to their source tile, are ranked by local multiplicity for the
+limited frequency lanes, and are never stitched across tile boundaries. The
+canvas shows reference coordinate ticks, orientation, alternate branches,
+curved topology edges, tile boundaries, local weights, and explicit summarized
+counts. Mouse, pointer, and keyboard controls share one transform; `destroy()`
+aborts work, removes listeners and observers, and releases all DOM owned by the
+viewer.
 
 ## Cost simulation
 

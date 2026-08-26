@@ -4,15 +4,20 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "vitepress dev .",
-    "build": "vitepress build .",
+    "fixtures": "node ../scripts/prepare-docs-fixtures.mjs",
+    "dev": "pnpm fixtures && vitepress dev .",
+    "build": "pnpm fixtures && vitepress build .",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test": "node -e \"console.log('Documentation has no standalone test suite; VitePress build is the validation gate.')\""
+    "test": "node --test test/docs.test.mjs",
+    "test:pages": "node test/pages-smoke.mjs"
   },
   "dependencies": {
-    "pangenome-range": "workspace:*"
+    "pangenome-range": "workspace:*",
+    "vue": "^3.5.41"
   },
   "devDependencies": {
+    "@playwright/test": "^1.62.1",
+    "@types/node": "^24.13.3",
     "typescript": "^6.0.3",
     "vitepress": "^1.6.4"
   }

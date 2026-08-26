@@ -1,0 +1,180 @@
+{
+  "schemaVersion": 1,
+  "command": "browser",
+  "archivePath": "/tmp/pangenome-range-mhc-benchmark-v1.pngr",
+  "workloadPath": "/tmp/pangenome-range-mhc-benchmark-workload.json",
+  "workload": {
+    "schemaVersion": 1,
+    "archiveSha256": "ec71bdfff9e0ebdf5bbbac9dcb77b547ba334054b5980d17cceba1c29509e1c5",
+    "seed": "0x504e47524e473031",
+    "queries": [
+      {
+        "id": "boundary-start",
+        "class": "boundary-start",
+        "sample": "MHC-GRCh38",
+        "contig": "MHC",
+        "start": 0,
+        "end": 1000,
+        "context": 100,
+        "expectedCanonicalHash": "c85f6b1243da89066a93bd95a999bd0eb01a37a15550a48938fd791a9754d64e"
+      },
+      {
+        "id": "pan-anchor",
+        "class": "pan-anchor",
+        "sample": "MHC-GRCh38",
+        "contig": "MHC",
+        "start": 2480226,
+        "end": 2490226,
+        "context": 100,
+        "expectedCanonicalHash": "222274cce6f68f83d21a926aa0c769f2fbfed5f1530af1035c9aeb6bf232bfa2"
+      },
+      {
+        "id": "nearby-pan",
+        "class": "nearby-pan",
+        "sample": "MHC-GRCh38",
+        "contig": "MHC",
+        "start": 2485226,
+        "end": 2495226,
+        "context": 100,
+        "expectedCanonicalHash": "6403453ae01c45e46acf6e32e287563cc471c63b8093c303267537fc73a2559d"
+      },
+      {
+        "id": "boundary-end",
+        "class": "boundary-end",
+        "sample": "MHC-GRCh38",
+        "contig": "MHC",
+        "start": 4969452,
+        "end": 4970452,
+        "context": 100,
+        "expectedCanonicalHash": "60187312fe357f44b6ae29493e90e3d912e40472a7fd69a02b06b1c5cec9cea8"
+      },
+      {
+        "id": "distant-random",
+        "class": "distant-random",
+        "sample": "MHC-GRCh38",
+        "contig": "MHC",
+        "start": 2480226,
+        "end": 2490226,
+        "context": 100,
+        "expectedCanonicalHash": "222274cce6f68f83d21a926aa0c769f2fbfed5f1530af1035c9aeb6bf232bfa2"
+      },
+      {
+        "id": "random-1000-00000",
+        "class": "random-1000",
+        "sample": "MHC-GRCh38",
+        "contig": "MHC",
+        "start": 3223198,
+        "end": 3224198,
+        "context": 100,
+        "expectedCanonicalHash": "a6035913816c90c6893b3e0546c0cb2147567787e1e3a07dadd4e9a0983f23ba"
+      },
+      {
+        "id": "random-1000-00001",
+        "class": "random-1000",
+        "sample": "MHC-GRCh38",
+        "contig": "MHC",
+        "start": 1577709,
+        "end": 1578709,
+        "context": 100,
+        "expectedCanonicalHash": "8b5af1deb90b3097fab40ffad2cc52492a6fa4c36357d3791013c337f091532a"
+      },
+      {
+        "id": "random-10000-00000",
+        "class": "random-10000",
+        "sample": "MHC-GRCh38",
+        "contig": "MHC",
+        "start": 3900300,
+        "end": 3910300,
+        "context": 100,
+        "expectedCanonicalHash": "8562f2661beb8b4d1155964ac63d9b31d70774366dfacc29a400ddcfd158d62d"
+      },
+      {
+        "id": "random-10000-00001",
+        "class": "random-10000",
+        "sample": "MHC-GRCh38",
+        "contig": "MHC",
+        "start": 2375403,
+        "end": 2385403,
+        "context": 100,
+        "expectedCanonicalHash": "9a01a3c4ebcb6c8a7f1073227cbca6d757aa3880920614b30aa46e42c8a03a6c"
+      },
+      {
+        "id": "random-100000-00000",
+        "class": "random-100000",
+        "sample": "MHC-GRCh38",
+        "contig": "MHC",
+        "start": 3089199,
+        "end": 3189199,
+        "context": 100,
+        "expectedCanonicalHash": "1b9aa5d0b43fae5e9af607f1856f2c364fded24b840837ad6983a34b978790a2"
+      },
+      {
+        "id": "random-100000-00001",
+        "class": "random-100000",
+        "sample": "MHC-GRCh38",
+        "contig": "MHC",
+        "start": 3812392,
+        "end": 3912392,
+        "context": 100,
+        "expectedCanonicalHash": "75e4e6e55ded13b742610f6d3b1e6ad03afd86dbc41e43dc10deaefa6ad6ce56"
+      },
+      {
+        "id": "random-1000000-00000",
+        "class": "random-1000000",
+        "sample": "MHC-GRCh38",
+        "contig": "MHC",
+        "start": 3893502,
+        "end": 4893502,
+        "context": 100,
+        "expectedCanonicalHash": "087da1974c7fdec5a0f222295c30613a9daf1f5934da70da6d20afaa60ea855f"
+      },
+      {
+        "id": "random-1000000-00001",
+        "class": "random-1000000",
+        "sample": "MHC-GRCh38",
+        "contig": "MHC",
+        "start": 2341448,
+        "end": 3341448,
+        "context": 100,
+        "expectedCanonicalHash": "cb6b24c85930c1748f1e26060f25a327c83507e545fc18051ccc64e72cc5eb58"
+      },
+      {
+        "id": "absent-reference",
+        "class": "absent-region",
+        "sample": "__absent_sample__",
+        "contig": "__absent_contig__",
+        "start": 0,
+        "end": 1000,
+        "context": 100,
+        "expectedError": "reference-not-found"
+      }
+    ]
+  },
+  "browsers": [
+    "chromium",
+    "firefox",
+    "webkit"
+  ],
+  "decoders": [
+    "pure-js",
+    "wasm"
+  ],
+  "scenarios": [
+    "cold-library-transport-no-store",
+    "cold-library-normal-http-cache",
+    "warm-directory-cache",
+    "repeated-same-query",
+    "nearby-pan-query",
+    "distant-random-query"
+  ],
+  "libraryCache": {
+    "directoryBytes": 1048576,
+    "payloadBytes": 33554432
+  },
+  "origin": {
+    "cors": "*",
+    "exposedHeaders": true,
+    "cacheControl": "public, max-age=31536000, immutable, no-transform",
+    "contentEncoding": "identity"
+  }
+}

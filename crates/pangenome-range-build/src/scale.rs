@@ -14,7 +14,8 @@ use simple_sds::serialize;
 use std::fs::{self, File};
 use std::io::{self, BufReader, BufWriter, Read, Write};
 use std::path::{Path, PathBuf};
-use std::time::Instant;
+use std::sync::{Arc, Condvar, Mutex};
+use std::time::{Duration, Instant};
 
 const PATH_INDEX_INTERVAL: usize = 1_000;
 const WINDOW_SIZE: u64 = 16_384;
@@ -113,7 +114,7 @@ pub struct EncodeSummary {
 fn encode_progress(mode: BuildProgressMode, phase: &str, message: &str) {
     match mode {
         BuildProgressMode::Off => {}
-        BuildProgressMode::Plain => eprintln!("{phase}: {message}"),
+        BuildProgressMode::Plain => eprintln!("[{phase}] {message}"),
         BuildProgressMode::Json => eprintln!(
             "{}",
             serde_json::json!({ "phase": phase, "message": message })
@@ -158,22 +159,33 @@ pub fn run_encode(options: &EncodeOptions) -> ExperimentResult<EncodeSummary> {
         fs::create_dir_all(scratch_dir)?;
     }
     let source_gbz_bytes = fs::metadata(&options.input)?.len();
-    encode_progress(options.progress, "source_checksum", "hashing GBZ source");
     let checksum_started = Instant::now();
-    let source_sha256 = file_sha256(&options.input)?;
+    let source_sha256 = file_sha256_with_progress(
+        &options.input,
+        options.progress,
+        "source_checksum",
+        "hashing GBZ source",
+        options.progress_interval_ms,
+    )?;
     let source_checksum_wall_ms = elapsed_ms(checksum_started);
-    encode_progress(options.progress, "source_load", "loading GBZ source");
     let load_started = Instant::now();
-    let graph: GBZ = serialize::load_from(&options.input)?;
+    let graph: GBZ = run_with_phase_heartbeat(
+        options.progress,
+        "source_load",
+        "loading GBZ source into memory",
+        options.progress_interval_ms,
+        || serialize::load_from(&options.input),
+    )?;
     let source_load_wall_ms = elapsed_ms(load_started);
     let rss_after_source_load_kib = process_current_rss_kib();
-    encode_progress(
+    let index_started = Instant::now();
+    let path_index = run_with_phase_heartbeat(
         options.progress,
         "path_index",
         "building compact reference path index",
-    );
-    let index_started = Instant::now();
-    let path_index = PathIndex::new(&graph, PATH_INDEX_INTERVAL, false)?;
+        options.progress_interval_ms,
+        || PathIndex::new(&graph, PATH_INDEX_INTERVAL, false),
+    )?;
     let path_index_wall_ms = elapsed_ms(index_started);
     let rss_after_path_index_kib = process_current_rss_kib();
     let config = FixedArchiveConfig {
@@ -210,7 +222,13 @@ pub fn run_encode(options: &EncodeOptions) -> ExperimentResult<EncodeSummary> {
         &config,
         &build_options,
     )?;
-    let output_sha256 = file_sha256(&options.output)?;
+    let output_sha256 = file_sha256_with_progress(
+        &options.output,
+        options.progress,
+        "output_checksum",
+        "hashing completed archive",
+        options.progress_interval_ms,
+    )?;
     let seconds = build.construction_wall_ms / 1_000.0;
     let chunks_per_second = if seconds > 0.0 {
         build.directory_entries as f64 / seconds
@@ -547,17 +565,225 @@ fn write_json(path: &Path, value: &impl Serialize) -> ExperimentResult<()> {
 }
 
 fn file_sha256(path: &Path) -> io::Result<String> {
+    file_sha256_with_progress(
+        path,
+        BuildProgressMode::Off,
+        "checksum",
+        "hashing file",
+        DEFAULT_PROGRESS_INTERVAL_MS,
+    )
+}
+
+fn run_with_phase_heartbeat<T>(
+    mode: BuildProgressMode,
+    phase: &'static str,
+    message: &'static str,
+    interval_ms: u64,
+    work: impl FnOnce() -> T,
+) -> T {
+    encode_progress(mode, phase, message);
+    if mode == BuildProgressMode::Off {
+        return work();
+    }
+    let done = Arc::new((Mutex::new(false), Condvar::new()));
+    let reporter_done = Arc::clone(&done);
+    let reporter = std::thread::spawn(move || {
+        let started = Instant::now();
+        let interval = Duration::from_millis(interval_ms.max(250));
+        let (lock, condition) = &*reporter_done;
+        let Ok(mut finished) = lock.lock() else {
+            return;
+        };
+        loop {
+            let Ok((next_finished, timeout)) = condition.wait_timeout(finished, interval) else {
+                return;
+            };
+            finished = next_finished;
+            if *finished {
+                return;
+            }
+            if timeout.timed_out() {
+                let elapsed_seconds = started.elapsed().as_secs_f64();
+                match mode {
+                    BuildProgressMode::Off => {}
+                    BuildProgressMode::Plain => eprintln!(
+                        "[{phase}] still working | elapsed {}",
+                        format_duration(elapsed_seconds)
+                    ),
+                    BuildProgressMode::Json => eprintln!(
+                        "{}",
+                        json!({
+                            "phase": phase,
+                            "event": "heartbeat",
+                            "message": message,
+                            "elapsed_seconds": elapsed_seconds,
+                        })
+                    ),
+                }
+            }
+        }
+    });
+    let result = work();
+    let (lock, condition) = &*done;
+    if let Ok(mut finished) = lock.lock() {
+        *finished = true;
+        condition.notify_all();
+    }
+    let _ = reporter.join();
+    result
+}
+
+#[allow(clippy::cast_precision_loss)]
+fn file_sha256_with_progress(
+    path: &Path,
+    mode: BuildProgressMode,
+    phase: &'static str,
+    message: &'static str,
+    interval_ms: u64,
+) -> io::Result<String> {
+    encode_progress(mode, phase, message);
+    let total_bytes = fs::metadata(path)?.len();
     let mut input = BufReader::new(File::open(path)?);
     let mut hasher = Sha256::new();
     let mut buffer = vec![0_u8; 1024 * 1024];
+    let started = Instant::now();
+    let mut bytes_read = 0_u64;
+    let mut last_emit_ms = 0.0;
+    let mut last_reported_bytes = u64::MAX;
+    let mut sequence = 0_u64;
     loop {
         let length = input.read(&mut buffer)?;
         if length == 0 {
             break;
         }
         hasher.update(&buffer[..length]);
+        bytes_read = bytes_read.saturating_add(length as u64);
+        let elapsed_seconds = started.elapsed().as_secs_f64();
+        let elapsed_ms = elapsed_seconds * 1_000.0;
+        if elapsed_ms - last_emit_ms >= interval_ms as f64 || bytes_read == total_bytes {
+            sequence = sequence.saturating_add(1);
+            emit_checksum_progress(
+                mode,
+                phase,
+                sequence,
+                bytes_read,
+                total_bytes,
+                elapsed_seconds,
+            );
+            last_emit_ms = elapsed_ms;
+            last_reported_bytes = bytes_read;
+        }
+    }
+    if last_reported_bytes != bytes_read {
+        emit_checksum_progress(
+            mode,
+            phase,
+            sequence.saturating_add(1),
+            bytes_read,
+            total_bytes,
+            started.elapsed().as_secs_f64(),
+        );
     }
     Ok(format!("{:x}", hasher.finalize()))
+}
+
+#[allow(clippy::cast_precision_loss)]
+fn emit_checksum_progress(
+    mode: BuildProgressMode,
+    phase: &str,
+    sequence: u64,
+    bytes_read: u64,
+    total_bytes: u64,
+    elapsed_seconds: f64,
+) {
+    if mode == BuildProgressMode::Off {
+        return;
+    }
+    let percent_complete = if total_bytes == 0 {
+        100.0
+    } else {
+        bytes_read as f64 / total_bytes as f64 * 100.0
+    };
+    let bytes_per_second = if elapsed_seconds > 0.0 {
+        bytes_read as f64 / elapsed_seconds
+    } else {
+        0.0
+    };
+    let estimated_seconds_remaining = (bytes_per_second > 0.0)
+        .then(|| total_bytes.saturating_sub(bytes_read) as f64 / bytes_per_second);
+    match mode {
+        BuildProgressMode::Off => {}
+        BuildProgressMode::Plain => eprintln!(
+            "[{phase}] {percent_complete:6.2}% | {}/{} | {}/s | ETA {} | elapsed {}",
+            format_bytes(bytes_read),
+            format_bytes(total_bytes),
+            format_byte_rate(bytes_per_second),
+            estimated_seconds_remaining.map_or_else(|| "unknown".into(), format_duration),
+            format_duration(elapsed_seconds),
+        ),
+        BuildProgressMode::Json => eprintln!(
+            "{}",
+            json!({
+                "phase": format!("{phase}_progress"),
+                "sequence": sequence,
+                "percent_complete": percent_complete,
+                "bytes_read": bytes_read,
+                "total_bytes": total_bytes,
+                "bytes_per_second": bytes_per_second,
+                "estimated_seconds_remaining": estimated_seconds_remaining,
+                "elapsed_seconds": elapsed_seconds,
+            })
+        ),
+    }
+}
+
+#[allow(clippy::cast_precision_loss)]
+fn format_bytes(bytes: u64) -> String {
+    const KIB: u64 = 1024;
+    const MIB: u64 = 1024 * KIB;
+    const GIB: u64 = 1024 * MIB;
+    if bytes >= GIB {
+        format!("{:.2} GiB", bytes as f64 / GIB as f64)
+    } else if bytes >= MIB {
+        format!("{:.1} MiB", bytes as f64 / MIB as f64)
+    } else if bytes >= KIB {
+        format!("{:.1} KiB", bytes as f64 / KIB as f64)
+    } else {
+        format!("{bytes} B")
+    }
+}
+
+fn format_byte_rate(bytes_per_second: f64) -> String {
+    const KIB: f64 = 1024.0;
+    const MIB: f64 = 1024.0 * KIB;
+    const GIB: f64 = 1024.0 * MIB;
+    if bytes_per_second >= GIB {
+        format!("{:.2} GiB", bytes_per_second / GIB)
+    } else if bytes_per_second >= MIB {
+        format!("{:.1} MiB", bytes_per_second / MIB)
+    } else if bytes_per_second >= KIB {
+        format!("{:.1} KiB", bytes_per_second / KIB)
+    } else {
+        format!("{:.0} B", bytes_per_second.max(0.0))
+    }
+}
+
+#[allow(clippy::cast_sign_loss, clippy::cast_possible_truncation)]
+fn format_duration(seconds: f64) -> String {
+    if !seconds.is_finite() || seconds < 0.0 {
+        return "unknown".into();
+    }
+    let rounded = seconds.round() as u64;
+    let hours = rounded / 3_600;
+    let minutes = (rounded % 3_600) / 60;
+    let seconds = rounded % 60;
+    if hours > 0 {
+        format!("{hours}h {minutes:02}m {seconds:02}s")
+    } else if minutes > 0 {
+        format!("{minutes}m {seconds:02}s")
+    } else {
+        format!("{seconds}s")
+    }
 }
 
 fn process_current_rss_kib() -> Option<u64> {

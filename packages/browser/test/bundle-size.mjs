@@ -28,5 +28,13 @@ assert(
   measurements.node.rawBytes <= 8 * 1024,
   `node entry is ${measurements.node.rawBytes} bytes; budget is 8192`,
 );
+assert(
+  measurements.viewer.rawBytes <= 48 * 1024,
+  `viewer bundle is ${measurements.viewer.rawBytes} bytes; budget is 49152`,
+);
+assert(
+  measurements.viewer.gzipBytes <= 16 * 1024,
+  `viewer gzip is ${measurements.viewer.gzipBytes} bytes; budget is 16384`,
+);
 
 console.log(JSON.stringify({ budgetsPassed: true, measurements }, null, 2));

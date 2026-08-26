@@ -33,9 +33,10 @@ interchange format. Older research objects are intentionally unsupported.
 It removes the rejected global occurrence index and exposes anonymous weighted
 tile-local haplotypes explicitly; see the
 [semantics decision](./HAPLOTYPE_SEMANTICS.md) and
-[optimization log](./OPTIMIZATION_LOG.md). The browser reader and decoder are
-implemented and exercised through real cross-origin range responses; the
-interactive viewer remains future work.
+[optimization log](./OPTIMIZATION_LOG.md). The browser reader, decoder, and
+bounded Canvas 2D viewer are implemented and exercised through exact range
+responses in a built-site Playwright gate. The [demo](./demo.md) also opens
+local files and configurable remote archives.
 
 Start with the [normative file-format v1](./FILE_FORMAT_V1.md), the
 [architecture](./ARCHITECTURE.md), the

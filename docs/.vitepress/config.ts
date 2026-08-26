@@ -20,6 +20,7 @@ export default defineConfig({
         items: [
           { text: "Overview", link: "/" },
           { text: "Demo", link: "/demo" },
+          { text: "Hosting", link: "/HOSTING" },
           { text: "Distribution", link: "/DISTRIBUTION" },
           { text: "Architecture", link: "/ARCHITECTURE" },
         ],

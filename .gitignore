@@ -104,6 +104,9 @@ dist
 # vitepress cache directory
 **/.vitepress/cache
 
+# Generated documentation fixtures (copied from checked conformance artifacts)
+/docs/public/fixtures/*.pngr
+
 # Docusaurus cache and generated files
 .docusaurus
 

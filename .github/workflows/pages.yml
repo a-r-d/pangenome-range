@@ -17,6 +17,8 @@ concurrency:
 jobs:
   build:
     runs-on: ubuntu-latest
+    env:
+      VITE_PANGENOME_RANGE_DEMO_ARCHIVE_URL: ${{ vars.PANGENOME_RANGE_DEMO_ARCHIVE_URL }}
     steps:
       - uses: actions/checkout@v7
       - uses: pnpm/setup@v2
@@ -24,9 +26,18 @@ jobs:
           runtime: node@24
           cache: true
           install: false
+      - name: Install Rust toolchain for fixture provenance
+        run: rustup toolchain install stable --profile minimal
       - uses: actions/configure-pages@v5
       - run: pnpm install --frozen-lockfile
-      - run: pnpm docs:build
+      - name: Reuse the checksum-verified Rust conformance fixture
+        run: pnpm docs:fixtures
+      - name: Build the public browser package and VitePress site
+        run: pnpm docs:build
+      - name: Install Chromium
+        run: pnpm exec playwright install --with-deps chromium
+      - name: Smoke-test the built Pages site
+        run: pnpm --filter @pangenome-range/docs test:pages
       - uses: actions/upload-pages-artifact@v4
         with:
           path: docs/.vitepress/dist

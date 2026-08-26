@@ -443,7 +443,9 @@ dependencies = [
  "pangenome-range-build",
  "pangenome-range-format",
  "pangenome-range-query",
+ "serde",
  "serde_json",
+ "sha2",
  "simple-sds",
 ]
 

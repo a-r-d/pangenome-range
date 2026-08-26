@@ -20,7 +20,16 @@ importers:
       pangenome-range:
         specifier: workspace:*
         version: link:../packages/browser
+      vue:
+        specifier: ^3.5.41
+        version: 3.5.41(typescript@6.0.3)
     devDependencies:
+      '@playwright/test':
+        specifier: ^1.62.1
+        version: 1.62.1
+      '@types/node':
+        specifier: ^24.13.3
+        version: 24.13.3
       typescript:
         specifier: ^6.0.3
         version: 6.0.3
@@ -30,6 +39,9 @@ importers:
 
   packages/benchmark:
     dependencies:
+      '@bokuweb/zstd-wasm':
+        specifier: 0.0.27
+        version: 0.0.27
       pangenome-range:
         specifier: workspace:*
         version: link:../browser
@@ -220,6 +232,9 @@ packages:
     engines: {node: '>=14.21.3'}
     cpu: [x64]
     os: [win32]
+
+  '@bokuweb/zstd-wasm@0.0.27':
+    resolution: {integrity: sha512-GDm2uOTK3ESjnYmSeLQifJnBsRCWajKLvN32D2ZcQaaCIJI/Hse9s74f7APXjHit95S10UImsRGkTsbwHmrtmg==}
 
   '@docsearch/css@3.8.2':
     resolution: {integrity: sha512-y05ayQFyUmCXze79+56v/4HpycYF3uFqB78pLPrSV5ZKAlDuIAAJNhaRi8tTdRNXh05yxX/TyNnzD6LwSM89vQ==}
@@ -1830,6 +1845,8 @@ snapshots:
 
   '@biomejs/cli-win32-x64@2.5.10':
     optional: true
+
+  '@bokuweb/zstd-wasm@0.0.27': {}
 
   '@docsearch/css@3.8.2': {}
 

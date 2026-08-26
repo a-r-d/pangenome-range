@@ -7,6 +7,8 @@ import * as viewer from "pangenome-range/viewer";
 assert.equal(root.PANGENOME_RANGE_API_VERSION, "0.1.0");
 assert.equal(reader.PANGENOME_RANGE_API_VERSION, "0.1.0");
 assert.equal(typeof viewer.createPangenomeViewer, "function");
+assert.equal("ViewerModelBuilder" in viewer, false);
+assert.equal("ProgressiveTileQuery" in viewer, false);
 assert.equal(typeof node.FileRangeSource, "function");
 assert.equal(typeof reader.HttpRangeSource, "function");
 assert.equal(typeof reader.openPangenome, "function");

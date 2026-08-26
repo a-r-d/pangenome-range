@@ -1,12 +1,20 @@
-export type { PangenomeViewer, PangenomeViewerOptions } from "./types.js";
+export type {
+  PangenomeViewer,
+  PangenomeViewerOptions,
+  ViewerBudgets,
+  ViewerCounts,
+  ViewerErrorDetail,
+  ViewerEventMap,
+  ViewerProgress,
+  ViewerSnapshot,
+} from "./types.js";
 
+import { createViewerController } from "./controller.js";
 import type { PangenomeViewer, PangenomeViewerOptions } from "./types.js";
 
 export function createPangenomeViewer(
+  container: HTMLElement,
   options: PangenomeViewerOptions,
 ): PangenomeViewer {
-  void options;
-  throw new Error(
-    "The pangenome-range viewer is not implemented in this scaffolding release",
-  );
+  return createViewerController(container, options);
 }

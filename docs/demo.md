@@ -1,17 +1,17 @@
-# Demo
+---
+layout: page
+aside: false
+---
 
 <script setup>
-import PackageVersion from './components/PackageVersion.vue'
+import PangenomeDemo from './components/PangenomeDemo.vue'
 </script>
 
-<PackageVersion />
+<PangenomeDemo />
 
-The interactive range-query UI is intentionally a placeholder. The public
-package now includes the v1-only reader, strict HTTP range source, zstd
-decompression, and regional decoder; the viewer has not been implemented. No
-production archive URL is hardcoded here.
-
-A later tranche will connect this page to a configured immutable archive,
-expose the request trace, and render decoded regional tiles. Real cross-origin
-`206` loading is already covered by the browser integration gate, but this page
-makes no public-origin performance claim.
+The bundled archive is a deterministic synthetic two-node conformance fixture,
+so the deployed page is always useful without an external service. It proves
+the complete reader/viewer path and exact range behavior; it is not a
+population-scale performance claim. Supply a content-addressed remote archive
+at build time with `VITE_PANGENOME_RANGE_DEMO_ARCHIVE_URL`, paste a compatible
+URL, or choose a local `.pngr` file to inspect richer data.

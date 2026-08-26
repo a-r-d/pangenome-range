@@ -13,7 +13,9 @@ gbz-base.workspace = true
 pangenome-range-build = { path = "../pangenome-range-build" }
 pangenome-range-format = { path = "../pangenome-range-format" }
 pangenome-range-query = { path = "../pangenome-range-query" }
+serde.workspace = true
 serde_json.workspace = true
+sha2.workspace = true
 simple-sds.workspace = true
 
 [lints]

@@ -30,6 +30,14 @@ resolved by `Cargo.lock`:
 
 GBZ 0.7.0 itself uses `simple-sds` 0.4.2 and `zstd` 0.13.3 in this lockfile.
 
+## JavaScript benchmark dependencies
+
+The private benchmark package uses `fzstd` 0.1.1 (MIT) through the public
+reader as its default pure-JavaScript decoder, `@bokuweb/zstd-wasm` 0.0.27
+(MIT) as the optional decoder comparison, and Playwright 1.62.1 (Apache-2.0)
+for real-browser execution. The WASM package is benchmark-only and is not
+exported by or selected as the default decoder in the public reader.
+
 ## Fixture provenance and terms
 
 `micb-kir3dl1.gbz` is fetched from the pinned GBZ-base commit above. The

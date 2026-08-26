@@ -119,6 +119,11 @@ For long runs, use `--progress json --progress-interval-seconds 5`. The initial
 base-window count before adaptive splits. `chunk_progress` events then report
 coordinate-based percentage and measured ETA. Do not derive completion from
 temporary archive size because regional compression ratios vary.
+`source_checksum_progress` and `output_checksum_progress` report byte-based
+completion, opaque source-load/index phases emit heartbeats, and
+`archive_validation_progress` reports validated directory entries/pages,
+physical payloads, bytes, rate, elapsed time, and ETA. A long run should never
+have a silent phase merely because payload encoding has finished.
 
 The accepted whole-source record-preserving run is retained in
 [`results/2026-08-25-record-preserving-v4/REPORT.md`](https://github.com/a-r-d/pangenome-range/blob/main/results/2026-08-25-record-preserving-v4/REPORT.md).
@@ -204,3 +209,128 @@ uses one reusable archive reader, cold on its first query and retaining its
 bootstrap/leaf cache thereafter. OS page-cache state remains uncontrolled.
 Because smoke mode runs only one candidate, it cannot establish a new Pareto
 winner or measure the incremental benefit of deduplication.
+
+## TypeScript/Node and real-browser harness
+
+`packages/benchmark` is a private Node 24 package. Its workload is a JSON object
+with `schemaVersion: 1`, the exact archive SHA-256, a fixed seed, and query
+records containing class, reference coordinates, context, and exactly one
+expected canonical hash or expected error category. The generator includes
+covered MICB/KIR3DL1 loci, start/end boundaries, deterministic 1 kb/10 kb/100
+kb/1 Mb intervals when a reference is long enough, nearby/distant queries, and
+an absent-reference case. Rust `verify --workload` accepts the same wrapper,
+checks the archive checksum and all positive expected hashes, and explicitly
+reports reader-specific negative cases it skips. Legacy Rust query arrays remain
+accepted for retained historical workloads.
+
+The CLI is:
+
+```bash
+pnpm bench -- workload --file ARCHIVE.pngr --output workload.json
+pnpm bench -- archive --file ARCHIVE.pngr --workload workload.json --run-id RUN
+pnpm bench -- archive --url URL --workload workload.json --run-id RUN
+pnpm bench -- browser --file ARCHIVE.pngr --workload workload.json --run-id RUN
+pnpm bench -- origin-check --url URL [--origin PAGES_ORIGIN] [--file ARCHIVE.pngr] [--sha256 HEX]
+pnpm bench -- compare --runs RUN_A RUN_B [--rust-summary verification.json]
+```
+
+Every archive/browser run exclusively creates `results/<run-id>/`; it refuses
+to overwrite an existing directory. It writes `config.json`,
+`environment.json`, `requests.ndjson`, `queries.csv`, `summary.json`, and
+`REPORT.md`. Environment evidence includes git status/SHA, Node/pnpm/package and
+browser versions, host/CPU/memory, archive identity, cache budgets, HTTP cache
+policy, and limitations. Per-query evidence keeps actual range-origin/source
+requests and bytes separate from planned reader ranges/bytes and dependency
+rounds. Browser runs record reader-observed fetches, origin-observed request
+rounds, and an explicit reconciliation result; a mismatch fails correctness.
+They also record cache hits, decompression/decode/merge/total time, canonical
+hash/correctness, and available heap observations.
+
+The local archive origin supports multiple immutable routes, `HEAD`, exact
+single byte ranges, CORS and exposed range headers, identity encoding,
+`no-transform`, stable ETags, and request logs containing method, range, status,
+bytes, elapsed time, and connection ID. Controlled modes cover ignored ranges,
+malformed `Content-Range`, truncated bodies, changed ETags, latency, bandwidth,
+missing CORS, and missing exposed headers. Multipart ranges are deliberately
+absent because the reader does not issue them.
+
+The real-browser matrix runs the built public `pangenome-range/reader` entry in
+Chromium, Firefox, and WebKit. It measures:
+
+1. cold library cache with transport `no-store`;
+2. cold library cache with normal browser HTTP caching;
+3. warm directory cache with the compressed-payload cache disabled;
+4. a repeated exact query with both library caches retained;
+5. a nearby pan query;
+6. a distant random query.
+
+Fresh ephemeral Playwright contexts define the two cold cases. This controls
+context cache state but not operating-system caches. Warm library-cache cases
+force transport `no-store`, and actual origin logs are reconciled with reader
+traces and Performance API measurements. Loopback latency remains qualified as
+local functional evidence.
+
+The default decoder remains bundled pure-JavaScript `fzstd`. The optional
+`@bokuweb/zstd-wasm` adapter implements the same `ChunkDecompressor` interface
+and is benchmark-only. Reports include initialization, unique JavaScript/WASM
+asset bytes, each decompression call, p50/p95, total query latency, correctness,
+and memory when the runtime exposes it. The WASM module is initialized once per
+page; reinitializing its singleton between archive instances corrupts later
+calls and is a rejected lifecycle.
+
+`origin-check` probes metadata, the `GET`/`Range`/`If-Range` CORS preflight, and
+small, overlapping, adjacent, and tail ranges. It fails on `200` full-object
+fallbacks, malformed metadata, unstable ETags, transformed bodies, missing
+CORS/exposed headers, and local byte mismatches. A checksum without a local
+file requires a content-addressed ETag;
+provide `--file` for exact sampled-byte comparison. `--origin` (or
+`PANGENOME_RANGE_CORS_ORIGIN`) supplies the actual GitHub Pages origin whose
+CORS grant is being tested; the default is an intentionally unrelated test
+origin. No deployment URL is hardcoded.
+
+The comparison command presents Rust planned rounds/ranges/bytes and simulated
+20 ms network cost in a separate section from real Node/browser source/origin
+requests, local runtime decode, and cold/warm end-to-end latency. Default CI
+installs Chromium and runs the pure-JS smoke subset. The three-engine,
+two-decoder matrix and large archives remain manual/scheduled work.
+
+## Retained benchmark-harness evidence (2026-08-25)
+
+The current-format conformance archive and the locally encoded MHC archive were
+run through both decoders and all three installed Playwright engines. The
+retained evidence is:
+
+- `results/2026-08-25-node-benchmark-harness-smoke/REPORT.md`: 40/40 Node
+  cold/warm conformance queries passed;
+- `results/2026-08-25-browser-benchmark-harness-smoke/REPORT.md`: 36/36
+  conformance browser scenarios passed;
+- `results/2026-08-25-node-mhc-benchmark-smoke/REPORT.md`: 56/56 Node MHC
+  queries passed, including 1 kb, 10 kb, 100 kb, and 1 Mb intervals;
+- `results/2026-08-25-browser-mhc-benchmark-smoke/REPORT.md`: 36/36 MHC browser
+  scenarios passed, with the matching Rust verification and comparison in the
+  same directory. `archive-build.json` retains the source checksum and encoder
+  construction metrics.
+
+The retained build configuration can be reproduced with:
+
+```bash
+cargo run --release -p pangenome-range-cli -- encode \
+  test-data/mhc-10.gbz /tmp/pangenome-range-mhc-benchmark-v1.pngr \
+  --sample MHC-GRCh38 --contig MHC --threads 8 --progress off \
+  --report /tmp/pangenome-range-mhc-benchmark-build.json
+```
+
+The browser matrix used Chromium 151.0.7922.34, Firefox 153.0, and WebKit 26.5.
+The MHC archive was 4,806,677 bytes with SHA-256
+`ec71bdfff9e0ebdf5bbbac9dcb77b547ba334054b5980d17cceba1c29509e1c5`.
+Its 13 positive workload queries matched Rust and the one reader-specific
+absent-reference case was explicitly skipped by Rust. Browser pure-JS chunk
+decompression was 2.9/5.0 ms p50/p95; WASM was 1.0/2.0 ms after 6 ms
+initialization and added 251,806 WASM bytes. These are loopback functional and
+local-performance results, not CDN or public-network claims.
+
+No current-v1 chromosome-scale or multi-GB archive was available. Historical
+large archives use incompatible pre-reset bytes and cannot be relabeled as v1.
+The next evidence tranche is a current-v1 chromosome/GB-scale archive served by
+the configured public range origin, using this exact checksum-bound workload
+and origin validator.

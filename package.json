@@ -18,8 +18,12 @@
     "build": "pnpm --filter pangenome-range build && pnpm --filter pangenome-range test:bundle && pnpm --filter @pangenome-range/benchmark build && pnpm --filter @pangenome-range/docs build && pnpm smoke:exports",
     "smoke:exports": "node packages/browser/test/export-smoke.mjs",
     "docs:dev": "pnpm --filter @pangenome-range/docs dev",
+    "docs:fixtures": "pnpm --filter @pangenome-range/docs fixtures",
     "docs:build": "pnpm --filter pangenome-range build && pnpm --filter @pangenome-range/docs build",
-    "test:browser": "pnpm --filter @pangenome-range/benchmark test:browser"
+    "test:pages": "pnpm --filter pangenome-range build && pnpm --filter @pangenome-range/docs build && pnpm --filter @pangenome-range/docs test:pages",
+    "test:browser": "pnpm --filter @pangenome-range/benchmark test:browser",
+    "test:browser:ci": "pnpm --filter @pangenome-range/benchmark test:browser:ci",
+    "bench": "pnpm --filter pangenome-range build && pnpm --filter @pangenome-range/benchmark build && pnpm --filter @pangenome-range/benchmark bench"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.5.10",

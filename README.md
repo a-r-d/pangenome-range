@@ -61,7 +61,28 @@ TypeScript checking and tests. `pnpm format` applies Biome formatting.
 
 `pnpm test:browser` builds the public reader and exercises real cross-origin
 HTTP `206` bootstrap, directory, zstd payload, and decode paths in Chromium,
-Firefox, and WebKit against a deterministic transport fixture.
+Firefox, and WebKit. The private harness runs six explicit cold/warm/query
+scenarios with both the default pure-JavaScript zstd decoder and an optional
+WASM decoder. CI keeps a Chromium/pure-JS subset; the full matrix remains a
+manual gate.
+
+Generate a checksum-bound shared workload and collect Node or real-browser
+evidence without overwriting an existing run ID:
+
+```bash
+pnpm bench -- workload --file graph.pngr --output workload.json
+pnpm bench -- archive --file graph.pngr --workload workload.json --run-id node-run
+pnpm bench -- browser --file graph.pngr --workload workload.json --run-id browser-run
+pnpm bench -- origin-check --url "$PANGENOME_RANGE_ARCHIVE_URL" \
+  --origin "$PANGENOME_RANGE_CORS_ORIGIN"
+pnpm bench -- compare --runs node-run browser-run \
+  --rust-summary results/browser-run/rust-verification.json
+```
+
+Each benchmark run writes configuration, environment, raw requests, per-query
+CSV, a machine-readable summary, and `REPORT.md` under `results/<run-id>/`.
+Loopback browser timings are local functional evidence, not public-network or
+CDN performance.
 
 ## TypeScript reader
 
@@ -116,6 +137,38 @@ const source = await FileRangeSource.open("graph.pngr");
 const archive = await openPangenome(source);
 ```
 
+Create the optional Canvas 2D viewer from its isolated DOM entry point. It
+streams `queryTiles()`, cancels stale region requests, and applies node, edge,
+and traversal budgets before layout:
+
+```ts
+import { openPangenome } from "pangenome-range/reader";
+import { createPangenomeViewer } from "pangenome-range/viewer";
+
+const archive = await openPangenome("https://example.test/graph.pngr");
+const viewer = createPangenomeViewer(document.querySelector("#viewer")!, {
+  archive,
+  maxRenderedNodes: 2_000,
+  maxRenderedEdges: 4_000,
+  maxHaplotypeLanes: 24,
+  showRequestTrace: true,
+});
+
+await viewer.setRegion({
+  sample: "GRCh38",
+  contig: "chr6",
+  start: 31_498_145,
+  end: 31_511_124,
+  context: 100,
+});
+viewer.destroy();
+await archive.close();
+```
+
+The viewer renders weighted anonymous traversals as tile-local evidence, never
+as named individuals or globally stitchable samples. See the [live demo](docs/demo.md)
+and [archive hosting contract](docs/HOSTING.md).
+
 Run measurements with `--release`. Large data and benchmarks will remain
 opt-in; the default test suite uses synthetic bytes and stays fast.
 
@@ -131,26 +184,32 @@ opt-in; the default test suite uses synthetic bytes and stays fast.
 - `packages/browser`: private ESM package with isolated reader, viewer, and Node
   exports, strict HTTP/Blob/memory/file range sources, v1-only archive and
   record-preserving regional decoding, canonical graph assembly, and optional
-  query traces. Rendering is not implemented in this tranche.
-- `packages/benchmark`: private browser/Node benchmark tools with a real
-  cross-origin range-origin smoke test; a full latency corpus remains future
-  work.
-- `docs`: the existing research Markdown plus a VitePress shell and demo
-  placeholder deployed under `/pangenome-range/`.
+  query traces. The bounded progressive Canvas 2D viewer lives only under the
+  `/viewer` export.
+- `packages/benchmark`: private Node/Playwright benchmark CLI, strict local
+  range origin with controlled faults, versioned shared workloads, immutable
+  result writer, origin validator, Rust-vs-runtime comparison report, and
+  pure-JS/WASM decoder measurement.
+- `docs`: the existing research Markdown plus a VitePress site and reader/viewer
+  demo deployed under `/pangenome-range/`.
 
 `encode INPUT.gbz OUTPUT.pngr` is implemented with sample/contig/interval and
 `--max-chunks` pilot guards, bounded deterministic parallel tile construction,
 exact compressed local GBWT records, direct writing, JSON build reports,
-periodic coordinate/base/chunk/percent/throughput/ETA progress, archive
-validation, and atomic rename. It defaults to available parallelism capped at
-eight workers and a 256 MiB raw/compressed queue. Progress defaults to
-five-second snapshots and is configurable with
-`--progress-interval-seconds`. Run
+periodic progress through input/output checksumming, opaque source-loading
+heartbeats, coordinate-based encoding, and full archive validation. Validation
+snapshots include entry/page/payload counts, percent, throughput, elapsed time,
+and ETA before the atomic rename. It defaults to available parallelism capped
+at eight workers and a 256 MiB raw/compressed queue. An interactive terminal
+gets readable five-second progress by default; redirected output stays quiet
+unless `--progress plain` or `--progress json` is selected. The cadence is
+configurable with `--progress-interval-seconds`. Run
 `pangenome-range help` for the complete option list. `verify` compares an
 archive query against an independently extracted GBZ source oracle, including
 tile-local weighted traversal evidence; `--workload` reuses one source load for
 a retained JSON query array. `validate` rereads every directory page and
-decompresses and structurally checks every physical archive payload. The
+decompresses and structurally checks every physical archive payload with the
+same periodic validation progress. The
 planned CLI names `build`, `query`, and `benchmark` remain reserved until there
 is a real experiment behind each one.
 
