@@ -1,0 +1,115 @@
+npm/scripts/verify-cargo-package.mjs
+  s_c6adeff06c2400::t_f135b0621b1084 1-5,14-15,17-30
+  s_c6adeff06c2400::t_239c9dd5a963b0 16
+  s_c6adeff06c2400::t_37a2bc679e6a60 6-13
+.github/workflows/release.yml
+  s_c6adeff06c2400::t_6a72a0786ec7cd 1-163
+packages/browser/test/launcher.node-test.mjs
+  s_c6adeff06c2400::t_d3a9c559baabeb 1-223
+packages/browser/README.md
+  s_c6adeff06c2400::t_78043ed5d10786 1-24
+npm/scripts/pack-release-set.mjs
+  s_c6adeff06c2400::t_648c1fd193ecc6 1-40,42-71
+  s_c6adeff06c2400::t_239c9dd5a963b0 41
+crates/pangenome-range-cli/Cargo.toml
+  s_c6adeff06c2400::t_aaafdc06116c4e 7,9-14,19-21
+crates/pangenome-range-cli/src/main.rs
+  s_c6adeff06c2400::t_aaafdc06116c4e 56-59,238,276-279,641-646
+npm/scripts/stage-release-set.mjs
+  s_c6adeff06c2400::t_922d8f31d2e3f9 8
+  s_c6adeff06c2400::t_2421431db6ceca 30
+  s_c6adeff06c2400::t_6a72a0786ec7cd 1-7,9-29,31-41,43-80
+  s_c6adeff06c2400::t_239c9dd5a963b0 42
+npm/scripts/stage-platform-package.mjs
+  s_c6adeff06c2400::t_648c1fd193ecc6 1-23,28-64
+  s_c6adeff06c2400::t_922d8f31d2e3f9 24-27
+AGENTS.md
+  s_c6adeff06c2400::t_da9bcb2dc93255 24-28,192,277,285-287,301-306
+  s_c6adeff06c2400::t_b9a4ba311c5908 307
+npm/scripts/verify-release-set.mjs
+  s_c6adeff06c2400::t_239c9dd5a963b0 52
+  s_c6adeff06c2400::t_648c1fd193ecc6 1-2,4-28,32-51,53-62,67-69,71-107
+  s_c6adeff06c2400::t_b0a0c622769f8f 70
+  s_c6adeff06c2400::t_922d8f31d2e3f9 3,29-31,63-66
+packages/browser/test/bundle-size.mjs
+  s_c6adeff06c2400::t_6e3f8fa2c38234 13-26,54-60
+crates/pangenome-range-cli/tests/cli.rs
+  s_c6adeff06c2400::t_aaafdc06116c4e 1-19,21-25
+  s_c6adeff06c2400::t_60a2de35c4c5a2 20
+npm/scripts/stage-main-package.mjs
+  s_c6adeff06c2400::t_cf6e707a53103f 30-31
+  s_c6adeff06c2400::t_648c1fd193ecc6 1-18,26-29,32-34,38
+  s_c6adeff06c2400::t_922d8f31d2e3f9 19-25,35-37
+docs/index.md
+  s_c6adeff06c2400::t_da9bcb2dc93255 22
+Cargo.toml
+  s_c6adeff06c2400::t_aaafdc06116c4e 16
+docs/ARCHITECTURE.md
+  s_c6adeff06c2400::t_da9bcb2dc93255 64,66-81
+npm/platforms/README.md
+  s_c6adeff06c2400::t_648c1fd193ecc6 1-13
+pnpm-workspace.yaml
+  s_c6adeff06c2400::t_cf6e707a53103f 7-12
+docs/DISTRIBUTION.md
+  s_c6adeff06c2400::t_e6399d6f876c1f 3-5,7,9-19,22-23,26-29,31-34,36,38-82,85-117,119-123
+npm/scripts/smoke-packed-release.mjs
+  s_c6adeff06c2400::t_5ec0bfb812c2a6 3,73,76
+  s_c6adeff06c2400::t_922d8f31d2e3f9 25,127-132
+  s_c6adeff06c2400::t_cf6e707a53103f 1-2,4-24,26-61,63-72,74-75,77-126,133-157
+  s_c6adeff06c2400::t_239c9dd5a963b0 62
+.github/workflows/ci.yml
+  s_c6adeff06c2400::t_6a72a0786ec7cd 23
+crates/pangenome-range-cli/README.md
+  s_c6adeff06c2400::t_aaafdc06116c4e 1-21
+README.md
+  s_c6adeff06c2400::t_da9bcb2dc93255 9-10,12-16,18-21,32-52,114,208-213
+crates/pangenome-range-query/Cargo.toml
+  s_c6adeff06c2400::t_aaafdc06116c4e 12
+packages/browser/package.json
+  s_c6adeff06c2400::t_d3a9c559baabeb 58
+  s_c6adeff06c2400::t_78043ed5d10786 4-24,28-31,33-35,69-80
+packages/browser/LICENSE
+  s_c6adeff06c2400::t_78043ed5d10786 1-2,4-21
+  s_c6adeff06c2400::t_ef33b9b087eb5e 3
+.github/workflows/pages.yml
+  s_c6adeff06c2400::t_7ffc20dddf3277 35
+npm/scripts/verify-version-sync.mjs
+  s_c6adeff06c2400::t_1d3830d15bdd13 55
+  s_c6adeff06c2400::t_648c1fd193ecc6 1-9,39-52,58-63,75-89
+  s_c6adeff06c2400::t_f135b0621b1084 10-16,64-74
+  s_c6adeff06c2400::t_2421431db6ceca 17,34-37,53-54,56-57
+  s_c6adeff06c2400::t_922d8f31d2e3f9 18-33,38
+packages/browser/bin/pangenome-range.mjs
+  s_c6adeff06c2400::t_78043ed5d10786 1-17
+npm/scripts/release-config.mjs
+  s_c6adeff06c2400::t_90e2f21208fe72 44
+  s_c6adeff06c2400::t_922d8f31d2e3f9 50-52
+  s_c6adeff06c2400::t_648c1fd193ecc6 1-43,45-49,53-63
+crates/pangenome-range-build/Cargo.toml
+  s_c6adeff06c2400::t_aaafdc06116c4e 14-15
+package.json
+  s_c6adeff06c2400::t_6e3f8fa2c38234 16-17,27,31-33
+  s_c6adeff06c2400::t_37a2bc679e6a60 29
+  s_c6adeff06c2400::t_f135b0621b1084 28
+  s_c6adeff06c2400::t_6a72a0786ec7cd 30
+packages/browser/bin/launcher.mjs
+  s_c6adeff06c2400::t_78043ed5d10786 1-202
+pnpm-lock.yaml
+  s_c6adeff06c2400::t_316b31f1fbc3cf 1687-1689
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.24",
+  "base_commit_sha": "ec3afffd96a9974e389ec5ff4c801fbab7bbd9d2",
+  "prompts": {},
+  "sessions": {
+    "s_c6adeff06c2400": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a03eda-5280-7641-a2d1-995a448eacdd",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "aaron decker <aaron@ard.ninja>"
+    }
+  }
+}
