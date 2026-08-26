@@ -7,25 +7,30 @@ use pangenome_range_format::RangeSource;
 use std::io;
 use std::path::Path;
 
+mod disk_source;
 mod experiment;
 mod fixed;
+mod local_subgraph;
 mod scale;
 mod source;
 
+pub use disk_source::{DiskGbzSource, DiskSourceStats};
 pub use experiment::{ExperimentMode, ExperimentOptions, run_fixed_window_experiment};
 pub use fixed::{
     ArchiveBuildMetrics, ArchiveBuildOptions, ArchiveValidationSummary, BuildProgressMode,
     ChunkCodec, FixedArchiveConfig, FixedArchiveReader, OracleResult, QueryMeasurement, QuerySpec,
-    build_fixed_archive_with_options, export_conformance_fixtures, internal_gbz_base_query,
-    query_fixed_archive, source_oracle, validate_fixed_archive,
-    validate_fixed_archive_with_options, validate_fixed_archive_with_progress,
+    build_fixed_archive_from_source_with_options, build_fixed_archive_with_options,
+    export_conformance_fixtures, internal_gbz_base_query, query_fixed_archive, source_oracle,
+    validate_fixed_archive, validate_fixed_archive_with_options,
+    validate_fixed_archive_with_progress,
 };
 pub use scale::{
-    EncodeOptions, EncodeSummary, EncoderScaleOptions, run_encode, run_encoder_scale_experiment,
+    EncodeOptions, EncodeSourceMode, EncodeSummary, EncoderScaleOptions, run_encode,
+    run_encoder_scale_experiment,
 };
 pub use source::{
-    LoadedGbzSource, PangenomeSource, SourceMemoryPreflight, SourceReference,
-    SourceReferencePosition, source_memory_preflight,
+    LoadedGbzSource, PangenomeSource, SourceMemoryPreflight, SourcePathIndex, SourceReference,
+    SourceReferencePosition, SourceReferenceSeed, source_memory_preflight,
 };
 
 #[derive(Clone, Debug, PartialEq, Eq)]

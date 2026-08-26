@@ -1,10 +1,11 @@
 use gbz::GBZ;
 use gbz_base::PathIndex;
 use pangenome_range_build::{
-    BuildProgressMode, ChunkCodec, EncodeOptions, EncoderScaleOptions, ExperimentMode,
-    ExperimentOptions, FixedArchiveConfig, FixedArchiveReader, QueryMeasurement, QuerySpec,
-    export_conformance_fixtures, internal_gbz_base_query, run_encode, run_encoder_scale_experiment,
-    run_fixed_window_experiment, source_oracle, validate_fixed_archive_with_options,
+    BuildProgressMode, ChunkCodec, EncodeOptions, EncodeSourceMode, EncoderScaleOptions,
+    ExperimentMode, ExperimentOptions, FixedArchiveConfig, FixedArchiveReader, QueryMeasurement,
+    QuerySpec, export_conformance_fixtures, internal_gbz_base_query, run_encode,
+    run_encoder_scale_experiment, run_fixed_window_experiment, source_oracle,
+    validate_fixed_archive_with_options,
 };
 use pangenome_range_format::{
     FileRangeSource, NetworkProfile, RangeSource, TracingRangeSource, ValidationMode,
@@ -256,7 +257,8 @@ fn print_help() {
         "  --threads N                bounded tile/compression workers (default: up to 8 available cores)"
     );
     println!("  --max-queued-bytes N       raw+compressed queue cap");
-    println!("  --scratch-dir PATH         validate/report a research scratch location");
+    println!("  --source-access MODE       disk|loaded (default: disk)");
+    println!("  --scratch-dir PATH         source-cache and research scratch location");
     println!("  --keep-partial             retain the sibling temp archive on failure");
     println!("  --progress auto|plain|json|off");
     println!("  --progress-interval-seconds N  chunk progress cadence (default: 5)");
@@ -711,6 +713,14 @@ fn encode(args: &mut impl Iterator<Item = String>) -> AppResult<()> {
             "--threads" => options.threads = parse_option(args, &flag)?,
             "--max-queued-bytes" => options.max_queued_bytes = parse_option(args, &flag)?,
             "--max-chunks" => options.max_chunks = Some(parse_option(args, &flag)?),
+            "--source-access" => {
+                let value = option_value(args, &flag)?;
+                options.source_mode = match value.as_str() {
+                    "disk" => EncodeSourceMode::Disk,
+                    "loaded" => EncodeSourceMode::Loaded,
+                    _ => return Err(format!("unsupported source access mode '{value}'").into()),
+                };
+            }
             "--scratch-dir" => {
                 options.scratch_dir = Some(PathBuf::from(option_value(args, &flag)?));
             }

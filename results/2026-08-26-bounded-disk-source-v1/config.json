@@ -1,0 +1,32 @@
+{
+  "schemaVersion": 1,
+  "runId": "2026-08-26-bounded-disk-source-v1",
+  "date": "2026-08-26",
+  "host": "apollo",
+  "kernel": "Linux 6.17.0-41-generic x86_64",
+  "cpu": "Intel Core i7-10700, 8 cores / 16 threads",
+  "rustc": "1.97.1 (8bab26f4f 2026-07-14)",
+  "repositoryBaseCommit": "e9463c45f82112978cfd22f1d824c2ca8d2e38ed",
+  "source": {
+    "path": "/media/ard/eba76579-d702-4ff0-b5dd-eb503a726a4d/pangenome-range-data/sources/hprc-v2.1-mc-grch38.gbz",
+    "bytes": 5492627216,
+    "sha256": "11d6047f79575ffb83757462484bad134ed20928bd2c8171ec52e35a54976e2b"
+  },
+  "filter": {
+    "sample": "GRCh38",
+    "contig": "chr6",
+    "maxChunks": 2,
+    "windowSize": 16384
+  },
+  "options": {
+    "sourceAccess": "disk",
+    "threads": 2,
+    "codec": "zstd-3",
+    "maxQueuedBytes": 268435456,
+    "sourceReadCacheBytes": 67108864
+  },
+  "command": "target/release/pangenome-range encode SOURCE.gbz OUTPUT.pngr --source-access disk --scratch-dir EXTERNAL_RUN_DIR --sample GRCh38 --contig chr6 --max-chunks 2 --threads 2 --progress plain --progress-interval-seconds 10 --report REPORT.json",
+  "wholeSourceCommand": "target/release/pangenome-range encode SOURCE.gbz OUTPUT.pngr --source-access disk --scratch-dir EXTERNAL_RUN_DIR --threads 8 --progress plain --progress-interval-seconds 60 --report REPORT.json",
+  "measurementCommand": "/usr/bin/time -v COMMAND",
+  "rawEvidenceDirectory": "/media/ard/eba76579-d702-4ff0-b5dd-eb503a726a4d/pangenome-range-data/runs/2026-08-26-bounded-source-pilot"
+}

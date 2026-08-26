@@ -89,8 +89,10 @@ payload spool. Only `config.json`, `summary.json`, and `REPORT.md` are retained
 under `results/<run-id>`. This mode deliberately skips GBZ-base and the
 20-layout sweep. After encoding, it checks deterministic 1 kb, 10 kb, 100 kb,
 and 1 Mb queries against the loaded source graph.
-The upstream `gbz` crate still deserializes the source in full; encoder-only
-mode bounds archive-construction scratch, not the source graph itself.
+The public encoder now defaults to project-owned disk-backed GBZ access. The
+older encoder-scale research command still uses its loaded graph because it
+also runs loaded source-oracle queries; do not use that command to measure the
+new source adapter.
 
 The first HPRC whole-genome attempt exposed an unacceptable global occurrence
 index. The current archive removed it; encoder-scale metrics must report zero occurrence
@@ -102,18 +104,21 @@ For cheap construction-only pilots, use the public encoder directly:
 ```bash
 cargo run --release -p pangenome-range-cli -- encode INPUT.gbz OUTPUT.pngr \
   --sample GRCh38 --contig chr6 --max-chunks 2 \
+  --source-access disk --scratch-dir EXTERNAL_SCRATCH \
   --threads 8 --progress json --report build-report.json
 ```
 
-The report separates source checksum, source load, reference path index,
+The schema-4 report separates source checksum, source load or disk-cache build,
+reference path index,
 manifest discovery, local subgraph selection, record/topology materialization,
 binary encode, compression, finalization, validation, and the removed
 haplotype-enumeration/copy/occurrence phases.
 It also retains input/output SHA-256, time to first payload, archive/index/payload
-bytes, queue peaks, scratch/temp bytes, throughput, and process RSS. A filtered
-pilot still pays the current full GBZ deserialization and `PathIndex` costs, but
-reference-length discovery is restricted before walking reference paths.
-The schema-3 report times the final output SHA-256 and records the complete
+bytes, source-cache files and byte limits, queue peaks, scratch/temp bytes,
+throughput, and process RSS. A filtered disk-backed pilot still builds the
+whole source cache and compact real-reference index before the first payload;
+filters do not make that preprocessing partial.
+The report times the final output SHA-256 and records the complete
 pre-report wall critical path; worker CPU milliseconds remain separate.
 
 For long runs, use `--progress json --progress-interval-seconds 5`. The initial
@@ -177,6 +182,13 @@ On the same source/options/host, the standard pre-rename gate fell from
 remained exactly 8,828,788,418 and 47,376,617 bytes. This is structural and
 integrity evidence; the separate nine-query GBZ oracle supplied semantic
 evidence.
+
+The project-owned disk-source whole-HPRC run is retained in
+[`results/2026-08-26-bounded-disk-source-v1/REPORT.md`](https://github.com/a-r-d/pangenome-range/blob/main/results/2026-08-26-bounded-disk-source-v1/REPORT.md).
+It produced the identical 8,828,788,418-byte archive and SHA-256 while reducing
+peak RSS from 8,775,928 to 608,060 KiB. Whole wall increased from 438.72 to
+499.34 seconds on the exact same source/options/host; the 11,921,858,427-byte
+ephemeral source cache is reported separately from zero encoder scratch.
 
 ## TypeScript reader conformance result
 

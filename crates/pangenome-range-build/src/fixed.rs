@@ -1,6 +1,9 @@
+#[cfg(test)]
+use gbz::GBWT;
+#[cfg(test)]
 use gbz::bwt::{BWT, Record};
 use gbz::support;
-use gbz::{FullPathName, GBWT, GBZ, Orientation, Pos};
+use gbz::{FullPathName, GBZ, Orientation, Pos};
 use gbz_base::{HaplotypeOutput, PathIndex, Subgraph, SubgraphQuery};
 use pangenome_range_format::{
     ARCHIVE_VERSION, ArchiveEntry, ArchiveValidationProgress, Bootstrap, DIRECTORY_BUCKET_WINDOWS,
@@ -33,7 +36,8 @@ use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::Instant;
 
-use crate::source::{LoadedGbzSource, PangenomeSource};
+use crate::local_subgraph::LocalSubgraph;
+use crate::source::{LoadedGbzSource, PangenomeSource, SourcePathIndex};
 
 pub type ExperimentResult<T> = Result<T, Box<dyn Error + Send + Sync>>;
 
@@ -613,19 +617,18 @@ fn reference_paths_filtered(
     sample_filter: Option<&str>,
     contig_filter: Option<&str>,
 ) -> ExperimentResult<Vec<ReferencePathSpec>> {
-    LoadedGbzSource::new(graph, None)
+    let source = LoadedGbzSource::new(graph);
+    SourcePathIndex::new(&source, 1_000)?
         .references(sample_filter, contig_filter)
-        .map(|references| {
-            references
-                .into_iter()
-                .map(|reference| ReferencePathSpec {
-                    name: reference.name,
-                    start: reference.start,
-                    end: reference.end,
-                })
-                .collect()
+        .into_iter()
+        .map(|reference| {
+            Ok(ReferencePathSpec {
+                name: reference.name,
+                start: reference.start,
+                end: reference.end,
+            })
         })
-        .map_err(Into::into)
+        .collect()
 }
 
 static NEXT_TEMPORARY_ID: AtomicU64 = AtomicU64::new(0);
@@ -949,25 +952,53 @@ enum ChunkWorkItem {
     Ready(ChunkTask, RecordChunk),
 }
 
+#[cfg(test)]
 fn gbwt_record(graph: &GBZ, handle: usize) -> Option<Record<'_>> {
     let index: &GBWT = graph.as_ref();
     let records: &BWT = index.as_ref();
     records.record(index.node_to_record(handle))
 }
 
+#[cfg(test)]
 fn direct_reference_position(
     graph: &GBZ,
     path_index: &PathIndex,
     query_pos: &FullPathName,
 ) -> ExperimentResult<DirectReferencePosition> {
-    let source = LoadedGbzSource::new(graph, Some(path_index));
-    let position = source.reference_position(query_pos)?;
-    Ok(DirectReferencePosition {
-        query_offset: position.query_offset,
-        node_offset: position.node_offset,
-        gbwt_pos: position.position,
-        path_name: position.path_name,
-    })
+    let path = gbz_base::GBZPath::with_name(graph, query_pos)
+        .ok_or_else(|| invalid_data(format!("cannot find a path covering {query_pos}")))?;
+    let query_offset = query_pos
+        .fragment
+        .checked_sub(path.name.fragment)
+        .ok_or_else(|| invalid_data("query starts before its reference fragment"))?;
+    let index_offset = path_index
+        .path_to_offset(path.handle)
+        .ok_or_else(|| invalid_data(format!("reference path {} is not indexed", path.name())))?;
+    let (mut path_offset, mut position) =
+        path_index
+            .indexed_position(index_offset, query_offset)
+            .ok_or_else(|| invalid_data(format!("reference path {} has no sample", path.name())))?;
+    loop {
+        let node_id = support::node_id(position.node);
+        let sequence_len = graph
+            .sequence_len(node_id)
+            .ok_or_else(|| invalid_data(format!("missing sequence for node {node_id}")))?;
+        let node_end = path_offset
+            .checked_add(sequence_len)
+            .ok_or_else(|| invalid_data("reference path offset overflow"))?;
+        if node_end > query_offset {
+            return Ok(DirectReferencePosition {
+                query_offset,
+                node_offset: query_offset - path_offset,
+                gbwt_pos: position,
+                path_name: path.name,
+            });
+        }
+        path_offset = node_end;
+        position = gbwt_record(graph, position.node)
+            .and_then(|record| record.lf(position.offset))
+            .ok_or_else(|| invalid_data("reference path ended before query offset"))?;
+    }
 }
 
 #[cfg(test)]
@@ -1140,13 +1171,10 @@ fn direct_weighted_paths(
     ))
 }
 
-fn record_payload_size_estimate(
-    graph: &GBZ,
-    subgraph: &Subgraph,
+fn source_record_payload_size_estimate(
+    subgraph: &LocalSubgraph,
     reference: &DirectReferencePosition,
 ) -> ExperimentResult<(u64, u64)> {
-    let index: &GBWT = graph.as_ref();
-    let bwt: &BWT = index.as_ref();
     let mut bytes = 128_u64
         .checked_add(16)
         .and_then(|value| value.checked_add(usize_to_u64(reference.path_name.sample.len()).ok()?))
@@ -1162,9 +1190,8 @@ fn record_payload_size_estimate(
             .and_then(|value| value.checked_add(usize_to_u64(sequence_len).ok()?))
             .ok_or_else(|| invalid_data("record payload node size overflow"))?;
         for orientation in [Orientation::Forward, Orientation::Reverse] {
-            for (next_id, next_orientation) in subgraph
-                .supergraph_successors(node_id, orientation)
-                .ok_or_else(|| invalid_data(format!("missing local node {node_id}")))?
+            for (next_id, next_orientation) in
+                subgraph.supergraph_successors(node_id, orientation)?
             {
                 if support::edge_is_canonical((node_id, orientation), (next_id, next_orientation)) {
                     bytes = bytes
@@ -1175,30 +1202,24 @@ fn record_payload_size_estimate(
         }
     }
     for handle in subgraph.handle_iter() {
-        let record_id = index.node_to_record(handle);
-        let (edges, bwt_bytes) = bwt.compressed_record(record_id).ok_or_else(|| {
-            invalid_data(format!(
-                "missing compressed GBWT record for handle {handle}"
-            ))
+        let packed = subgraph.packed_record(handle).ok_or_else(|| {
+            invalid_data(format!("missing packed GBWT record for handle {handle}"))
         })?;
-        let occurrence_count = gbwt_record(graph, handle)
-            .ok_or_else(|| invalid_data(format!("missing GBWT record for handle {handle}")))?
-            .len();
+        let record = subgraph.record(handle)?;
+        let occurrence_count = record.len();
         total_occurrences = total_occurrences
             .checked_add(usize_to_u64(occurrence_count)?)
             .ok_or_else(|| invalid_data("record payload occurrence count overflow"))?;
         bytes = bytes
             .checked_add(24)
-            .and_then(|value| value.checked_add(usize_to_u64(edges.len()).ok()?))
-            .and_then(|value| value.checked_add(usize_to_u64(bwt_bytes.len()).ok()?))
+            .and_then(|value| value.checked_add(usize_to_u64(packed.len()).ok()?))
             .ok_or_else(|| invalid_data("record payload GBWT size overflow"))?;
     }
     Ok((bytes, total_occurrences))
 }
 
-fn record_payload_from_subgraph(
-    graph: &GBZ,
-    subgraph: &Subgraph,
+fn source_record_payload_from_subgraph(
+    subgraph: &LocalSubgraph,
     reference: &DirectReferencePosition,
     core_start: u64,
     core_end: u64,
@@ -1211,9 +1232,8 @@ fn record_payload_from_subgraph(
             .ok_or_else(|| invalid_data(format!("missing local sequence for node {node_id}")))?;
         nodes.insert(usize_to_u64(node_id)?, sequence.to_vec());
         for orientation in [Orientation::Forward, Orientation::Reverse] {
-            for (next_id, next_orientation) in subgraph
-                .supergraph_successors(node_id, orientation)
-                .ok_or_else(|| invalid_data(format!("missing local node {node_id}")))?
+            for (next_id, next_orientation) in
+                subgraph.supergraph_successors(node_id, orientation)?
             {
                 if support::edge_is_canonical((node_id, orientation), (next_id, next_orientation)) {
                     edges.insert(PackedEdge {
@@ -1225,28 +1245,17 @@ fn record_payload_from_subgraph(
         }
     }
 
-    let index: &GBWT = graph.as_ref();
-    let bwt: &BWT = index.as_ref();
     let mut records = Vec::with_capacity(subgraph.handle_iter().count());
     let mut total_occurrences = 0_u64;
     for handle in subgraph.handle_iter() {
-        let record_id = index.node_to_record(handle);
-        let (edge_bytes, bwt_bytes) = bwt.compressed_record(record_id).ok_or_else(|| {
-            invalid_data(format!(
-                "missing compressed GBWT record for handle {handle}"
-            ))
-        })?;
-        let occurrence_count = usize_to_u64(
-            gbwt_record(graph, handle)
-                .ok_or_else(|| invalid_data(format!("missing GBWT record for handle {handle}")))?
-                .len(),
-        )?;
+        let bytes = subgraph
+            .packed_record(handle)
+            .ok_or_else(|| invalid_data(format!("missing packed GBWT record for handle {handle}")))?
+            .to_vec();
+        let occurrence_count = usize_to_u64(subgraph.record(handle)?.len())?;
         total_occurrences = total_occurrences
             .checked_add(occurrence_count)
             .ok_or_else(|| invalid_data("record payload occurrence count overflow"))?;
-        let mut bytes = Vec::with_capacity(edge_bytes.len() + bwt_bytes.len());
-        bytes.extend_from_slice(edge_bytes);
-        bytes.extend_from_slice(bwt_bytes);
         records.push(PackedGbwtRecord {
             handle: usize_to_u64(handle)?,
             occurrence_count,
@@ -1276,25 +1285,31 @@ fn record_payload_from_subgraph(
 
 #[allow(clippy::too_many_arguments)]
 fn construct_record_chunk(
-    graph: &GBZ,
-    path_index: &PathIndex,
+    source: &dyn PangenomeSource,
+    path_index: &SourcePathIndex,
     reference: &FullPathName,
     start: u64,
     end: u64,
     max_uncompressed_bytes: u64,
 ) -> ExperimentResult<RecordChunkOutcome> {
-    let query = SubgraphQuery::path_interval(reference, u64_to_usize(start)?..u64_to_usize(end)?)
-        .with_context(u64_to_usize(CONSTRUCTION_CONTEXT)?)
-        .with_haplotypes(HaplotypeOutput::None);
     let selection_started = Instant::now();
-    let mut subgraph = Subgraph::new();
-    subgraph.from_gbz(graph, Some(path_index), None, &query)?;
-    let mut query_position = reference.clone();
-    query_position.fragment = u64_to_usize(start)?;
-    let reference_position = direct_reference_position(graph, path_index, &query_position)?;
+    let (subgraph, source_reference_position) = LocalSubgraph::around_reference_interval(
+        source,
+        path_index,
+        reference,
+        start,
+        end,
+        CONSTRUCTION_CONTEXT,
+    )?;
+    let reference_position = DirectReferencePosition {
+        query_offset: source_reference_position.query_offset,
+        node_offset: source_reference_position.node_offset,
+        gbwt_pos: source_reference_position.position,
+        path_name: source_reference_position.path_name,
+    };
     let subgraph_selection_wall_ms = selection_started.elapsed().as_secs_f64() * 1_000.0;
     let (estimated_bytes, total_occurrences) =
-        record_payload_size_estimate(graph, &subgraph, &reference_position)?;
+        source_record_payload_size_estimate(&subgraph, &reference_position)?;
     if estimated_bytes > max_uncompressed_bytes {
         return Ok(RecordChunkOutcome::Split {
             estimated_bytes,
@@ -1308,7 +1323,7 @@ fn construct_record_chunk(
         });
     }
     let materialization_started = Instant::now();
-    let payload = record_payload_from_subgraph(graph, &subgraph, &reference_position, start, end)?;
+    let payload = source_record_payload_from_subgraph(&subgraph, &reference_position, start, end)?;
     let regional_materialization_wall_ms =
         materialization_started.elapsed().as_secs_f64() * 1_000.0;
     let encoding_started = Instant::now();
@@ -1475,21 +1490,26 @@ pub fn compare_haplotype_outputs(
 }
 
 fn selected_reference_paths(
-    graph: &GBZ,
+    path_index: &SourcePathIndex,
     config: &FixedArchiveConfig,
     options: &ArchiveBuildOptions,
 ) -> ExperimentResult<Vec<ReferencePathSpec>> {
-    let mut references =
-        reference_paths_filtered(graph, options.sample.as_deref(), options.contig.as_deref())?
-            .into_iter()
-            .filter_map(|mut reference| {
-                reference.start = reference
-                    .start
-                    .max(options.start.unwrap_or(reference.start));
-                reference.end = reference.end.min(options.end.unwrap_or(reference.end));
-                (reference.start < reference.end).then_some(reference)
-            })
-            .collect::<Vec<_>>();
+    let mut references = path_index
+        .references(options.sample.as_deref(), options.contig.as_deref())
+        .into_iter()
+        .map(|reference| ReferencePathSpec {
+            name: reference.name,
+            start: reference.start,
+            end: reference.end,
+        })
+        .filter_map(|mut reference| {
+            reference.start = reference
+                .start
+                .max(options.start.unwrap_or(reference.start));
+            reference.end = reference.end.min(options.end.unwrap_or(reference.end));
+            (reference.start < reference.end).then_some(reference)
+        })
+        .collect::<Vec<_>>();
     if let Some(max_chunks) = options.max_chunks {
         if max_chunks == 0 {
             return Err(invalid_input("--max-chunks must be greater than zero").into());
@@ -1873,14 +1893,16 @@ fn queue_record_chunk(
 #[allow(clippy::too_many_lines)]
 pub fn build_fixed_archive(
     graph: &GBZ,
-    path_index: &PathIndex,
+    _path_index: &PathIndex,
     source_gbz_bytes: u64,
     output: &Path,
     config: &FixedArchiveConfig,
 ) -> ExperimentResult<ArchiveBuildMetrics> {
-    build_fixed_archive_with_options(
-        graph,
-        path_index,
+    let source = LoadedGbzSource::new(graph);
+    let source_path_index = SourcePathIndex::new(&source, 1_000)?;
+    build_fixed_archive_from_source_with_options(
+        &source,
+        &source_path_index,
         source_gbz_bytes,
         output,
         config,
@@ -1897,7 +1919,34 @@ pub fn build_fixed_archive(
 /// archive encoding/corruption errors, or destination I/O failures.
 pub fn build_fixed_archive_with_options(
     graph: &GBZ,
-    path_index: &PathIndex,
+    _path_index: &PathIndex,
+    source_gbz_bytes: u64,
+    output: &Path,
+    config: &FixedArchiveConfig,
+    options: &ArchiveBuildOptions,
+) -> ExperimentResult<ArchiveBuildMetrics> {
+    let source = LoadedGbzSource::new(graph);
+    let source_path_index = SourcePathIndex::new(&source, 1_000)?;
+    build_fixed_archive_from_source_with_options(
+        &source,
+        &source_path_index,
+        source_gbz_bytes,
+        output,
+        config,
+        options,
+    )
+}
+
+#[allow(clippy::too_many_lines)]
+/// Builds a filtered v1 archive from a project-owned pangenome source.
+///
+/// # Errors
+///
+/// Returns an error for invalid filters or limits, source extraction failures,
+/// archive encoding/corruption errors, or destination I/O failures.
+pub fn build_fixed_archive_from_source_with_options(
+    source: &dyn PangenomeSource,
+    path_index: &SourcePathIndex,
     source_gbz_bytes: u64,
     output: &Path,
     config: &FixedArchiveConfig,
@@ -1923,7 +1972,7 @@ pub fn build_fixed_archive_with_options(
     }
     let started = Instant::now();
     let manifest_started = Instant::now();
-    let references = selected_reference_paths(graph, config, options)?;
+    let references = selected_reference_paths(path_index, config, options)?;
     let reference_manifest_discovery_wall_ms = manifest_started.elapsed().as_secs_f64() * 1_000.0;
     if references.is_empty() {
         return Err(invalid_input("no reference paths match the requested filters").into());
@@ -2129,7 +2178,7 @@ pub fn build_fixed_archive_with_options(
             }
             let outcomes = if tasks.len() == 1 {
                 vec![construct_record_chunk(
-                    graph,
+                    source,
                     path_index,
                     &query_name,
                     tasks[0].start,
@@ -2144,7 +2193,7 @@ pub fn build_fixed_archive_with_options(
                         .map(|task| {
                             scope.spawn(move || {
                                 construct_record_chunk(
-                                    graph,
+                                    source,
                                     path_index,
                                     query_name,
                                     task.start,
@@ -4633,6 +4682,8 @@ mod tests {
         }
         let graph: GBZ = simple_sds::serialize::load_from(&source).unwrap();
         let path_index = PathIndex::new(&graph, 1_000, false).unwrap();
+        let source_adapter = LoadedGbzSource::new(&graph);
+        let source_path_index = SourcePathIndex::new(&source_adapter, 1_000).unwrap();
         let reference = reference_paths(&graph).unwrap().remove(0);
         for offset in [0, 16_384, 131_072, 524_288] {
             let start = reference.start + offset;
@@ -4646,10 +4697,15 @@ mod tests {
                 haplotype: reference.name.haplotype,
                 fragment: 0,
             };
-            let RecordChunkOutcome::Accepted(chunk) =
-                construct_record_chunk(&graph, &path_index, &query_name, start, end, u64::MAX)
-                    .unwrap()
-            else {
+            let RecordChunkOutcome::Accepted(chunk) = construct_record_chunk(
+                &source_adapter,
+                &source_path_index,
+                &query_name,
+                start,
+                end,
+                u64::MAX,
+            )
+            .unwrap() else {
                 panic!("test record payload unexpectedly requested an adaptive split");
             };
             let decoded = RegionalGraph::decode(&chunk.raw).unwrap();

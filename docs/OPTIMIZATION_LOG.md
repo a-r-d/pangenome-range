@@ -501,3 +501,96 @@ seam and memory preflight report `fully-loaded-gbz` / unbounded access. A
 two-chunk HPRC pilot still peaked at 8,776,080 KiB. This rejects any claim that
 filtering makes source memory bounded and leaves a whole 1000GP attempt
 unauthorized pending lazy/mmap upstream work.
+
+## 2026-08-26: project-owned disk-backed GBZ source accepted for bounded pilots
+
+The production encoder no longer uses `gbz-base::PathIndex`,
+`gbz-base::Subgraph`, or `gbz-base::GBZRecord`. Those remain research/oracle
+tools only. `SourcePathIndex` now owns sparse real-reference samples and
+`LocalSubgraph` owns interval walking, context expansion, topology, and exact
+packed-record retention. The loaded adapter and disk adapter produced identical
+MHC archives at one and four workers:
+
+```text
+164d18c254cae1e52bfed5a6cd53ea9d48c8d14ab50dbcc85d5e3b54f5569c70
+```
+
+GBZ/simple-sds stores the complete record and sequence bodies as large
+serialized sections. `DiskGbzSource` parses their indices, streams their bodies
+to four temporary files, and performs arithmetic offset lookup through four
+16 MiB block caches. It never creates a row per haplotype visit or expands full
+haplotypes. `--source-access disk` is now the default; `loaded` is retained as
+the correctness baseline.
+
+The exact retained HPRC pilot used the same source, filters, archive options,
+host, and correctness gate as the release-candidate source pilot:
+
+```text
+source:       5,492,627,216 B / sha256 11d6047f...e2b
+filter:       GRCh38 chr6, first two 16 KiB chunks
+archive:      4,807 B
+archive sha:  23342b919d933a19002ac97aac8d8ce3495ed5f4d3fcb27c9e194aeba76f70ca
+```
+
+| Measurement | Fully loaded baseline | Disk-backed + 64 MiB cache |
+| --- | ---: | ---: |
+| Peak RSS | 8,776,080 KiB | 408,376 KiB |
+| Whole pilot wall | 51.37 s | 104.68 s |
+| Source checksum | included in wall | 20.822 s |
+| Source preparation | full load | 26.123 s cache build |
+| Reference index | included in wall | 57.647 s |
+| Encoder construction | negligible | 9.484 ms |
+| Source scratch | 0 B | 11,921,858,427 B |
+| Explicit read-cache limit | n/a | 67,108,864 B |
+
+Peak process memory fell by 95.35%, from 8.37 GiB to 0.389 GiB. The cache is
+2.171x source size and is removed on exit. The first uncached reader prototype
+had the same 407,756 KiB memory peak and exact archive hash, but its one-seek-
+per-access reference index took 378.746 s. The fixed 64 MiB block cache reduced
+that phase to 57.647 s. Both runs rebuilt fresh cache files; whole-wall
+comparison is still affected by ordinary OS source-cache warmth, so no claim is
+made from the 48.040 s versus 26.123 s cache-build difference.
+
+On the 4,511,832-byte MHC fixture, disk-backed one-worker construction was
+611.312 ms versus 573.678 ms loaded (6.6% slower), while the archive bytes were
+identical. This supports the intended trade: a modest construction penalty for
+a source working set no longer proportional to the full GBZ body. The compact
+simple-sds indices loaded while creating the disk cache still scale with record
+and sequence count; the HPRC cache-build peak is the evidence bound, not a claim
+of constant memory.
+
+A 1,024-window HPRC chr6 extension then covered 16,777,216 bp, wrote and
+validated 1,024 physical payloads in 976.111 ms construction wall, and remained
+at 407,880 KiB peak RSS. Its archive was 26,156,797 bytes with SHA-256
+`239242b09acc247601ff58829002697cfd74bcebfe1b88bf457512f611604f46`.
+The sustained 0.953 ms per entry is close to the accepted whole-HPRC loaded
+run's 0.976 ms per entry average. The measurable whole-command penalty is thus
+currently concentrated in source preprocessing: 103.113 s for disk-backed
+checksum/cache/index versus 51.260 s loaded, about 52 seconds on this host.
+
+The final whole-HPRC run completed from the project-owned path after two more
+bounded hill-climbing steps: 16 cache shards removed the single cache lock from
+the worker critical path, and a length-only source operation stopped reference
+indexing from materializing sequence bodies. It produced the exact retained
+8,828,788,418-byte archive, 47,376,617-byte index, and SHA-256
+`76ae6616d296af1c270420ecbaa1fdb1dfa80f28645d72df589a31d2f0f0121e`.
+
+| Measurement | Fully loaded release candidate | Final disk-backed |
+| --- | ---: | ---: |
+| Whole command | 438.720 s | 499.340 s |
+| Prebuild | 51.260 s | 95.034 s |
+| Construction including validation | 354.481 s | 369.561 s |
+| Pre-rename validation | 28.123 s | 32.221 s |
+| Output SHA-256 | 32.520 s | 34.493 s |
+| Peak RSS | 8,775,928 KiB | 608,060 KiB |
+| Source cache | 0 B | 11,921,858,427 B |
+
+This is a 93.07% RSS reduction for a 13.82% whole-wall penalty on the exact
+same source, options, and host. Construction itself was 4.25% slower; most of
+the remaining cost is the bounded source cache and reference-index prebuild.
+The source cache was removed on exit, and occurrence scratch, payload spool,
+and general encoder scratch remained zero.
+
+The whole HPRC gate is now complete. A 1000GP whole-source run remains
+unauthorized until a representative bounded pilot measures cache expansion,
+compact-index RSS, construction throughput, and required disk headroom.

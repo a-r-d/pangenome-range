@@ -5,7 +5,7 @@ dependency pins unless explicitly listed in `Cargo.lock`.
 
 | Project | Repository | Version / inspected commit | License | Purpose |
 |---|---|---|---|---|
-| GBZ-base | <https://github.com/jltsiren/gbz-base> | 0.6.1 / `a5ed1ff3ddc402e230d1187afa438e05c8b3654e` | MIT | SQLite local-query baseline, query semantics, fixture source |
+| GBZ-base | <https://github.com/jltsiren/gbz-base> | 0.6.1 / `a5ed1ff3ddc402e230d1187afa438e05c8b3654e` | MIT | Research SQLite baseline, independent query oracle, fixture source; not the production encoder |
 | GBWT-rs / `gbz` | <https://github.com/jltsiren/gbwt-rs> | crate 0.7.0 / `a0d72bc3bd261fc433e59de64b2706f5f45708ad` | MIT | Rust GBZ parser and graph API |
 | GBWTGraph | <https://github.com/jltsiren/gbwtgraph> | `e27bc439cf110ac8cca89fcecacda993d2c9df70` | MIT | GBZ v3 / GBWTGraph v4 serialization reference |
 | GBWT | <https://github.com/jltsiren/gbwt> | `c2e0199694fe41ec46c61c201c6ae0cd7dd08783` | MIT | Compressed haplotype index implementation/serialization |
@@ -30,18 +30,21 @@ resolved by `Cargo.lock`:
 
 GBZ 0.7.0 itself uses `simple-sds` 0.4.2 and `zstd` 0.13.3 in this lockfile.
 
-## Lazy source-access issue draft
+## Bounded source access and remaining upstream opportunity
 
-The release-candidate encoder now has a `PangenomeSource` seam, but the
-`LoadedGbzSource` baseline still calls `simple_sds::serialize::load_from` and
-fully deserializes the object. On the 5,492,627,216-byte HPRC source, a two-tile
-filtered pilot still reached 8,776,080 KiB peak RSS. Filtering therefore does
-not bound source memory.
+The normal encoder no longer calls `simple_sds::serialize::load_from` or
+`gbz-base`. `DiskGbzSource` parses the locked GBZ/simple-sds serialization,
+streams record and sequence bodies to temporary disk, and supplies project-owned
+reference indexing and local context extraction. On the 5,492,627,216-byte HPRC
+source, the final whole encode fell from 8,775,928 to 608,060 KiB peak RSS and
+remained byte-identical. Whole wall increased from 438.72 to 499.34 seconds and
+the disk-backed path used an 11,921,858,427-byte ephemeral cache.
 
-A focused upstream prototype/issue is retained in
+A focused upstream issue remains useful in
 [`UPSTREAM_LAZY_GBZ_ACCESS.md`](UPSTREAM_LAZY_GBZ_ACCESS.md). It asks for
-borrowed/mmap or section-lazy metadata, sequence, GBWT record, and reference
-position access—not a global occurrence table or SQLite visit index.
+an official borrowed/mmap or section-lazy API so this repository does not have
+to track upstream serialization details. It is now an interoperability and
+maintenance improvement, not a blocker for bounded production encoding.
 
 ## JavaScript benchmark dependencies
 

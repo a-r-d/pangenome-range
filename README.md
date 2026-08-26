@@ -63,6 +63,16 @@ cargo run --release -- validate /tmp/mhc.pngr
 cargo run --release -- fixtures export test-data/conformance
 ```
 
+`encode` uses the project-owned disk-backed GBZ reader by default. GBZ record
+and sequence sections are streamed into an ephemeral indexed cache below
+`--scratch-dir` (or beside the output), read through a fixed 64 MiB block-cache
+budget, and removed when the command exits. The final whole-HPRC encode used
+11.92 GB of scratch for a 5.49 GB source and peaked at 608,060 KiB RSS instead
+of 8,775,928 KiB for the fully loaded baseline. Use
+`--source-access loaded` only for the fully deserialized correctness baseline.
+Plan scratch capacity before large runs; this cache is separate from the `.pngr`
+temporary sibling and does not contain a global occurrence table.
+
 Development checks:
 
 ```bash

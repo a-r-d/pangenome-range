@@ -1,12 +1,14 @@
+use super::disk_source::{DiskGbzSource, DiskSourceStats};
 use super::fixed::{
     ArchiveBuildMetrics, ArchiveBuildOptions, BuildProgressMode, ChunkCodec,
     DEFAULT_MAX_QUEUED_BYTES, DEFAULT_MAX_UNCOMPRESSED_CHUNK_BYTES, DEFAULT_MIN_WINDOW_SIZE,
     DEFAULT_PROGRESS_INTERVAL_MS, ExperimentResult, FixedArchiveConfig, QueryMeasurement,
-    QuerySpec, build_fixed_archive, build_fixed_archive_with_options, query_fixed_archive,
-    reference_paths, source_oracle,
+    QuerySpec, build_fixed_archive, build_fixed_archive_from_source_with_options,
+    query_fixed_archive, reference_paths, source_oracle,
 };
 use super::source::{
-    LoadedGbzSource, PangenomeSource, SourceMemoryPreflight, source_memory_preflight,
+    LoadedGbzSource, PangenomeSource, SourceMemoryPreflight, SourcePathIndex, SourceReferenceSeed,
+    source_memory_preflight,
 };
 use gbz::GBZ;
 use gbz_base::PathIndex;
@@ -26,6 +28,14 @@ const QUERY_CONTEXT: u64 = 100;
 const QUERY_SIZES: [u64; 4] = [1_000, 10_000, 100_000, 1_000_000];
 const QUERY_COALESCING_GAP: u64 = 65_536;
 
+#[derive(Clone, Copy, Debug, Default, Serialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum EncodeSourceMode {
+    #[default]
+    Disk,
+    Loaded,
+}
+
 #[derive(Clone, Debug)]
 pub struct EncodeOptions {
     pub input: PathBuf,
@@ -41,6 +51,7 @@ pub struct EncodeOptions {
     pub min_window_size: u64,
     pub threads: usize,
     pub max_queued_bytes: u64,
+    pub source_mode: EncodeSourceMode,
     pub scratch_dir: Option<PathBuf>,
     pub keep_partial: bool,
     pub progress: BuildProgressMode,
@@ -65,6 +76,7 @@ impl EncodeOptions {
             min_window_size: DEFAULT_MIN_WINDOW_SIZE,
             threads: default_encode_threads(),
             max_queued_bytes: DEFAULT_MAX_QUEUED_BYTES,
+            source_mode: EncodeSourceMode::Disk,
             scratch_dir: None,
             keep_partial: false,
             progress: BuildProgressMode::Off,
@@ -89,10 +101,14 @@ pub struct EncodeSummary {
     pub source_gbz_bytes: u64,
     pub source_access_mode: &'static str,
     pub source_access_is_bounded: bool,
+    pub source_mode: EncodeSourceMode,
+    pub source_cache: Option<DiskSourceStats>,
     pub source_memory_preflight: SourceMemoryPreflight,
+    pub source_memory_preflight_applies: bool,
     pub source_sha256: String,
     pub source_checksum_wall_ms: f64,
     pub source_load_wall_ms: f64,
+    pub source_cache_build_wall_ms: f64,
     pub rss_after_source_load_kib: Option<u64>,
     pub path_index_wall_ms: f64,
     pub rss_after_path_index_kib: Option<u64>,
@@ -130,6 +146,48 @@ fn encode_progress(mode: BuildProgressMode, phase: &str, message: &str) {
             "{}",
             serde_json::json!({ "phase": phase, "message": message })
         ),
+    }
+}
+
+enum ActiveEncoderSource {
+    Disk(Box<DiskGbzSource>),
+    Loaded(Box<GBZ>),
+}
+
+impl PangenomeSource for ActiveEncoderSource {
+    fn access_mode(&self) -> &'static str {
+        match self {
+            Self::Disk(source) => source.access_mode(),
+            Self::Loaded(graph) => LoadedGbzSource::new(graph).access_mode(),
+        }
+    }
+
+    fn reference_seeds(&self) -> io::Result<Vec<SourceReferenceSeed>> {
+        match self {
+            Self::Disk(source) => source.reference_seeds(),
+            Self::Loaded(graph) => LoadedGbzSource::new(graph).reference_seeds(),
+        }
+    }
+
+    fn sequence(&self, node_id: usize) -> io::Result<Option<Vec<u8>>> {
+        match self {
+            Self::Disk(source) => source.sequence(node_id),
+            Self::Loaded(graph) => LoadedGbzSource::new(graph).sequence(node_id),
+        }
+    }
+
+    fn sequence_len(&self, node_id: usize) -> io::Result<Option<usize>> {
+        match self {
+            Self::Disk(source) => source.sequence_len(node_id),
+            Self::Loaded(graph) => LoadedGbzSource::new(graph).sequence_len(node_id),
+        }
+    }
+
+    fn packed_record(&self, packed_handle: usize) -> io::Result<Option<Vec<u8>>> {
+        match self {
+            Self::Disk(source) => source.packed_record(packed_handle),
+            Self::Loaded(graph) => LoadedGbzSource::new(graph).packed_record(packed_handle),
+        }
     }
 }
 
@@ -180,16 +238,49 @@ pub fn run_encode(options: &EncodeOptions) -> ExperimentResult<EncodeSummary> {
         options.progress_interval_ms,
     )?;
     let source_checksum_wall_ms = elapsed_ms(checksum_started);
-    let load_started = Instant::now();
-    let graph: GBZ = run_with_phase_heartbeat(
+    let source_prepare_started = Instant::now();
+    let scratch_parent = options.scratch_dir.as_deref().unwrap_or_else(|| {
+        options
+            .output
+            .parent()
+            .filter(|parent| !parent.as_os_str().is_empty())
+            .unwrap_or_else(|| Path::new("."))
+    });
+    let (source_phase, source_message) = match options.source_mode {
+        EncodeSourceMode::Disk => (
+            "source_cache",
+            "streaming GBZ records and sequences into a bounded disk cache",
+        ),
+        EncodeSourceMode::Loaded => ("source_load", "loading GBZ source into memory"),
+    };
+    let source = run_with_phase_heartbeat(
         options.progress,
-        "source_load",
-        "loading GBZ source into memory",
+        source_phase,
+        source_message,
         options.progress_interval_ms,
-        || serialize::load_from(&options.input),
+        || match options.source_mode {
+            EncodeSourceMode::Disk => DiskGbzSource::build(&options.input, scratch_parent)
+                .map(Box::new)
+                .map(ActiveEncoderSource::Disk),
+            EncodeSourceMode::Loaded => serialize::load_from(&options.input)
+                .map(Box::new)
+                .map(ActiveEncoderSource::Loaded),
+        },
     )?;
-    let source_access_mode = LoadedGbzSource::new(&graph, None).access_mode();
-    let source_load_wall_ms = elapsed_ms(load_started);
+    let source_access_mode = source.access_mode();
+    let source_prepare_wall_ms = elapsed_ms(source_prepare_started);
+    let source_load_wall_ms = match options.source_mode {
+        EncodeSourceMode::Loaded => source_prepare_wall_ms,
+        EncodeSourceMode::Disk => 0.0,
+    };
+    let source_cache_build_wall_ms = match options.source_mode {
+        EncodeSourceMode::Disk => source_prepare_wall_ms,
+        EncodeSourceMode::Loaded => 0.0,
+    };
+    let source_cache = match &source {
+        ActiveEncoderSource::Disk(source) => Some(source.stats().clone()),
+        ActiveEncoderSource::Loaded(_) => None,
+    };
     let rss_after_source_load_kib = process_current_rss_kib();
     let index_started = Instant::now();
     let path_index = run_with_phase_heartbeat(
@@ -197,7 +288,7 @@ pub fn run_encode(options: &EncodeOptions) -> ExperimentResult<EncodeSummary> {
         "path_index",
         "building compact reference path index",
         options.progress_interval_ms,
-        || PathIndex::new(&graph, PATH_INDEX_INTERVAL, false),
+        || SourcePathIndex::new(&source, PATH_INDEX_INTERVAL),
     )?;
     let path_index_wall_ms = elapsed_ms(index_started);
     let rss_after_path_index_kib = process_current_rss_kib();
@@ -227,8 +318,8 @@ pub fn run_encode(options: &EncodeOptions) -> ExperimentResult<EncodeSummary> {
         "starting direct archive writer",
     );
     let prebuild_wall_ms = elapsed_ms(encode_started);
-    let build = build_fixed_archive_with_options(
-        &graph,
+    let build = build_fixed_archive_from_source_with_options(
+        &source,
         &path_index,
         source_gbz_bytes,
         &options.output,
@@ -261,17 +352,21 @@ pub fn run_encode(options: &EncodeOptions) -> ExperimentResult<EncodeSummary> {
         0.0
     };
     let summary = EncodeSummary {
-        schema_version: 3,
+        schema_version: 4,
         archive_version: 1,
         regional_payload_version: 1,
         source_path: options.input.clone(),
         source_gbz_bytes,
         source_access_mode,
-        source_access_is_bounded: false,
+        source_access_is_bounded: matches!(options.source_mode, EncodeSourceMode::Disk),
+        source_mode: options.source_mode,
+        source_cache,
         source_memory_preflight,
+        source_memory_preflight_applies: matches!(options.source_mode, EncodeSourceMode::Loaded),
         source_sha256,
         source_checksum_wall_ms,
         source_load_wall_ms,
+        source_cache_build_wall_ms,
         rss_after_source_load_kib,
         path_index_wall_ms,
         rss_after_path_index_kib,

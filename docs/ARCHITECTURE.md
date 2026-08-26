@@ -5,17 +5,19 @@
 ```text
 pangenome-range-cli ──> pangenome-range-build ──> pangenome-range-query
      │                         │                         │
-     └────> upstream gbz/gbz-base                       ▼
-                               └────────> pangenome-range-format
+     └────> upstream gbz       └────────> pangenome-range-format
+                               └ - - -> gbz-base (research/oracle only)
 ```
 
 `pangenome-range-format` owns the normative v1 header/root/directory and
 regional codecs, corruption checks, reader primitives, structural validation,
 storage seam, and network cost model. It has no GBZ dependency.
 `pangenome-range-query` owns canonical graph/tile semantics, comparison, and
-hashing. `pangenome-range-build` owns the GBZ/GBZ-base source adapters,
-reference anchoring, tile selection, bounded encoder pipeline, build metrics,
-and candidate-layout experiments. The current object is normatively specified
+hashing. `pangenome-range-build` owns GBZ source access, reference anchoring,
+tile selection, the bounded encoder pipeline, build metrics, and candidate-layout
+experiments. `gbz-base` remains only in research baselines and independent
+source-oracle checks; it no longer defines or constructs production payloads.
+The current object is normatively specified
 in [File Format v1](FILE_FORMAT_V1.md) and summarized in
 [Fixed-window archive v1](FIXED_WINDOW_ARCHIVE.md).
 
@@ -28,10 +30,11 @@ reference/coordinate order. Compact per-reference/per-bucket descriptors are
 retained for directory backfill; there is no payload spool, second full-file
 copy, occurrence table, or global pending-entry sort.
 
-The normal regional path uses `HaplotypeOutput::None` only to select local graph
-state. It copies the exact compressed GBWT records, forward node sequences, and
-canonical topology edges; it does not enumerate or sort anonymous paths while
-encoding. Exact borrowed record lengths provide the adaptive-split preflight,
+The normal regional path uses the project-owned `LocalSubgraph` selector. It
+copies exact packed GBWT records, forward node sequences, and canonical topology
+edges directly from `PangenomeSource`; it does not call `gbz-base`, enumerate,
+or sort anonymous paths while encoding. Exact record lengths provide the
+adaptive-split preflight,
 so an oversized parent is rejected before a second payload corpus is copied.
 The real reference is retained as a GBWT occurrence anchor with fragment and
 node offsets. Weighted anonymous paths are reconstructed only by a reader for
@@ -74,13 +77,29 @@ critical path.
 
 ## Source access seam
 
-`PangenomeSource` isolates reference discovery, borrowed node/record access,
-and reference-position lookup from the encoder pipeline. `LoadedGbzSource` is
-the current correctness baseline and still fully deserializes GBZ before tile
-work. The CLI performs an explicit source-memory preflight and reports
-`source_access_is_bounded: false`; interval filters do not imply bounded source
-RAM. Lazy or mmap-backed simple-sds/GBZ access can be prototyped behind this
-seam without changing the accepted writer or recreating a global visit index.
+`PangenomeSource` isolates reference discovery, owned active node/record access,
+and reference-position lookup from the encoder pipeline. `DiskGbzSource` is the
+default encoder adapter. It parses GBZ/simple-sds sections directly, streams the
+packed-record body and decoded concatenated node sequences into four ephemeral
+files, writes arithmetic offset tables, and reads them through four 16 MiB
+block caches. Each cache has 16 fixed shards so bounded workers do not serialize
+on one cache lock; the total explicit read-cache limit remains 64 MiB. The
+source cache is removed on exit and is independent of the atomic `.pngr`
+temporary sibling.
+
+GBZ v1 stores 425,853,421 record offsets and 212,926,710 sequence offsets for
+the retained HPRC source. The cache therefore intentionally trades 11.92 GB of
+temporary disk for a measured 608,060 KiB whole-encode process peak instead of
+fully loading the 5.49 GB GBZ at an 8,775,928 KiB peak. The compact simple-sds indices used
+while constructing the cache still scale with record/sequence count; “bounded”
+means the source body and active reads are not retained in RAM, not constant
+memory independent of graph metadata.
+
+`SourcePathIndex` is project-owned and samples only real reference paths roughly
+every 1,000 bp using length-only sequence lookup. `LocalSubgraph` performs interval walking and bidirectional
+context expansion from packed records. Neither is a global haplotype occurrence
+index. `LoadedGbzSource` remains available via `--source-access loaded` as the
+byte-correctness baseline.
 
 ## Primary npm product boundary
 

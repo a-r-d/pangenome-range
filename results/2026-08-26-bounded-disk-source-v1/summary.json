@@ -1,0 +1,120 @@
+{
+  "schemaVersion": 1,
+  "verdict": "bounded-source-whole-hprc-accepted",
+  "formatBytesChanged": false,
+  "productionEncoderCallsGbzBase": false,
+  "researchOracleDependencyRetained": true,
+  "source": {
+    "bytes": 5492627216,
+    "sha256": "11d6047f79575ffb83757462484bad134ed20928bd2c8171ec52e35a54976e2b"
+  },
+  "correctness": {
+    "hprcArchiveBytes": 4807,
+    "hprcArchiveSha256": "23342b919d933a19002ac97aac8d8ce3495ed5f4d3fcb27c9e194aeba76f70ca",
+    "matchesLoadedBaseline": true,
+    "mhcArchiveBytes": 4806677,
+    "mhcDiskThreads1Sha256": "164d18c254cae1e52bfed5a6cd53ea9d48c8d14ab50dbcc85d5e3b54f5569c70",
+    "mhcDiskThreads4Sha256": "164d18c254cae1e52bfed5a6cd53ea9d48c8d14ab50dbcc85d5e3b54f5569c70",
+    "mhcLoadedThreads1Sha256": "164d18c254cae1e52bfed5a6cd53ea9d48c8d14ab50dbcc85d5e3b54f5569c70",
+    "wholeHprcArchiveBytes": 8828788418,
+    "wholeHprcIndexBytes": 47376617,
+    "wholeHprcDirectoryEntries": 363105,
+    "wholeHprcArchiveSha256": "76ae6616d296af1c270420ecbaa1fdb1dfa80f28645d72df589a31d2f0f0121e",
+    "matchesLoadedWholeHprcBaseline": true
+  },
+  "hprcBlockCachePilot": {
+    "wholeWallSeconds": 104.68,
+    "sourceChecksumWallMs": 20821.584134,
+    "sourceCacheBuildWallMs": 26122.582899,
+    "pathIndexWallMs": 57647.450135,
+    "constructionWallMs": 9.484072,
+    "peakRssKiB": 408376,
+    "rssAfterCacheKiB": 34428,
+    "rssAfterPathIndexKiB": 200076,
+    "sourceCacheBytes": 11921858427,
+    "sourceCacheToSourceRatio": 2.170520218862055,
+    "sourceReadCacheLimitBytes": 67108864,
+    "recordCount": 425853421,
+    "recordBytes": 3393944577,
+    "sequenceCount": 212926710,
+    "sequenceBytes": 3417672786
+  },
+  "hprc1024WindowPilot": {
+    "referenceBases": 16777216,
+    "directoryEntries": 1024,
+    "archiveBytes": 26156797,
+    "archiveSha256": "239242b09acc247601ff58829002697cfd74bcebfe1b88bf457512f611604f46",
+    "wholeWallSeconds": 106.18,
+    "prebuildWallMs": 104896.385341,
+    "constructionWallMs": 912.5572,
+    "payloadPipelineWallMs": 817.470268,
+    "validationWallMs": 61.71794,
+    "peakRssKiB": 407964,
+    "meanConstructionMsPerEntry": 0.891169140625
+  },
+  "wholeHprcFinal": {
+    "wholeWallSeconds": 499.34,
+    "reportWallMs": 499182.845534,
+    "sourceChecksumWallMs": 21350.142426,
+    "sourceCacheBuildWallMs": 24412.036486,
+    "pathIndexWallMs": 49272.042945,
+    "prebuildWallMs": 95034.336819,
+    "constructionWallMs": 369561.488761,
+    "payloadPipelineWallMs": 337140.417478,
+    "validationWallMs": 32220.802395,
+    "outputChecksumWallMs": 34492.564214,
+    "peakRssKiB": 608060,
+    "rssAfterCacheKiB": 33560,
+    "rssAfterPathIndexKiB": 183972,
+    "sourceCacheBytes": 11921858427,
+    "sourceReadCacheLimitBytes": 67108864,
+    "timeToFirstPayloadMs": 95062.19947
+  },
+  "wholeHprcLoadedReleaseCandidateBaseline": {
+    "wholeWallSeconds": 438.72,
+    "prebuildWallMs": 51260.0,
+    "constructionWallMs": 354480.984,
+    "validationWallMs": 28123.0,
+    "outputChecksumWallMs": 32520.0,
+    "peakRssKiB": 8775928
+  },
+  "wholeHprcTradeoff": {
+    "extraWallSeconds": 60.62,
+    "wallPenaltyPercent": 13.817469000729377,
+    "peakRssReductionKiB": 8167868,
+    "peakRssReductionPercent": 93.07127405785462
+  },
+  "unshardedWholePrototype": {
+    "wholeWallSeconds": 580.43,
+    "constructionWallMs": 446427.567642,
+    "peakRssKiB": 622000,
+    "archiveSha256": "76ae6616d296af1c270420ecbaa1fdb1dfa80f28645d72df589a31d2f0f0121e"
+  },
+  "rejectedUncachedDiskPrototype": {
+    "pathIndexWallMs": 378746.09822,
+    "wholeWallSeconds": 461.95,
+    "peakRssKiB": 407756,
+    "archiveSha256": "23342b919d933a19002ac97aac8d8ce3495ed5f4d3fcb27c9e194aeba76f70ca"
+  },
+  "mhc": {
+    "diskThreads1ConstructionWallMs": 611.31237,
+    "loadedThreads1ConstructionWallMs": 573.678479,
+    "diskThreads1PenaltyPercent": 6.55835657715893,
+    "diskThreads4ConstructionWallMs": 263.571486,
+    "diskThreads1PeakRssKiB": 23844,
+    "diskThreads4PeakRssKiB": 29296,
+    "loadedThreads1PeakRssKiB": 21156
+  },
+  "scratch": {
+    "occurrenceIndexBytes": 0,
+    "payloadSpoolBytes": 0,
+    "generalEncoderScratchBytes": 0,
+    "ephemeralSourceCacheBytes": 11921858427,
+    "removedOnExit": true
+  },
+  "nextAuthorization": {
+    "wholeHprcEncodeCompleted": true,
+    "bounded1000GpPilot": true,
+    "whole1000GpEncode": false
+  }
+}
