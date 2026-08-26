@@ -35,6 +35,7 @@ use std::fs::{File, OpenOptions};
 use std::io::{self, Read, Seek, SeekFrom, Write};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::{Arc, Mutex, mpsc};
 use std::time::Instant;
 
 use crate::features::{
@@ -973,7 +974,46 @@ struct ChunkTask {
 #[derive(Debug)]
 enum ChunkWorkItem {
     Task(ChunkTask),
+    InFlight { sequence: usize, task: ChunkTask },
     Ready(ChunkTask, RecordChunk),
+}
+
+struct ConstructionJob {
+    sequence: usize,
+    reference: Arc<FullPathName>,
+    task: ChunkTask,
+}
+
+struct ConstructionWorkerResult {
+    sequence: usize,
+    outcome: ExperimentResult<RecordChunkOutcome>,
+}
+
+struct ConstructionWorkers {
+    jobs: mpsc::SyncSender<PipelineJob>,
+    results: mpsc::Receiver<ConstructionWorkerResult>,
+}
+
+struct CompressionJob {
+    sequence: usize,
+    codec: ChunkCodec,
+    chunk: PendingRawChunk,
+}
+
+struct CompressionWorkerResult {
+    sequence: usize,
+    chunk: PendingRawChunk,
+    compressed: io::Result<Vec<u8>>,
+}
+
+struct CompressionWorkers {
+    jobs: mpsc::SyncSender<PipelineJob>,
+    results: mpsc::Receiver<CompressionWorkerResult>,
+}
+
+enum PipelineJob {
+    Construction(ConstructionJob),
+    Compression(CompressionJob),
 }
 
 #[cfg(test)]
@@ -1376,6 +1416,92 @@ fn construct_record_chunk(
     }))
 }
 
+fn with_persistent_workers<R>(
+    source: &dyn PangenomeSource,
+    path_index: &SourcePathIndex,
+    max_uncompressed_bytes: u64,
+    threads: usize,
+    work: impl FnOnce(Option<&ConstructionWorkers>, Option<&CompressionWorkers>) -> ExperimentResult<R>,
+) -> ExperimentResult<R> {
+    std::thread::scope(|scope| {
+        if threads == 1 {
+            return work(None, None);
+        }
+        let channel_capacity = threads.saturating_mul(2).max(1);
+        let (job_sender, job_receiver) = mpsc::sync_channel::<PipelineJob>(channel_capacity);
+        let (construction_result_sender, construction_result_receiver) =
+            mpsc::sync_channel::<ConstructionWorkerResult>(channel_capacity);
+        let (compression_result_sender, compression_result_receiver) =
+            mpsc::sync_channel::<CompressionWorkerResult>(channel_capacity);
+        let job_receiver = Arc::new(Mutex::new(job_receiver));
+        for _ in 0..threads {
+            let jobs = Arc::clone(&job_receiver);
+            let construction_results = construction_result_sender.clone();
+            let compression_results = compression_result_sender.clone();
+            scope.spawn(move || {
+                loop {
+                    let job = match jobs.lock() {
+                        Ok(receiver) => receiver.recv(),
+                        Err(_) => return,
+                    };
+                    let Ok(job) = job else {
+                        return;
+                    };
+                    match job {
+                        PipelineJob::Construction(job) => {
+                            let outcome = construct_record_chunk(
+                                source,
+                                path_index,
+                                &job.reference,
+                                job.task.start,
+                                job.task.end,
+                                max_uncompressed_bytes,
+                            );
+                            if construction_results
+                                .send(ConstructionWorkerResult {
+                                    sequence: job.sequence,
+                                    outcome,
+                                })
+                                .is_err()
+                            {
+                                return;
+                            }
+                        }
+                        PipelineJob::Compression(job) => {
+                            let compressed = compress(job.codec, &job.chunk.raw);
+                            if compression_results
+                                .send(CompressionWorkerResult {
+                                    sequence: job.sequence,
+                                    chunk: job.chunk,
+                                    compressed,
+                                })
+                                .is_err()
+                            {
+                                return;
+                            }
+                        }
+                    }
+                }
+            });
+        }
+        drop(construction_result_sender);
+        drop(compression_result_sender);
+        let construction = ConstructionWorkers {
+            jobs: job_sender.clone(),
+            results: construction_result_receiver,
+        };
+        let compression = CompressionWorkers {
+            jobs: job_sender,
+            results: compression_result_receiver,
+        };
+
+        let result = work(Some(&construction), Some(&compression));
+        drop(construction);
+        drop(compression);
+        result
+    })
+}
+
 trait RecordRegionalPayloadExt {
     fn into_regional_graph(self) -> ExperimentResult<RegionalGraph>;
 }
@@ -1640,9 +1766,60 @@ fn maybe_emit_chunk_progress(
     Ok(())
 }
 
+fn compress_pending_batch(
+    batch: Vec<PendingRawChunk>,
+    codec: ChunkCodec,
+    workers: Option<&CompressionWorkers>,
+) -> ExperimentResult<(Vec<PendingRawChunk>, Vec<Vec<u8>>)> {
+    if batch.len() == 1 || workers.is_none() {
+        let compressed = batch
+            .iter()
+            .map(|chunk| compress(codec, &chunk.raw))
+            .collect::<io::Result<Vec<_>>>()?;
+        return Ok((batch, compressed));
+    }
+    let workers = workers.expect("worker presence was checked");
+    let batch_len = batch.len();
+    for (sequence, chunk) in batch.into_iter().enumerate() {
+        workers
+            .jobs
+            .send(PipelineJob::Compression(CompressionJob {
+                sequence,
+                codec,
+                chunk,
+            }))
+            .map_err(|_| invalid_data("compression workers stopped before accepting a batch"))?;
+    }
+    let mut ordered = std::iter::repeat_with(|| None)
+        .take(batch_len)
+        .collect::<Vec<Option<(PendingRawChunk, io::Result<Vec<u8>>)>>>();
+    for _ in 0..batch_len {
+        let result = workers
+            .results
+            .recv()
+            .map_err(|_| invalid_data("compression workers stopped before completing a batch"))?;
+        let slot = ordered
+            .get_mut(result.sequence)
+            .ok_or_else(|| invalid_data("compression worker returned an invalid sequence"))?;
+        if slot.replace((result.chunk, result.compressed)).is_some() {
+            return Err(invalid_data("compression worker returned a duplicate sequence").into());
+        }
+    }
+    let mut chunks = Vec::with_capacity(batch_len);
+    let mut compressed = Vec::with_capacity(batch_len);
+    for result in ordered {
+        let (chunk, encoded) =
+            result.ok_or_else(|| invalid_data("compression batch result is missing"))?;
+        chunks.push(chunk);
+        compressed.push(encoded?);
+    }
+    Ok((chunks, compressed))
+}
+
 #[allow(clippy::too_many_arguments, clippy::too_many_lines)]
 fn flush_pending_chunks(
     pending: &mut Vec<PendingRawChunk>,
+    compression_workers: Option<&CompressionWorkers>,
     archive: &mut File,
     manifests: &mut [ReferenceManifest],
     bucket_entries: &mut [Vec<Vec<ArchiveEntry>>],
@@ -1667,27 +1844,7 @@ fn flush_pending_chunks(
     state.peak_queued_raw_bytes = state.peak_queued_raw_bytes.max(queued_raw_bytes);
 
     let compression_started = Instant::now();
-    let compressed = if options.threads == 1 || batch.len() == 1 {
-        batch
-            .iter()
-            .map(|chunk| compress(config.codec, &chunk.raw))
-            .collect::<io::Result<Vec<_>>>()?
-    } else {
-        std::thread::scope(|scope| {
-            let handles = batch
-                .iter()
-                .map(|chunk| scope.spawn(|| compress(config.codec, &chunk.raw)))
-                .collect::<Vec<_>>();
-            handles
-                .into_iter()
-                .map(|handle| {
-                    handle
-                        .join()
-                        .map_err(|_| invalid_data("compression worker panicked"))?
-                })
-                .collect::<io::Result<Vec<_>>>()
-        })?
-    };
+    let (batch, compressed) = compress_pending_batch(batch, config.codec, compression_workers)?;
     state.compression_wall_ms += compression_started.elapsed().as_secs_f64() * 1_000.0;
     let queued_compressed_bytes = compressed.iter().try_fold(0_u64, |total, bytes| {
         total
@@ -1855,6 +2012,7 @@ fn queue_record_chunk(
     pending: &mut Vec<PendingRawChunk>,
     pending_memory_bound: &mut u64,
     peak_raw_chunk_bytes: &mut u64,
+    compression_workers: Option<&CompressionWorkers>,
     archive: &mut File,
     manifests: &mut [ReferenceManifest],
     bucket_entries: &mut [Vec<Vec<ArchiveEntry>>],
@@ -1889,6 +2047,7 @@ fn queue_record_chunk(
     {
         flush_pending_chunks(
             pending,
+            compression_workers,
             archive,
             manifests,
             bucket_entries,
@@ -1921,6 +2080,7 @@ fn queue_record_chunk(
     if pending.len() >= options.threads {
         flush_pending_chunks(
             pending,
+            compression_workers,
             archive,
             manifests,
             bucket_entries,
@@ -2161,51 +2321,223 @@ pub fn build_fixed_archive_from_source_with_options(
         options.progress_interval_ms,
     );
 
-    for (reference_id, reference) in references.iter().enumerate() {
-        emit_reference_start(
-            options.progress,
-            usize_to_u64(reference_id + 1)?,
-            usize_to_u64(references.len())?,
-            reference,
-        );
-        let first_boundary = (reference.start / config.window_size) * config.window_size;
-        let mut boundary = first_boundary;
-        let mut work = VecDeque::new();
-        while boundary < reference.end {
-            let boundary_end = boundary
-                .checked_add(config.window_size)
-                .ok_or_else(|| invalid_data("window boundary overflow"))?;
-            let start = boundary.max(reference.start);
-            let end = boundary_end.min(reference.end);
-            if start < end {
-                work.push_back(ChunkWorkItem::Task(ChunkTask { start, end }));
-            }
-            boundary = boundary_end;
-        }
-        let query_name = FullPathName {
-            sample: reference.name.sample.clone(),
-            contig: reference.name.contig.clone(),
-            haplotype: reference.name.haplotype,
-            fragment: 0,
-        };
-        while !work.is_empty() {
-            if matches!(work.front(), Some(ChunkWorkItem::Ready(_, _))) {
-                let Some(ChunkWorkItem::Ready(task, chunk)) = work.pop_front() else {
-                    unreachable!("front was checked as a ready chunk");
-                };
-                ready_raw_bytes = ready_raw_bytes
-                    .checked_sub(usize_to_u64(chunk.raw.len())?)
-                    .ok_or_else(|| invalid_data("ready raw byte count underflow"))?;
-                subgraph_selection_wall_ms += chunk.subgraph_selection_wall_ms;
-                regional_materialization_wall_ms += chunk.regional_materialization_wall_ms;
-                regional_encoding_wall_ms += chunk.regional_encoding_wall_ms;
-                queue_record_chunk(
-                    chunk,
-                    task,
-                    reference_id,
+    with_persistent_workers(
+        source,
+        path_index,
+        config.max_uncompressed_chunk_bytes,
+        options.threads,
+        |construction_workers, compression_workers| -> ExperimentResult<()> {
+            for (reference_id, reference) in references.iter().enumerate() {
+                emit_reference_start(
+                    options.progress,
+                    usize_to_u64(reference_id + 1)?,
+                    usize_to_u64(references.len())?,
+                    reference,
+                );
+                let first_boundary = (reference.start / config.window_size) * config.window_size;
+                let mut boundary = first_boundary;
+                let mut work = VecDeque::new();
+                while boundary < reference.end {
+                    let boundary_end = boundary
+                        .checked_add(config.window_size)
+                        .ok_or_else(|| invalid_data("window boundary overflow"))?;
+                    let start = boundary.max(reference.start);
+                    let end = boundary_end.min(reference.end);
+                    if start < end {
+                        work.push_back(ChunkWorkItem::Task(ChunkTask { start, end }));
+                    }
+                    boundary = boundary_end;
+                }
+                let query_name = Arc::new(FullPathName {
+                    sample: reference.name.sample.clone(),
+                    contig: reference.name.contig.clone(),
+                    haplotype: reference.name.haplotype,
+                    fragment: 0,
+                });
+                let mut outstanding_chunks = 0_usize;
+                let mut next_sequence = 0_usize;
+                while !work.is_empty() {
+                    if matches!(work.front(), Some(ChunkWorkItem::Ready(_, _))) {
+                        let Some(ChunkWorkItem::Ready(task, chunk)) = work.pop_front() else {
+                            unreachable!("front was checked as a ready chunk");
+                        };
+                        outstanding_chunks = outstanding_chunks
+                            .checked_sub(1)
+                            .ok_or_else(|| invalid_data("outstanding chunk count underflow"))?;
+                        ready_raw_bytes = ready_raw_bytes
+                            .checked_sub(usize_to_u64(chunk.raw.len())?)
+                            .ok_or_else(|| invalid_data("ready raw byte count underflow"))?;
+                        subgraph_selection_wall_ms += chunk.subgraph_selection_wall_ms;
+                        regional_materialization_wall_ms += chunk.regional_materialization_wall_ms;
+                        regional_encoding_wall_ms += chunk.regional_encoding_wall_ms;
+                        queue_record_chunk(
+                            chunk,
+                            task,
+                            reference_id,
+                            &mut pending,
+                            &mut pending_memory_bound,
+                            &mut peak_raw_chunk_bytes,
+                            compression_workers,
+                            &mut archive_temp.file,
+                            &mut manifests,
+                            &mut bucket_entries,
+                            bucket_span,
+                            config,
+                            options,
+                            started,
+                            processing_started,
+                            total_reference_bases,
+                            references.len(),
+                            &mut writer,
+                        )?;
+                        if work.is_empty() {
+                            continue;
+                        }
+                    }
+                    let (result_index, task, outcome) = if let Some(workers) = construction_workers
+                    {
+                        for index in 0..work.len() {
+                            if outstanding_chunks >= options.threads {
+                                break;
+                            }
+                            let Some(item) = work.get_mut(index) else {
+                                unreachable!("work index came from its current length");
+                            };
+                            let ChunkWorkItem::Task(task) = item else {
+                                continue;
+                            };
+                            let task = *task;
+                            let sequence = next_sequence;
+                            next_sequence = next_sequence
+                                .checked_add(1)
+                                .ok_or_else(|| invalid_data("construction sequence overflow"))?;
+                            workers
+                                .jobs
+                                .send(PipelineJob::Construction(ConstructionJob {
+                                    sequence,
+                                    reference: Arc::clone(&query_name),
+                                    task,
+                                }))
+                                .map_err(|_| {
+                                    invalid_data(
+                                        "construction workers stopped before accepting work",
+                                    )
+                                })?;
+                            *item = ChunkWorkItem::InFlight { sequence, task };
+                            outstanding_chunks = outstanding_chunks
+                                .checked_add(1)
+                                .ok_or_else(|| invalid_data("outstanding chunk overflow"))?;
+                        }
+
+                        if !work
+                            .iter()
+                            .any(|item| matches!(item, ChunkWorkItem::InFlight { .. }))
+                        {
+                            continue;
+                        }
+                        if matches!(work.front(), Some(ChunkWorkItem::Ready(_, _))) {
+                            continue;
+                        }
+
+                        let result = workers.results.recv().map_err(|_| {
+                            invalid_data("construction workers stopped before completing work")
+                        })?;
+                        let result_index = work
+                            .iter()
+                            .position(|item| {
+                                matches!(
+                                    item,
+                                    ChunkWorkItem::InFlight { sequence, .. }
+                                        if *sequence == result.sequence
+                                )
+                            })
+                            .ok_or_else(|| {
+                                invalid_data("construction worker returned an unknown sequence")
+                            })?;
+                        let ChunkWorkItem::InFlight { task, .. } = work[result_index] else {
+                            unreachable!("result index was matched as in-flight work");
+                        };
+                        (result_index, task, result.outcome?)
+                    } else {
+                        let Some(ChunkWorkItem::Task(task)) = work.front() else {
+                            return Err(invalid_data(
+                                "single-thread construction found unexpected queued work",
+                            )
+                            .into());
+                        };
+                        let task = *task;
+                        outstanding_chunks = outstanding_chunks
+                            .checked_add(1)
+                            .ok_or_else(|| invalid_data("outstanding chunk overflow"))?;
+                        let outcome = construct_record_chunk(
+                            source,
+                            path_index,
+                            &query_name,
+                            task.start,
+                            task.end,
+                            config.max_uncompressed_chunk_bytes,
+                        )?;
+                        (0, task, outcome)
+                    };
+
+                    match outcome {
+                        RecordChunkOutcome::Accepted(chunk) => {
+                            ready_raw_bytes = ready_raw_bytes
+                                .checked_add(usize_to_u64(chunk.raw.len())?)
+                                .ok_or_else(|| invalid_data("ready raw byte count overflow"))?;
+                            peak_ready_raw_bytes = peak_ready_raw_bytes.max(ready_raw_bytes);
+                            work[result_index] = ChunkWorkItem::Ready(task, chunk);
+                        }
+                        RecordChunkOutcome::Split {
+                            estimated_bytes,
+                            subgraph_selection_wall_ms: selection_ms,
+                        } => {
+                            outstanding_chunks =
+                                outstanding_chunks.checked_sub(1).ok_or_else(|| {
+                                    invalid_data("outstanding split chunk count underflow")
+                                })?;
+                            subgraph_selection_wall_ms += selection_ms;
+                            let [left, right] = adaptive_split_interval(
+                                task.start,
+                                task.end,
+                                estimated_bytes,
+                                config.max_uncompressed_chunk_bytes,
+                                config.min_window_size,
+                            )?
+                            .ok_or_else(|| {
+                                invalid_data("record payload requested a split below its byte cap")
+                            })?;
+                            work[result_index] = ChunkWorkItem::Task(ChunkTask {
+                                start: left.0,
+                                end: left.1,
+                            });
+                            work.insert(
+                                result_index + 1,
+                                ChunkWorkItem::Task(ChunkTask {
+                                    start: right.0,
+                                    end: right.1,
+                                }),
+                            );
+                            post_materialization_splits =
+                                post_materialization_splits.checked_add(1).ok_or_else(|| {
+                                    invalid_data("record payload split count overflow")
+                                })?;
+                            adaptive_splits = adaptive_splits
+                                .checked_add(1)
+                                .ok_or_else(|| invalid_data("adaptive split count overflow"))?;
+                            largest_rejected_parent_bytes =
+                                largest_rejected_parent_bytes.max(estimated_bytes);
+                        }
+                    }
+                }
+                if outstanding_chunks != 0 || ready_raw_bytes != 0 {
+                    return Err(
+                        invalid_data("reference construction ended with queued work").into(),
+                    );
+                }
+                flush_pending_chunks(
                     &mut pending,
-                    &mut pending_memory_bound,
-                    &mut peak_raw_chunk_bytes,
+                    compression_workers,
                     &mut archive_temp.file,
                     &mut manifests,
                     &mut bucket_entries,
@@ -2218,10 +2550,12 @@ pub fn build_fixed_archive_from_source_with_options(
                     references.len(),
                     &mut writer,
                 )?;
-                continue;
+                pending_memory_bound = 0;
             }
+
             flush_pending_chunks(
                 &mut pending,
+                compression_workers,
                 &mut archive_temp.file,
                 &mut manifests,
                 &mut bucket_entries,
@@ -2234,130 +2568,8 @@ pub fn build_fixed_archive_from_source_with_options(
                 references.len(),
                 &mut writer,
             )?;
-            pending_memory_bound = 0;
-            let mut tasks = Vec::with_capacity(options.threads);
-            while tasks.len() < options.threads {
-                match work.front() {
-                    Some(ChunkWorkItem::Task(_)) => {
-                        let Some(ChunkWorkItem::Task(task)) = work.pop_front() else {
-                            unreachable!("front was checked as a task");
-                        };
-                        tasks.push(task);
-                    }
-                    _ => break,
-                }
-            }
-            let outcomes = if tasks.len() == 1 {
-                vec![construct_record_chunk(
-                    source,
-                    path_index,
-                    &query_name,
-                    tasks[0].start,
-                    tasks[0].end,
-                    config.max_uncompressed_chunk_bytes,
-                )?]
-            } else {
-                std::thread::scope(|scope| {
-                    let query_name = &query_name;
-                    let handles = tasks
-                        .iter()
-                        .map(|task| {
-                            scope.spawn(move || {
-                                construct_record_chunk(
-                                    source,
-                                    path_index,
-                                    query_name,
-                                    task.start,
-                                    task.end,
-                                    config.max_uncompressed_chunk_bytes,
-                                )
-                            })
-                        })
-                        .collect::<Vec<_>>();
-                    handles
-                        .into_iter()
-                        .map(|handle| {
-                            handle
-                                .join()
-                                .map_err(|_| invalid_data("record construction worker panicked"))?
-                        })
-                        .collect::<ExperimentResult<Vec<_>>>()
-                })?
-            };
-            for (task, outcome) in tasks.into_iter().zip(outcomes).rev() {
-                match outcome {
-                    RecordChunkOutcome::Accepted(chunk) => {
-                        ready_raw_bytes = ready_raw_bytes
-                            .checked_add(usize_to_u64(chunk.raw.len())?)
-                            .ok_or_else(|| invalid_data("ready raw byte count overflow"))?;
-                        peak_ready_raw_bytes = peak_ready_raw_bytes.max(ready_raw_bytes);
-                        work.push_front(ChunkWorkItem::Ready(task, chunk));
-                    }
-                    RecordChunkOutcome::Split {
-                        estimated_bytes,
-                        subgraph_selection_wall_ms: selection_ms,
-                    } => {
-                        subgraph_selection_wall_ms += selection_ms;
-                        let [left, right] = adaptive_split_interval(
-                            task.start,
-                            task.end,
-                            estimated_bytes,
-                            config.max_uncompressed_chunk_bytes,
-                            config.min_window_size,
-                        )?
-                        .ok_or_else(|| {
-                            invalid_data("record payload requested a split below its byte cap")
-                        })?;
-                        work.push_front(ChunkWorkItem::Task(ChunkTask {
-                            start: right.0,
-                            end: right.1,
-                        }));
-                        work.push_front(ChunkWorkItem::Task(ChunkTask {
-                            start: left.0,
-                            end: left.1,
-                        }));
-                        post_materialization_splits = post_materialization_splits
-                            .checked_add(1)
-                            .ok_or_else(|| invalid_data("record payload split count overflow"))?;
-                        adaptive_splits = adaptive_splits
-                            .checked_add(1)
-                            .ok_or_else(|| invalid_data("adaptive split count overflow"))?;
-                        largest_rejected_parent_bytes =
-                            largest_rejected_parent_bytes.max(estimated_bytes);
-                    }
-                }
-            }
-        }
-        flush_pending_chunks(
-            &mut pending,
-            &mut archive_temp.file,
-            &mut manifests,
-            &mut bucket_entries,
-            bucket_span,
-            config,
-            options,
-            started,
-            processing_started,
-            total_reference_bases,
-            references.len(),
-            &mut writer,
-        )?;
-        pending_memory_bound = 0;
-    }
-
-    flush_pending_chunks(
-        &mut pending,
-        &mut archive_temp.file,
-        &mut manifests,
-        &mut bucket_entries,
-        bucket_span,
-        config,
-        options,
-        started,
-        processing_started,
-        total_reference_bases,
-        references.len(),
-        &mut writer,
+            Ok(())
+        },
     )?;
     let payload_pipeline_wall_ms = processing_started.elapsed().as_secs_f64() * 1_000.0;
 
@@ -4769,7 +4981,7 @@ mod tests {
         let parallel = simple_sds::serialize::temp_file_name("pangenome-range-direct-parallel");
         let config = FixedArchiveConfig {
             experiment_id: "direct-determinism".into(),
-            window_size: 16_384,
+            window_size: 4_096,
             codec: ChunkCodec::Zstd3,
             deduplicate_chunks: false,
             max_uncompressed_chunk_bytes: DEFAULT_MAX_UNCOMPRESSED_CHUNK_BYTES,
@@ -4778,7 +4990,7 @@ mod tests {
         let base_options = ArchiveBuildOptions {
             sample: Some(reference.name.sample),
             contig: Some(reference.name.contig),
-            max_chunks: Some(4),
+            max_chunks: Some(16),
             progress: BuildProgressMode::Plain,
             progress_interval_ms: 0,
             ..ArchiveBuildOptions::default()
@@ -4792,9 +5004,9 @@ mod tests {
             &base_options,
         )
         .unwrap();
-        assert_eq!(single_thread.reference_bases_processed, 4 * 16_384);
-        assert_eq!(single_thread.total_reference_bases, 4 * 16_384);
-        assert_eq!(single_thread.progress_events_emitted, 4);
+        assert_eq!(single_thread.reference_bases_processed, 16 * 4_096);
+        assert_eq!(single_thread.total_reference_bases, 16 * 4_096);
+        assert_eq!(single_thread.progress_events_emitted, 16);
         let parallel_build = build_fixed_archive_with_options(
             &graph,
             &path_index,
@@ -4807,9 +5019,9 @@ mod tests {
             },
         )
         .unwrap();
-        assert_eq!(parallel_build.reference_bases_processed, 4 * 16_384);
-        assert_eq!(parallel_build.total_reference_bases, 4 * 16_384);
-        assert_eq!(parallel_build.progress_events_emitted, 4);
+        assert_eq!(parallel_build.reference_bases_processed, 16 * 4_096);
+        assert_eq!(parallel_build.total_reference_bases, 16 * 4_096);
+        assert_eq!(parallel_build.progress_events_emitted, 16);
         assert_eq!(
             std::fs::read(&first).unwrap(),
             std::fs::read(&parallel).unwrap()

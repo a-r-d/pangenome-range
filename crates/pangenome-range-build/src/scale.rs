@@ -111,6 +111,7 @@ pub struct EncodeSummary {
     pub source_memory_preflight_applies: bool,
     pub source_sha256: String,
     pub source_checksum_wall_ms: f64,
+    pub source_prepare_and_checksum_wall_ms: f64,
     pub source_load_wall_ms: f64,
     pub source_cache_build_wall_ms: f64,
     pub rss_after_source_load_kib: Option<u64>,
@@ -251,16 +252,6 @@ pub fn run_encode(options: &EncodeOptions) -> ExperimentResult<EncodeSummary> {
     }
     let source_gbz_bytes = fs::metadata(&options.input)?.len();
     let source_memory_preflight = source_memory_preflight(source_gbz_bytes)?;
-    let checksum_started = Instant::now();
-    let source_sha256 = file_sha256_with_progress(
-        &options.input,
-        options.progress,
-        "source_checksum",
-        "hashing GBZ source",
-        options.progress_interval_ms,
-    )?;
-    let source_checksum_wall_ms = elapsed_ms(checksum_started);
-    let source_prepare_started = Instant::now();
     let scratch_parent = options.scratch_dir.as_deref().unwrap_or_else(|| {
         options
             .output
@@ -275,22 +266,48 @@ pub fn run_encode(options: &EncodeOptions) -> ExperimentResult<EncodeSummary> {
         ),
         EncodeSourceMode::Loaded => ("source_load", "loading GBZ source into memory"),
     };
-    let source = run_with_phase_heartbeat(
-        options.progress,
-        source_phase,
-        source_message,
-        options.progress_interval_ms,
-        || match options.source_mode {
-            EncodeSourceMode::Disk => DiskGbzSource::build(&options.input, scratch_parent)
-                .map(Box::new)
-                .map(ActiveEncoderSource::Disk),
-            EncodeSourceMode::Loaded => serialize::load_from(&options.input)
-                .map(Box::new)
-                .map(ActiveEncoderSource::Loaded),
-        },
-    )?;
+    let source_prepare_and_checksum_started = Instant::now();
+    let (source, source_prepare_wall_ms, source_sha256, source_checksum_wall_ms) =
+        std::thread::scope(|scope| -> ExperimentResult<_> {
+            let checksum = scope.spawn(|| {
+                let checksum_started = Instant::now();
+                let result = file_sha256_with_progress(
+                    &options.input,
+                    options.progress,
+                    "source_checksum",
+                    "hashing GBZ source",
+                    options.progress_interval_ms,
+                );
+                (result, elapsed_ms(checksum_started))
+            });
+            let source_prepare_started = Instant::now();
+            let source = run_with_phase_heartbeat(
+                options.progress,
+                source_phase,
+                source_message,
+                options.progress_interval_ms,
+                || match options.source_mode {
+                    EncodeSourceMode::Disk => DiskGbzSource::build(&options.input, scratch_parent)
+                        .map(Box::new)
+                        .map(ActiveEncoderSource::Disk),
+                    EncodeSourceMode::Loaded => serialize::load_from(&options.input)
+                        .map(Box::new)
+                        .map(ActiveEncoderSource::Loaded),
+                },
+            )?;
+            let source_prepare_wall_ms = elapsed_ms(source_prepare_started);
+            let (source_sha256, source_checksum_wall_ms) = checksum
+                .join()
+                .map_err(|_| io::Error::other("source checksum worker panicked"))?;
+            Ok((
+                source,
+                source_prepare_wall_ms,
+                source_sha256?,
+                source_checksum_wall_ms,
+            ))
+        })?;
+    let source_prepare_and_checksum_wall_ms = elapsed_ms(source_prepare_and_checksum_started);
     let source_access_mode = source.access_mode();
-    let source_prepare_wall_ms = elapsed_ms(source_prepare_started);
     let source_load_wall_ms = match options.source_mode {
         EncodeSourceMode::Loaded => source_prepare_wall_ms,
         EncodeSourceMode::Disk => 0.0,
@@ -376,7 +393,7 @@ pub fn run_encode(options: &EncodeOptions) -> ExperimentResult<EncodeSummary> {
         0.0
     };
     let summary = EncodeSummary {
-        schema_version: 5,
+        schema_version: 6,
         archive_version: 1,
         regional_payload_version: 1,
         source_path: options.input.clone(),
@@ -389,6 +406,7 @@ pub fn run_encode(options: &EncodeOptions) -> ExperimentResult<EncodeSummary> {
         source_memory_preflight_applies: matches!(options.source_mode, EncodeSourceMode::Loaded),
         source_sha256,
         source_checksum_wall_ms,
+        source_prepare_and_checksum_wall_ms,
         source_load_wall_ms,
         source_cache_build_wall_ms,
         rss_after_source_load_kib,

@@ -630,3 +630,53 @@ fully loaded research/oracle structures, took 81.58 seconds, and peaked at
 12,973,152 KiB. Encoder peak remained 642,220 KiB (627.2 MiB), 92.68% below the
 fully loaded encoder baseline. Exact commands and raw-evidence paths are in
 `results/2026-08-26-default-viewer-indexes-whole-hprc/`.
+
+## 2026-08-26: unified rolling workers and source overlap accepted
+
+The committed current-v1 encoder created new scoped native threads for every
+eight-tile construction batch and again for each compression batch. The first
+attempt only made those workers persistent while retaining the barriers; its
+8,192-tile payload phase regressed from 5.721 to 6.663 seconds. A two-pool
+pseudo-rolling attempt improved the small pilot but failed the whole-source
+gate: payload time rose to 349.205 seconds, whole wall to 530.114 seconds, and
+peak RSS to 751,812 KiB. Persistent construction and compression pools were
+competing for the same eight physical cores and retaining a second set of
+thread-local allocator state.
+
+The accepted design uses one bounded pool of exactly `--threads` workers for
+both job types. Construction maintains a rolling window and may complete out
+of order, but the coordinator processes results and adaptive splits in strict
+coordinate order. Full compression batches enter the same FIFO pool, so no
+second worker set exists. The sixteen-window determinism test crosses multiple
+worker waves and remains byte-identical between one and four workers.
+
+Source SHA-256 also now overlaps the already-required disk-cache build. Schema-6
+reports retain both worker-wall times and add their non-overlapping combined
+critical-path wall. Whole-output SHA-256 was not overlapped with validation: a
+read-only experiment kept validation at 30.40 seconds but slowed the competing
+hash to 61.49 seconds, providing no critical-path benefit.
+
+The exact same retained source, archive options, host, and storage layout
+produced:
+
+| Measurement | Previous current-v1 | Unified workers | Delta |
+| --- | ---: | ---: | ---: |
+| Archive / index | 8,829,030,376 / 47,376,777 B | identical | 0 B |
+| Archive SHA-256 | `0b033255...17293` | identical | byte-identical |
+| Whole command | 503.191 s | 409.937 s | -93.254 s (-18.53%) |
+| Prebuild | 112.899 s | 79.182 s | -33.717 s |
+| Payload pipeline | 328.715 s | 267.234 s | -61.482 s (-18.70%) |
+| Construction including validation | 357.660 s | 297.977 s | -59.683 s |
+| Pre-rename validation | 28.743 s | 30.454 s | +1.711 s |
+| Output SHA-256 | 32.557 s | 32.701 s | +0.143 s |
+| Peak RSS | 642,220 KiB | 640,556 KiB | -1,664 KiB |
+| Voluntary context switches | 29,711,742 | 19,652,973 | -33.85% |
+
+On the accepted run, the 23.104-second source-checksum worker fit inside the
+27.598-second cache-build worker. Path indexing also measured 10.028 seconds
+faster, but that single-run movement is treated as ordinary cache/system noise.
+The payload improvement reproduced in the bounded pilot (5.721 to 4.545
+seconds) and whole source. Mandatory structural validation passed before
+rename; occurrence scratch, payload spool, and general scratch remained zero.
+Full evidence is retained in
+`results/2026-08-26-unified-workers-whole-hprc/`.

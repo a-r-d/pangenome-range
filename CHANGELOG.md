@@ -25,6 +25,12 @@
 - Extended schema-4 encoder reports with source-access mode, cache construction
   and size, source/path-index memory evidence, and coherent critical-path wall
   timing.
+- Replaced per-batch construction and compression thread creation with one
+  bounded persistent worker pool shared by a deterministic rolling construction
+  window and ordered compression jobs.
+- Advanced encoder reports to schema 6. Source SHA-256 and disk-cache
+  construction now overlap, while their worker-wall times and combined
+  critical-path wall remain separately labeled.
 
 ### Performance
 
@@ -36,6 +42,10 @@
   8,829,030,376-byte archive in 503.36 seconds at 642,220 KiB peak RSS. Relative
   to the preceding disk-backed run this is +241,958 bytes (+0.00274%), +4.02
   seconds (+0.81%), and +34,160 KiB RSS; all nine source-oracle queries passed.
+- With unified rolling workers and source checksum/cache overlap, that exact
+  archive completed in 409.94 seconds (-18.53%) at 640,556 KiB peak RSS. The
+  payload pipeline fell from 328.72 to 267.23 seconds, and archive/index bytes
+  plus SHA-256 remained identical.
 
 ### Compatibility
 

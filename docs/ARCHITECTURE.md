@@ -40,11 +40,12 @@ The real reference is retained as a GBWT occurrence anchor with fragment and
 node offsets. Weighted anonymous paths are reconstructed only by a reader for
 the tiles selected by a query.
 
-Tile selection/materialization and compression use bounded batches controlled
-by `--threads` and `--max-queued-bytes`; the CLI defaults to available
-parallelism capped at eight and a 256 MiB queue cap. Results are consumed in
-input order, and adaptive children precede later completed work, so worker
-completion order cannot change archive offsets or bytes. The completed
+Tile selection/materialization and compression share one bounded persistent
+worker pool controlled by `--threads` and `--max-queued-bytes`; the CLI defaults
+to available parallelism capped at eight and a 256 MiB queue cap. Construction
+uses a rolling window rather than per-batch thread creation. Results are
+consumed in input order, and adaptive children precede later completed work, so
+worker completion order cannot change archive offsets or bytes. The completed
 temporary object is flushed, then the standard gate validates directory/range
 structure, BLAKE3-128 over every unique encoded payload, exact decompression,
 and regional structural decoding with bounded workers. Only then is it
@@ -61,19 +62,23 @@ measurements; `--progress-interval-seconds` controls their cadence. Percent is
 coordinate-based rather than inferred from compressed bytes.
 
 Progress covers every potentially long CLI phase. Input and output checksum
-passes report bytes, percentage, transfer rate, elapsed time, and ETA. GBZ load
-and compact path-index construction emit elapsed-time heartbeats because the
-upstream APIs do not expose reliable partial-work counts. The final structural
-validation reports directory entries/pages and unique physical payloads,
+workers report bytes, percentage, transfer rate, elapsed time, and ETA. For the
+default disk source, input SHA-256 overlaps source-cache construction; the
+report retains each worker wall plus their combined critical-path wall. GBZ
+load/cache construction and compact path-index construction emit elapsed-time
+heartbeats because those parsers do not expose reliable partial-work counts.
+The final structural validation reports directory entries/pages and unique physical payloads,
 compressed bytes reread, percentage, rate, elapsed time, and ETA. Interactive
 terminals select readable plain progress by default; JSON mode emits stable
 newline-delimited events, while redirected commands remain quiet unless a mode
 is selected explicitly.
 
-Wall phases in encoder reports are non-overlapping through the output SHA-256
-pass. Aggregate selection, encoding, compression, decode, and reconstruction
-worker milliseconds are labeled separately and must not be added to the wall
-critical path.
+Critical-path wall phases in encoder reports are non-overlapping through the
+output SHA-256 pass. Source checksum and source preparation are explicitly
+overlapping worker-wall measurements with a separate combined wall. Aggregate
+selection, encoding, compression, decode, and reconstruction worker
+milliseconds are labeled separately and must not be added to the wall critical
+path.
 
 ## Source access seam
 

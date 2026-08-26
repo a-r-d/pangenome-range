@@ -108,8 +108,8 @@ cargo run --release -p pangenome-range-cli -- encode INPUT.gbz OUTPUT.pngr \
   --threads 8 --progress json --report build-report.json
 ```
 
-The schema-4 report separates source checksum, source load or disk-cache build,
-reference path index,
+The schema-6 report separates source checksum, source load or disk-cache build,
+their combined critical-path wall, reference path index,
 manifest discovery, local subgraph selection, record/topology materialization,
 binary encode, compression, finalization, validation, and the removed
 haplotype-enumeration/copy/occurrence phases.
@@ -118,8 +118,10 @@ bytes, source-cache files and byte limits, queue peaks, scratch/temp bytes,
 throughput, and process RSS. A filtered disk-backed pilot still builds the
 whole source cache and compact real-reference index before the first payload;
 filters do not make that preprocessing partial.
-The report times the final output SHA-256 and records the complete
-pre-report wall critical path; worker CPU milliseconds remain separate.
+Source SHA-256 overlaps source preparation and is labeled as worker wall rather
+than an additive phase. The report times the final output SHA-256 and records
+the complete pre-report wall critical path; worker CPU milliseconds remain
+separate.
 
 For long runs, use `--progress json --progress-interval-seconds 5`. The initial
 `encoding_plan` records the exact selected reference count/base total and the

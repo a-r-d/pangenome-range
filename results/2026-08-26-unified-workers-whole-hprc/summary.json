@@ -1,0 +1,54 @@
+{
+  "schemaVersion": 1,
+  "runId": "2026-08-26-unified-workers-whole-hprc",
+  "verdict": "accepted",
+  "archiveSha256": "0b03325564dcfd558015f4722f509fd749216e30f98522c550182c1090317293",
+  "archiveBytes": 8829030376,
+  "indexBytes": 47376777,
+  "directoryEntries": 363105,
+  "physicalChunks": 363105,
+  "baseline": {
+    "wholeWallMs": 503190.8913,
+    "prebuildWallMs": 112899.107467,
+    "payloadPipelineWallMs": 328715.353135,
+    "constructionWallMs": 357659.885697,
+    "validationWallMs": 28743.136512,
+    "outputChecksumWallMs": 32557.307637,
+    "peakRssKiB": 642220,
+    "voluntaryContextSwitches": 29711742
+  },
+  "current": {
+    "wholeWallMs": 409936.712096,
+    "prebuildWallMs": 79181.676083,
+    "sourceChecksumWorkerMs": 23103.847232,
+    "sourceCacheWorkerMs": 27598.22431,
+    "sourcePrepareAndChecksumWallMs": 27598.260137,
+    "pathIndexWallMs": 51583.299437,
+    "payloadPipelineWallMs": 267233.699709,
+    "constructionWallMs": 297977.24335,
+    "validationWallMs": 30454.47957,
+    "outputChecksumWallMs": 32700.628064,
+    "peakRssKiB": 640556,
+    "voluntaryContextSwitches": 19652973
+  },
+  "delta": {
+    "wholeWallMs": -93254.179204,
+    "wholeWallPercent": -18.532565,
+    "prebuildWallMs": -33717.431384,
+    "payloadPipelineWallMs": -61481.653426,
+    "payloadPipelinePercent": -18.703615,
+    "constructionWallMs": -59682.642347,
+    "peakRssKiB": -1664,
+    "voluntaryContextSwitches": -10058769
+  },
+  "correctness": {
+    "archiveBytesIdentical": true,
+    "indexBytesIdentical": true,
+    "archiveSha256Identical": true,
+    "mandatoryPreRenameValidationPassed": true,
+    "priorSourceOracleAppliesToIdenticalBytes": true,
+    "occurrenceScratchBytes": 0,
+    "payloadSpoolBytes": 0,
+    "generalScratchBytes": 0
+  }
+}
