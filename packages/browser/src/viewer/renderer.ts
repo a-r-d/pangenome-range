@@ -70,10 +70,98 @@ export function renderViewerCanvas(
     sequenceLabels: true,
   };
   if (layers.tileBoundaries) drawTileBoundaries(context, layout, colors);
-  if (layers.topology) drawEdges(context, layout, colors);
+  const aggregateTopology =
+    options.displayMode !== "base" &&
+    layout.nodes.filter((node) => node.visible).length > 320;
+  if (layers.topology) {
+    if (aggregateTopology) {
+      drawBundledEdges(context, layout, colors);
+    } else {
+      drawEdges(context, layout, colors);
+    }
+  }
   if (layers.traversals) drawTraversals(context, layout, colors);
-  drawNodes(context, layout, options, layers, colors);
+  drawNodes(context, layout, options, layers, colors, aggregateTopology);
   drawLegend(context, layout, options.loading ?? false, colors);
+  context.restore();
+}
+
+function drawBundledEdges(
+  context: CanvasRenderingContext2D,
+  layout: ViewerLayout,
+  colors: ViewerColors,
+): void {
+  drawEdges(
+    context,
+    { ...layout, edges: layout.edges.filter((edge) => edge.reference) },
+    colors,
+  );
+  const bundles = new Map<
+    string,
+    { fromX: number; toX: number; count: number; inversion: boolean }
+  >();
+  for (const edge of layout.edges) {
+    if (edge.reference) continue;
+    const fromX = Math.min(edge.fromX, edge.toX);
+    const toX = Math.max(edge.fromX, edge.toX);
+    const key = `${Math.round(fromX / 36)}:${Math.round(toX / 36)}:${edge.classification}`;
+    const existing = bundles.get(key);
+    if (existing === undefined) {
+      bundles.set(key, {
+        fromX,
+        toX,
+        count: 1,
+        inversion: edge.classification === "inversion",
+      });
+    } else {
+      existing.fromX = Math.min(existing.fromX, fromX);
+      existing.toX = Math.max(existing.toX, toX);
+      existing.count += 1;
+    }
+  }
+  const visible = [...bundles.values()]
+    .sort((left, right) => right.count - left.count)
+    .slice(0, 10)
+    .sort((left, right) => left.fromX - right.fromX);
+  const backboneY = Math.round(layout.height * 0.42) + 11;
+  context.save();
+  for (const [index, bundle] of visible.entries()) {
+    const width = Math.max(24, bundle.toX - bundle.fromX);
+    const lane = index % 5;
+    const controlY = backboneY - 48 - lane * 24;
+    context.strokeStyle = bundle.inversion
+      ? colors.traversal
+      : colors.alternate;
+    context.globalAlpha = 0.82;
+    context.lineWidth = Math.min(7, 1.8 + Math.log2(bundle.count + 1));
+    context.beginPath();
+    context.moveTo(bundle.fromX, backboneY);
+    context.bezierCurveTo(
+      bundle.fromX + width * 0.25,
+      controlY,
+      bundle.toX - width * 0.25,
+      controlY,
+      bundle.toX,
+      backboneY,
+    );
+    context.stroke();
+    if (bundle.count > 1 && width > 46) {
+      const label = `${bundle.count} branches`;
+      const x = (bundle.fromX + bundle.toX) / 2;
+      context.font = "600 11px -apple-system, BlinkMacSystemFont, sans-serif";
+      const labelWidth = context.measureText(label).width + 18;
+      context.fillStyle = bundle.inversion
+        ? colors.traversal
+        : colors.alternate;
+      context.globalAlpha = 0.95;
+      context.beginPath();
+      context.roundRect(x - labelWidth / 2, controlY - 14, labelWidth, 24, 10);
+      context.fill();
+      context.fillStyle = "#ffffff";
+      context.textAlign = "center";
+      context.fillText(label, x, controlY + 2);
+    }
+  }
   context.restore();
 }
 
@@ -216,11 +304,22 @@ function drawNodes(
   options: CanvasRenderOptions,
   layers: ViewerLayerState,
   colors: ViewerColors,
+  aggregateTopology: boolean,
 ): void {
   for (const node of layout.nodes) {
     if (!node.visible || (node.reference && !layers.reference)) continue;
     const selected = node.id === options.selectedNodeId;
     const hovered = node.id === options.hoveredNodeId;
+    if (aggregateTopology && !node.reference && !selected && !hovered) continue;
+    if (
+      aggregateTopology &&
+      node.reference &&
+      !selected &&
+      !hovered &&
+      node.width < 3
+    ) {
+      continue;
+    }
     context.fillStyle = node.reference
       ? colors.referenceFill
       : colors.alternateFill;

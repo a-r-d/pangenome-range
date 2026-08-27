@@ -267,6 +267,14 @@ tile-record totals, not globally unique graph elements, individuals, allele
 frequencies, or globally stitchable haplotypes. Readers and viewers MUST label
 them accordingly.
 
+A query may clip the coordinate bounds of its first and last returned bin, but
+the eight counters still describe the complete underlying stored bin. Reader
+APIs therefore expose both the clipped query bounds and the full bin bounds,
+plus the covered fraction. Consumers MAY coverage-prorate whole-bin counters
+for a conservative display or LOD estimate, but MUST label that result as an
+estimate. Exact payload count and transfer bytes come from directory planning,
+not from prorating summary counters.
+
 #### 3.2.3 Archive metadata
 
 `archive-meta-v1-` is stored without compression by the reference encoder and

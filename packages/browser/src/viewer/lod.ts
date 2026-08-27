@@ -1,4 +1,4 @@
-import type { OverviewBin } from "../reader/types.js";
+import type { OverviewBin, RegionPlan } from "../reader/types.js";
 
 export type ViewerDisplayMode = "overview" | "regional" | "detailed" | "base";
 
@@ -17,6 +17,8 @@ export interface ViewerLodDecision {
   readonly estimates: ViewerComplexityBudgets;
   readonly budgets: ViewerComplexityBudgets;
   readonly limitingMetrics: readonly (keyof ViewerComplexityBudgets)[];
+  /** True when whole-bin record totals were coverage-prorated for policy use. */
+  readonly usesPartialBinEstimates: boolean;
   readonly reason: string;
 }
 
@@ -35,6 +37,7 @@ export function chooseViewerLod(
   viewportPixels: number,
   budgets: ViewerComplexityBudgets = DEFAULT_COMPLEXITY_BUDGETS,
   forceDetail = false,
+  plan?: Pick<RegionPlan, "compressedBytes" | "decodedBytes">,
 ): ViewerLodDecision {
   if (
     !Number.isSafeInteger(interval.start) ||
@@ -46,13 +49,18 @@ export function chooseViewerLod(
   if (!Number.isFinite(viewportPixels) || viewportPixels <= 0) {
     throw new RangeError("LOD viewport width must be positive and finite.");
   }
-  const estimates = bins.reduce<ViewerComplexityBudgets>(
+  const summaryEstimates = bins.reduce<ViewerComplexityBudgets>(
     (total, bin) => ({
-      compressedBytes: total.compressedBytes + bin.encodedBytes,
-      decodedBytes: total.decodedBytes + bin.decodedBytes,
-      nodeRecords: total.nodeRecords + bin.nodeRecords,
-      edgeRecords: total.edgeRecords + bin.edgeRecords,
-      occurrences: total.occurrences + bin.occurrences,
+      compressedBytes:
+        total.compressedBytes + proratedWholeBinValue(bin.encodedBytes, bin),
+      decodedBytes:
+        total.decodedBytes + proratedWholeBinValue(bin.decodedBytes, bin),
+      nodeRecords:
+        total.nodeRecords + proratedWholeBinValue(bin.nodeRecords, bin),
+      edgeRecords:
+        total.edgeRecords + proratedWholeBinValue(bin.edgeRecords, bin),
+      occurrences:
+        total.occurrences + proratedWholeBinValue(bin.occurrences, bin),
     }),
     {
       compressedBytes: 0n,
@@ -62,6 +70,12 @@ export function chooseViewerLod(
       occurrences: 0n,
     },
   );
+  const estimates: ViewerComplexityBudgets = {
+    ...summaryEstimates,
+    compressedBytes: plan?.compressedBytes ?? summaryEstimates.compressedBytes,
+    decodedBytes: plan?.decodedBytes ?? summaryEstimates.decodedBytes,
+  };
+  const usesPartialBinEstimates = bins.some((bin) => bin.coverageFraction < 1);
   const limitingMetrics = (
     Object.keys(budgets) as (keyof ViewerComplexityBudgets)[]
   ).filter((key) => estimates[key] > budgets[key]);
@@ -84,7 +98,7 @@ export function chooseViewerLod(
             : "overview";
   const automaticDetail = fits && (mode === "detailed" || mode === "base");
   const reason = automaticDetail
-    ? `${mode} graph fits all five archive-derived complexity budgets.`
+    ? `${mode} graph fits exact transfer budgets and archive-derived complexity estimates.`
     : limitingMetrics.length > 0
       ? `Detailed graph held back by ${limitingMetrics.join(", ")} budget${limitingMetrics.length === 1 ? "" : "s"}.`
       : `Summary retained at ${formatBpPerPixel(bpPerPixel)} per horizontal pixel.`;
@@ -95,8 +109,17 @@ export function chooseViewerLod(
     estimates,
     budgets,
     limitingMetrics,
+    usesPartialBinEstimates,
     reason,
   };
+}
+
+function proratedWholeBinValue(value: bigint, bin: OverviewBin): bigint {
+  const fullSpan = BigInt(Math.max(1, bin.fullBinEnd - bin.fullBinStart));
+  const coveredSpan = BigInt(
+    Math.max(0, bin.reference.end - bin.reference.start),
+  );
+  return (value * coveredSpan + fullSpan - 1n) / fullSpan;
 }
 
 export function recommendedSummaryBins(viewportPixels: number): number {

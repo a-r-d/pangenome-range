@@ -39,6 +39,7 @@ import type {
   RangeReadOptions,
   RangeSource,
   ReferenceDescriptor,
+  RegionPlan,
   RegionQuery,
   RegionResult,
   RegionTile,
@@ -1482,32 +1483,25 @@ class ArchiveReader implements PangenomeArchive {
         if (binStart >= queryEnd || binEnd <= queryStart) continue;
         const value = seriesBins[index];
         if (value === undefined) throw corrupt("summary bin is missing");
+        const fullBinStart =
+          binStart > manifest.start ? binStart : manifest.start;
+        const fullBinEnd = binEnd < manifest.end ? binEnd : manifest.end;
+        const clippedStart =
+          fullBinStart > queryStart ? fullBinStart : queryStart;
+        const clippedEnd = fullBinEnd < queryEnd ? fullBinEnd : queryEnd;
         bins.push({
           reference: {
             sample: manifest.sample,
             contig: manifest.contig,
-            start: safeNumber(
-              binStart > manifest.start
-                ? binStart > queryStart
-                  ? binStart
-                  : queryStart
-                : manifest.start > queryStart
-                  ? manifest.start
-                  : queryStart,
-              "summary bin start",
-            ),
-            end: safeNumber(
-              binEnd < manifest.end
-                ? binEnd < queryEnd
-                  ? binEnd
-                  : queryEnd
-                : manifest.end < queryEnd
-                  ? manifest.end
-                  : queryEnd,
-              "summary bin end",
-            ),
+            start: safeNumber(clippedStart, "summary bin start"),
+            end: safeNumber(clippedEnd, "summary bin end"),
             orientation: "forward",
           },
+          fullBinStart: safeNumber(fullBinStart, "summary full bin start"),
+          fullBinEnd: safeNumber(fullBinEnd, "summary full bin end"),
+          coverageFraction:
+            Number(clippedEnd - clippedStart) /
+            Number(fullBinEnd - fullBinStart),
           level: series.level,
           binSpan: safeNumber(series.binSpan, "summary bin span"),
           ...value,
@@ -1533,6 +1527,54 @@ class ArchiveReader implements PangenomeArchive {
       },
       bins,
       ...(completedTrace === undefined ? {} : { trace: completedTrace }),
+    };
+  }
+
+  async planRegion(query: RegionQuery): Promise<RegionPlan> {
+    this.#assertOpen();
+    validateQuery(query);
+    const entries = await this.#lookup(query);
+    const uniqueEntries = new Map<string, DirectoryEntry>();
+    for (const entry of entries) {
+      uniqueEntries.set(
+        `${entry.offset}:${entry.compressedLength}:${entry.uncompressedLength}`,
+        entry,
+      );
+    }
+    const ranges = [...uniqueEntries.values()]
+      .sort((left, right) =>
+        left.start < right.start
+          ? -1
+          : left.start > right.start
+            ? 1
+            : left.end < right.end
+              ? -1
+              : left.end > right.end
+                ? 1
+                : 0,
+      )
+      .map((entry) => ({
+        coreStart: safeNumber(entry.start, "planned core start"),
+        coreEnd: safeNumber(entry.end, "planned core end"),
+        offset: entry.offset,
+        compressedBytes: entry.compressedLength,
+        decodedBytes: entry.uncompressedLength,
+      }));
+    return {
+      sample: query.sample,
+      contig: query.contig,
+      start: query.start,
+      end: query.end,
+      selectedChunks: ranges.length,
+      compressedBytes: ranges.reduce(
+        (total, range) => total + range.compressedBytes,
+        0n,
+      ),
+      decodedBytes: ranges.reduce(
+        (total, range) => total + range.decodedBytes,
+        0n,
+      ),
+      ranges,
     };
   }
 

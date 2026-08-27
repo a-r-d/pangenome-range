@@ -1,0 +1,42 @@
+{
+  "schemaVersion": 1,
+  "verdict": "explorer-redesign-accepted",
+  "fileFormatChanged": false,
+  "tests": {
+    "readerViewerPassed": 38,
+    "readerViewerTotal": 38,
+    "browserEngines": ["chromium", "firefox", "webkit"],
+    "actualLoopback206Responses": 12,
+    "configuredHprcArchivePassed": true,
+    "configured1000gArchivePassed": true,
+    "noPageOverflowViewports": [
+      "1600x1000",
+      "1366x768",
+      "1024x768",
+      "820x1180"
+    ]
+  },
+  "fixtureTimingMs": {
+    "objectOpen": 5.8,
+    "firstSummaryPaint": 0.6,
+    "firstGraphTile": 1.2,
+    "queryComplete": 1.9,
+    "layout": 0.0,
+    "paint": 0.3
+  },
+  "publicHlaOverview": {
+    "observationKind": "single-public-browser-observation",
+    "plannedPayloadRanges": 2,
+    "plannedCompressedDisplay": "139.3 KiB",
+    "summaryAndPlanWallMs": 108.1
+  },
+  "summaryGranularity": {
+    "currentBaseBinSpan": 1048576,
+    "wholeHprcEncodedExtensionBodyBytes": 241798,
+    "wholeHprcDecodedExtensionBytes": 588832,
+    "wholeHprcSummarySeries": 591,
+    "wholeHprcSummaryBins": 8017,
+    "decision": "keep-current",
+    "freshWholeSourceReencodePerformed": false
+  }
+}

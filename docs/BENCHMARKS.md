@@ -385,3 +385,19 @@ search, cold and warm summary queries, Chromium/Firefox/WebKit application
 smoke, and desktop light/dark/tablet screenshots. See
 [Viewer performance](VIEWER_PERFORMANCE.md) for the phase definitions and
 limitations.
+
+## Explorer redesign validation (2026-08-27)
+
+`results/2026-08-27-explorer-redesign-v1/` retains the canvas-first explorer
+screenshots and the hermetic Pages result after the orientation-first redesign.
+The run exercised 12 real `206` responses, custom/local source switching,
+cancel/recovery, actionable malformed-range handling, browser history, and
+Chromium/Firefox/WebKit. It also asserts that the document itself does not
+overflow at 1600x1000, 1366x768, 1024x768, or 820x1180; scrolling remains
+inside explicit popovers, inspectors, and the evidence drawer.
+
+The deterministic 4.3 KiB fixture measured 5.8 ms object open, 0.6 ms first
+summary paint, 1.2 ms first graph-tile paint, 1.9 ms query completion, and 0.3
+ms canvas paint in one Chromium loopback run. These values validate UI phase
+instrumentation only; they do not replace the retained multi-gigabyte public
+archive measurements above.

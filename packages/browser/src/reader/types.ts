@@ -295,6 +295,11 @@ export interface SummaryQuery {
 
 export interface OverviewBin {
   readonly reference: ReferenceDescriptor;
+  /** Complete underlying summary-bin bounds before query clipping. */
+  readonly fullBinStart: number;
+  readonly fullBinEnd: number;
+  /** Fraction of the complete bin covered by `reference`; counters remain whole-bin totals. */
+  readonly coverageFraction: number;
   readonly level: number;
   readonly binSpan: number;
   readonly coveredBases: bigint;
@@ -305,6 +310,26 @@ export interface OverviewBin {
   readonly edgeRecords: bigint;
   readonly gbwtRecords: bigint;
   readonly occurrences: bigint;
+}
+
+export interface RegionPlanRange {
+  readonly coreStart: number;
+  readonly coreEnd: number;
+  readonly offset: bigint;
+  readonly compressedBytes: bigint;
+  readonly decodedBytes: bigint;
+}
+
+/** Exact directory-derived payload plan; no regional payload is downloaded. */
+export interface RegionPlan {
+  readonly sample: string;
+  readonly contig: string;
+  readonly start: number;
+  readonly end: number;
+  readonly selectedChunks: number;
+  readonly compressedBytes: bigint;
+  readonly decodedBytes: bigint;
+  readonly ranges: readonly RegionPlanRange[];
 }
 
 export interface SummaryResult {
@@ -321,6 +346,7 @@ export interface PangenomeArchive {
   info(options?: { signal?: AbortSignal }): Promise<ArchiveInfo>;
   searchLoci(query: LocusSearch): Promise<LocusSearchResult>;
   summary(query: SummaryQuery): Promise<SummaryResult>;
+  planRegion(query: RegionQuery): Promise<RegionPlan>;
   query(query: RegionQuery): Promise<RegionResult>;
   /** Streams tiles as decoding completes; progressive event order is intentionally unspecified. */
   queryTiles(query: RegionQuery): AsyncIterable<RegionTile>;

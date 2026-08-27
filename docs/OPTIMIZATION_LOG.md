@@ -827,3 +827,38 @@ four strict `206` byte-equality probes including EOF, stable ETag, CORS and
 preflight, exposed range headers, identity encoding, and immutable/no-transform
 caching. Full evidence is retained in
 `results/2026-08-27-1000gplons-hs38d1-na19239-h0/`.
+
+## 2026-08-27: orientation-first explorer and exact payload planning accepted
+
+The first explorer rendered a dense developer-oriented three-column surface
+and allowed a summary-derived estimate to trigger graph fetch immediately.
+The redesigned application uses one bounded viewport, an icon rail, a dominant
+canvas, contextual overlays, a command palette, and a collapsed evidence
+drawer. Summary-capable archives now stop at an orientation-first overview;
+graph payloads begin only after an explicit recommended-detail action. During
+archive replacement the previous view remains mounted until the new archive is
+ready or the request fails.
+
+The reader gained `planRegion()`, which reuses the existing directory lookup to
+return exact selected physical ranges, compressed bytes, and decoded bytes
+without reading regional payloads. Summary edge bins now expose their full
+stored bounds and coverage fraction. LOD policy uses exact planned bytes and
+coverage-prorated whole-bin record totals, with the estimate boundary visible
+in the UI. Dense regional topology is represented by deterministic edge
+bundles and branch-count capsules rather than an unreadable mass of nodes.
+
+The canonical base summary span remains `window_size * 64`. Coarser 4x, 16x,
+and 64x alternatives were rejected as an immediate optimization: the retained
+whole-HPRC summary extension is already only 241,798 encoded body bytes, while
+coarser bins worsen locality for the gene-scale workflow. A finer-base
+experiment remains open, but requires a fresh exact-source encode because the
+large source/archive are not available in this checkout; analytic projections
+are not recorded as construction measurements.
+
+The hermetic browser run passed Chromium, Firefox, and WebKit, made 12 strict
+`206` responses, and found no document overflow at 1600x1000, 1366x768,
+1024x768, or 820x1180. The tiny deterministic fixture measured 5.8 ms open,
+0.6 ms first summary paint, 1.2 ms first graph tile, and 1.9 ms query completion
+in one Chromium loopback run. This validates the phase plumbing and layout,
+not public multi-gigabyte latency. Evidence is retained in
+`results/2026-08-27-explorer-redesign-v1/`.

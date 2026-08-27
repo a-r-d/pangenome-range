@@ -54,6 +54,8 @@ export type {
   RangeSource,
   ReferenceDescriptor,
   RegionGraph,
+  RegionPlan,
+  RegionPlanRange,
   RegionQuery,
   RegionResult,
   RegionTile,

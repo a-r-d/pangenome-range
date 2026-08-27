@@ -5,7 +5,11 @@ import type {
   RegionQuery,
   RegionTile,
 } from "../src/reader/types.js";
-import { chooseViewerLod, recommendedSummaryBins } from "../src/viewer/lod.js";
+import {
+  chooseViewerLod,
+  DEFAULT_COMPLEXITY_BUDGETS,
+  recommendedSummaryBins,
+} from "../src/viewer/lod.js";
 import {
   hitTestNode,
   layoutViewerModel,
@@ -194,6 +198,9 @@ describe("summary-driven detail policy", () => {
   };
   const bin = {
     reference,
+    fullBinStart: 0,
+    fullBinEnd: 100_000,
+    coverageFraction: 1,
     level: 0,
     binSpan: 10_000,
     coveredBases: 10_000n,
@@ -222,6 +229,29 @@ describe("summary-driven detail policy", () => {
     expect(decision.mode).toBe("regional");
     expect(decision.automaticDetail).toBe(false);
     expect(decision.limitingMetrics).toEqual(["decodedBytes", "occurrences"]);
+  });
+
+  it("uses exact directory transport and coverage-prorated record estimates", () => {
+    const decision = chooseViewerLod(
+      [
+        {
+          ...bin,
+          reference: { ...reference, start: 40_000, end: 50_000 },
+          coverageFraction: 0.1,
+          decodedBytes: 100_000_000n,
+          occurrences: 3_000_000n,
+        },
+      ],
+      { start: 40_000, end: 50_000 },
+      1_000,
+      DEFAULT_COMPLEXITY_BUDGETS,
+      false,
+      { compressedBytes: 50_000n, decodedBytes: 500_000n },
+    );
+    expect(decision.estimates.decodedBytes).toBe(500_000n);
+    expect(decision.estimates.occurrences).toBe(300_000n);
+    expect(decision.usesPartialBinEstimates).toBe(true);
+    expect(decision.automaticDetail).toBe(true);
   });
 
   it("requests approximately one bin per four horizontal pixels", () => {
@@ -336,6 +366,16 @@ function delayedArchive(): PangenomeArchive {
     summary: async () => {
       throw new Error("not implemented by viewer test archive");
     },
+    planRegion: async (region) => ({
+      sample: region.sample,
+      contig: region.contig,
+      start: region.start,
+      end: region.end,
+      selectedChunks: 0,
+      compressedBytes: 0n,
+      decodedBytes: 0n,
+      ranges: [],
+    }),
     query: async () => {
       throw new Error("not used");
     },

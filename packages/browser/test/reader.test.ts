@@ -810,13 +810,34 @@ describe("reader contract validation", () => {
     expect(overview.bins[0]).toMatchObject({
       level: 0,
       binSpan: recordArchiveMetadata.features.summary.baseBinSpan,
+      fullBinStart: expect.any(Number),
+      fullBinEnd: expect.any(Number),
       coveredBases: BigInt(recordArchiveMetadata.features.summary.coveredBases),
       tileCount: BigInt(recordArchiveMetadata.features.summary.tileCount),
     });
+    expect(overview.bins[0]?.coverageFraction).toBeGreaterThan(0);
+    expect(overview.bins[0]?.coverageFraction).toBeLessThanOrEqual(1);
     expect(overview.bins[0]?.nodeRecords).toBeGreaterThan(0n);
     expect(overview.bins[0]?.edgeRecords).toBeGreaterThan(0n);
     expect(overview.bins[0]?.gbwtRecords).toBeGreaterThan(0n);
     expect(overview.bins[0]?.occurrences).toBeGreaterThan(0n);
+    const plan = await archive.planRegion({
+      sample: "CHM13",
+      contig: "chr6",
+      start: 31_350_872,
+      end: 31_351_896,
+    });
+    expect(plan).toMatchObject({
+      sample: "CHM13",
+      contig: "chr6",
+      start: 31_350_872,
+      end: 31_351_896,
+      selectedChunks: 1,
+    });
+    expect(plan.ranges).toHaveLength(1);
+    expect(plan.compressedBytes).toBeGreaterThan(0n);
+    expect(plan.decodedBytes).toBeGreaterThan(plan.compressedBytes);
+    expect(plan.ranges[0]?.offset).toBeGreaterThan(0n);
     const result = await archive.query({
       sample: "CHM13",
       contig: "chr6",
