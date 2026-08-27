@@ -3,10 +3,10 @@
 ## Verdict
 
 **Release candidate but not publishable.** The stable-v1 format checklist has no
-open release-critical row, the local clean-checkout-equivalent gates pass, and
-the current whole-HPRC bytes pass structural and independent source-oracle
-gates. Publication remains blocked on a green remote CI run of this tranche and
-the protected release workflow with six real native artifacts.
+open release-critical row, local and remote clean-checkout gates pass, and the
+current whole-HPRC bytes pass structural and independent source-oracle gates.
+Publication remains blocked on the protected release workflow with six real
+native artifacts plus the remaining npm and repository-protection setup.
 
 No package, GitHub Release, or registry publication occurred.
 
@@ -190,21 +190,25 @@ measurements. Only `x86_64-unknown-linux-gnu` is installed locally.
 
 ## Remote status and remaining work
 
-The latest remote CI and Pages runs are still failures on earlier commit
-`d960876e...`, not runs of this working tree. CI run `33019751735` stopped at
-the Rust gate with the checkout fixture absent. Pages run `33019751731` stopped
-at `configure-pages` before building. This tranche tracks and checksum-checks
-the fixture, makes normal CI smoke-test the Pages artifact, and moves
-`configure-pages` to deployment. CodeQL on that remote commit is green.
+The clean-checkout follow-up commit `4d59c31` passed all remote gates. CI run
+`33036238653` passed Rust, Cargo packaging, the hermetic TypeScript/test gate,
+build and bundle checks, Pages artifact smoke, and Chromium range tests. Pages
+run `33036238701` built, browser-smoked, uploaded, configured, and deployed the
+site successfully. CodeQL run `33036238242` passed Actions, Python, Rust, and
+JavaScript/TypeScript analysis.
+
+The deployed demo defaults to the 8,832,749,949-byte content-addressed HPRC /
+GENCODE archive. A fresh browser opened it at
+`https://a-r-d.github.io/pangenome-range/demo`, selected `GRCh38` / `chr1`,
+reached the ready state without errors, and issued five real `206` requests to
+the static archive. The independent origin probe also passed HEAD, CORS
+preflight, immutable/no-transform caching, identity, and four bounded ranges.
 
 Before npm publication:
 
-1. commit/push this tranche and obtain a green clean-checkout CI run;
-2. enable **Settings -> Pages -> Build and deployment -> Source: GitHub
-   Actions**;
-3. run the protected six-target release workflow with real native artifacts;
-4. protect `main` (or add a ruleset) and require CI plus CodeQL;
-5. configure npm ownership for `pangenome-range` and `@pangenome-range`, trusted
+1. run the protected six-target release workflow with real native artifacts;
+2. protect `main` (or add a ruleset) and require CI plus CodeQL;
+3. configure npm ownership for `pangenome-range` and `@pangenome-range`, trusted
    publishing, and the protected `release` environment.
 
 Node remains deliberately `>=24 <25`: Node 24 is the repository's stated and
@@ -216,7 +220,7 @@ and reusable-cache correctness, but the retained 1000GP two-chunk pilot still
 shows source-side scaling that needs another bounded pilot under the new cache
 before documenting a whole-source resource budget.
 
-## Exact repository paths changed
+## Exact repository paths changed by the core tranche
 
 The working tree contains the following intended paths. `AGENTS.md` was reviewed
 but is unchanged because its architectural and workflow rules remain accurate.
@@ -282,4 +286,14 @@ test-data/conformance/unsupported-zstd-content-checksum.zstd3
 test-data/golden/record-archive-v1.json
 test-data/golden/record-archive-v1.pngr
 test-data/micb-kir3dl1.gbz
+```
+
+The clean-checkout and deployed-demo follow-up changed these additional paths:
+
+```text
+docs/HOSTING.md
+docs/components/PangenomeDemo.vue
+docs/demo.md
+docs/test/docs.test.mjs
+package.json
 ```

@@ -69,14 +69,15 @@
     "realNativeMatrixRun": false
   },
   "remote": {
-    "latestCodeql": "success",
-    "latestCi": "failure on earlier commit before hermetic fixture change",
-    "latestPages": "failure on earlier commit before configure-pages separation"
+    "validatedImplementationCommit": "4d59c319227da889ccd92ca73846c8520dee7dd9",
+    "latestCodeql": "success: run 33036238242",
+    "latestCi": "success: run 33036238653",
+    "latestPages": "success and deployed: run 33036238701",
+    "deployedDemoRangeResponses": 5
   },
   "publicationBlockers": [
-    "commit and push this tranche, then obtain a green clean-checkout CI run",
     "run the protected six-target native release workflow with real artifacts",
-    "enable GitHub Pages through Actions and configure repository protections",
+    "protect main or add an equivalent ruleset requiring CI and CodeQL",
     "configure npm ownership, trusted publishing, and the protected release environment"
   ]
 }

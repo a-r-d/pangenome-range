@@ -130,15 +130,17 @@ until that setup is complete.
 The repository owner must complete these service-side steps; they cannot be
 proved by a local package rehearsal:
 
-1. In GitHub **Settings -> Pages -> Build and deployment**, select **GitHub
-   Actions** as the source.
-2. Protect `main`, or add an equivalent ruleset, requiring the normal CI and
+1. Protect `main`, or add an equivalent ruleset, requiring the normal CI and
    CodeQL checks.
-3. Establish npm ownership for `pangenome-range` and the `@pangenome-range`
+2. Establish npm ownership for `pangenome-range` and the `@pangenome-range`
    scope, then bind trusted publishing to the protected release workflow.
-4. Configure the protected GitHub `release` environment and its approval rules.
-5. Run the release workflow and require all six real target artifacts before
+3. Configure the protected GitHub `release` environment and its approval rules.
+4. Run the release workflow and require all six real target artifacts before
    any publish step.
+
+GitHub Pages is already configured to deploy through Actions. Remote run
+`33036238701` built, smoke-tested, uploaded, and deployed the site successfully;
+this setup step is complete.
 
 Local staging verifies manifests, file allowlists, exact versions, lifecycle
 script absence, tarball shape, and the host binary. Synthetic non-host package
