@@ -1,316 +1,123 @@
 # pangenome-range
 
-`pangenome-range` is a systems-research project for testing cloud-native,
-range-addressable layouts for pangenome graphs. The target is a static immutable
-`.pngr` object on an HTTP origin, object store, or CDN that can answer
-interactive genomic-region queries with few byte-range reads and no custom
-query server.
+[![CI](https://img.shields.io/github/actions/workflow/status/a-r-d/pangenome-range/ci.yml?branch=main&style=for-the-badge&logo=githubactions&logoColor=white&label=CI)](https://github.com/a-r-d/pangenome-range/actions/workflows/ci.yml)
+[![MIT](https://img.shields.io/badge/license-MIT-blue?style=for-the-badge)](LICENSE)
 
-The primary public npm package combines browser-safe TypeScript libraries with
-an isolated launcher for the native Rust CLI:
+## [Open the live demo →](https://a-r-d.github.io/pangenome-range/demo)
 
-- `pangenome-range` and `/reader` provide portable range reading;
-- `/viewer` provides the framework-neutral viewer;
-- `/node` provides positioned local-file reads;
-- `npx pangenome-range` launches an exact-version, platform-specific optional
-  native package containing the encoder and research CLI.
+`pangenome-range` is four things:
 
-The browser exports do not import the launcher, Node built-ins, or native code.
-Standalone native archives remain a second installation form through GitHub
-Releases, and a future crates.io route is prepared separately. See
-[`docs/DISTRIBUTION.md`](docs/DISTRIBUTION.md) for the release topology.
+1. `.pngr`, a range-readable pangenome file format.
+2. A reference Rust encoder from GBZ to `.pngr`.
+3. A reference JavaScript decoder.
+4. A [browser demo](https://a-r-d.github.io/pangenome-range/demo) using that decoder.
 
-The only current on-disk format is pre-release file-format v1: archive magic
-`PNGRNG01` and regional magic `PNGRGN01`. Its complete normative contract is
-[`docs/FILE_FORMAT_V1.md`](docs/FILE_FORMAT_V1.md). Historical research objects
-are intentionally unsupported and must be regenerated with the current
-encoder; npm/Cargo package versions are independent of the file-format number.
+It is inspired by tiled GeoTIFF systems: convert a huge GBZ pangenome into one tiled, static `.pngr` object, then query small regions in a browser with HTTP Range requests instead of downloading the whole graph.
 
+[Format specification](docs/FILE_FORMAT_V1.md) · [Live demo](https://a-r-d.github.io/pangenome-range/demo) · [Hosting requirements](docs/HOSTING.md)
 
-## Quick start
-
-Install the complete npm product when consuming a release:
+## Encoder
 
 ```bash
-npm install pangenome-range
-npx pangenome-range --version
-npx pangenome-range encode input.gbz output.pngr
+pangenome-range encode input.gbz output.pngr
 ```
 
-Application imports remain reader/viewer focused:
-
-```ts
-import { openPangenome } from "pangenome-range";
-import { createPangenomeViewer } from "pangenome-range/viewer";
-```
-
-Installing with `npm install --omit=optional` intentionally installs only the
-JavaScript libraries. If the CLI is then invoked, its shim names the exact
-missing native package and explains how to reinstall it.
-
-From a source checkout:
+Add a searchable gene index with GFF3 annotations:
 
 ```bash
-./scripts/fetch-test-data.sh
-cargo run --release -- inspect test-data/micb-kir3dl1.gbz
-cargo run --release -- benchmark-source test-data/micb-kir3dl1.gbz
-cargo run --release -- encode test-data/mhc-10.gbz /tmp/mhc.pngr \
-  --sample MHC-GRCh38 --contig MHC --progress plain
-cargo run --release -- verify /tmp/mhc.pngr \
-  --against test-data/mhc-10.gbz --sample MHC-GRCh38 --contig MHC \
-  --start 100000 --end 200000
-cargo run --release -- validate /tmp/mhc.pngr
-cargo run --release -- fixtures export test-data/conformance
+pangenome-range encode input.gbz output.pngr --annotations genes.gff3 --annotation-release v50 --annotation-assembly GRCh38.p14
 ```
 
-`encode` uses the project-owned disk-backed GBZ reader by default. GBZ record
-and sequence sections are streamed into an ephemeral indexed cache below
-`--scratch-dir` (or beside the output), read through a fixed 64 MiB block-cache
-budget, and removed when the command exits. The final whole-HPRC encode used
-11.92 GB of ephemeral scratch for a 5.49 GB source and peaked below 686,000 KiB
-RSS instead of 8,775,928 KiB for the fully loaded baseline. The final
-persistent-cache, populated GENCODE run peaked at 621,808 KiB RSS. Use
-`--source-access loaded` only for the fully deserialized correctness baseline.
-Plan scratch capacity before large runs; this cache is separate from the `.pngr`
-temporary sibling and does not contain a global occurrence table.
-
-Repeated experiments can retain that bounded source representation and its
-sparse real-reference coordinate index:
-
-```bash
-pangenome-range source-cache build input.gbz /data/cache/input-v1
-pangenome-range source-cache inspect /data/cache/input-v1
-pangenome-range encode input.gbz output.pngr --source-cache /data/cache/input-v1
-pangenome-range source-cache prune /data/cache/input-v1
-```
-
-Persistent caches are versioned, checksum-bound to the source, built through a
-temporary sibling, protected by an interprocess lock, and never deleted
-implicitly. Component blocks carry BLAKE3-128 and are verified lazily before
-use. A warm encode still hashes the GBZ to authenticate the cache, but
-does not rebuild the raw cache or traverse the reference paths again.
-
-Development checks:
-
-```bash
-cargo fmt --all --check
-cargo test --workspace
-cargo clippy --workspace --all-targets --all-features -- -D warnings
-```
-
-The TypeScript workspace uses Node.js 24 LTS and pnpm:
-
-```bash
-pnpm install --frozen-lockfile
-pnpm check
-pnpm check:rust
-pnpm build
-pnpm docs:dev
-```
-
-`pnpm check` uses Biome for lint and format verification, then runs strict
-TypeScript checking and tests. `pnpm format` applies Biome formatting.
-
-`pnpm test:browser` builds the public reader and exercises real cross-origin
-HTTP `206` bootstrap, directory, zstd payload, and decode paths in Chromium,
-Firefox, and WebKit. The private harness runs six explicit cold/warm/query
-scenarios with both the default pure-JavaScript zstd decoder and an optional
-WASM decoder. CI keeps a Chromium/pure-JS subset; the full matrix remains a
-manual gate.
-
-Generate a checksum-bound shared workload and collect Node or real-browser
-evidence without overwriting an existing run ID:
-
-```bash
-pnpm bench -- workload --file graph.pngr --output workload.json
-pnpm bench -- archive --file graph.pngr --workload workload.json --run-id node-run
-pnpm bench -- browser --file graph.pngr --workload workload.json --run-id browser-run
-pnpm bench -- origin-check --url "$PANGENOME_RANGE_ARCHIVE_URL" \
-  --origin "$PANGENOME_RANGE_CORS_ORIGIN"
-pnpm bench -- compare --runs node-run browser-run \
-  --rust-summary results/browser-run/rust-verification.json
-```
-
-Each benchmark run writes configuration, environment, raw requests, per-query
-CSV, a machine-readable summary, and `REPORT.md` under `results/<run-id>/`.
-Loopback browser timings are local functional evidence, not public-network or
-CDN performance.
-
-## TypeScript reader
-
-Browser code can open a URL or a local `File`/`Blob` directly:
+## JavaScript decoder
 
 ```ts
 import { openPangenome } from "pangenome-range";
 
-const archive = await openPangenome({
-  source: "https://example.test/graph.pngr",
-  directoryCacheBytes: 1024 * 1024,
-  payloadCacheBytes: 32 * 1024 * 1024,
-  extensionCacheBytes: 8 * 1024 * 1024,
-  decodedFeatureCacheBytes: 16 * 1024 * 1024,
-});
-
-const result = await archive.query({
+const archive = await openPangenome("https://example.org/graph.pngr");
+const region = await archive.query({
   sample: "GRCh38",
   contig: "chr6",
   start: 31_498_145,
   end: 31_511_124,
-  context: 100,
-  trace: true,
 });
 
-console.log(result.graph.nodes.ids, result.tiles[0]?.haplotypes);
-console.log(result.trace?.requestRanges, result.trace?.canonicalHash);
-
-const genes = await archive.searchLoci({ name: "BRCA", mode: "prefix" });
-const overview = await archive.summary({
-  sample: "GRCh38",
-  contig: "chr6",
-  start: 0,
-  end: 170_000_000,
-  maxBins: 512,
-});
-console.log(genes.hits, overview.bins);
+console.log(region.graph.nodes.ids.length, region.tiles.length);
 await archive.close();
 ```
 
-`queryTiles()` is the streaming primitive. Tile events arrive as decoding
-completes, so progressive event order is intentionally unspecified. `query()`
-sorts semantic results deterministically before merging and hashing. It preserves anonymous haplotype
-evidence per source tile; `query()` merges only globally mergeable graph
-topology and keeps those tiles alongside the merged graph.
+## Encoder performance
 
-Every newly encoded archive includes a multiscale summary pyramid and bound
-provenance metadata. A named-locus index is included only when the encoder
-receives an explicit GFF3:
+Largest measured encode: HPRC v2.1 GRCh38 with GENCODE v50 genes, eight workers, on the same NVMe host.
 
-```bash
-pangenome-range encode graph.gbz graph.pngr \
-  --annotations genes.gff3 --annotation-sample GRCh38 \
-  --annotation-release v50 --annotation-assembly GRCh38.p14
-```
+| Measurement | Result |
+| --- | ---: |
+| Source GBZ | 5,492,627,216 bytes (5.115 GiB) |
+| GFF3 annotations | 4,763,975,927 bytes |
+| Output `.pngr` | 8,832,750,626 bytes (1.608× source) |
+| Cold encode | 612.87 s, 685,992 KiB peak RSS |
+| Warm reusable-cache encode | 384.08 s, 621,808 KiB peak RSS |
+| Reusable source cache | 12,055,087,949 bytes |
+| Prebuild, cold → warm | 118.94 s → 21.69 s |
+| Correctness | 363,105/363,105 payloads; 9/9 graph and 58/58 haplotype checks |
 
-The named-locus index selects GFF3 `gene` features. It indexes their stable
-IDs, names, and declared aliases without duplicating the gene label for every
-transcript, exon, CDS, codon, or UTR child feature.
+Cold and warm modes produced byte-identical output. Only the prebuild reduction is directly attributable to cache reuse; whole-wall timing also contains normal I/O variance. [Full report](results/2026-08-26-release-hardening-v1/REPORT.md).
 
-Without `--annotations`, the named-locus extension is absent. The
-encoder never downloads or guesses an annotation assembly. Both features are
-skippable by readers that only need regional graph queries.
+## Demo performance
 
-```ts
-for await (const tile of archive.queryTiles({
-  sample: "GRCh38",
-  contig: "chr19",
-  start: 54_816_468,
-  end: 54_830_778,
-})) {
-  renderProgressively(tile);
-}
-```
+Five fresh Chromium sessions against the [deployed demo](https://a-r-d.github.io/pangenome-range/demo) and its 8.8 GB remote archive:
 
-Use the isolated Node subpath for positioned file reads:
+| Measurement | Result |
+| --- | ---: |
+| HTTP Range requests | 5 |
+| Archive bytes read | 73,972 bytes |
+| Median page-to-region-ready | 520 ms |
+| Observed range | 502–1,456 ms |
 
-```ts
-import { openPangenome } from "pangenome-range/reader";
-import { FileRangeSource } from "pangenome-range/node";
+Measured August 27, 2026 over the public network; latency will vary by location and cache state.
 
-const source = await FileRangeSource.open("graph.pngr");
-const archive = await openPangenome(source);
-```
+## Encoder arguments
 
-Create the optional Canvas 2D viewer from its isolated DOM entry point. It
-streams `queryTiles()`, cancels stale region requests, and applies node, edge,
-and traversal budgets before layout:
+| Argument | Default | Meaning |
+| --- | --- | --- |
+| `input.gbz` | required | Source GBZ file. |
+| `output.pngr` | required | New archive path; existing files are not overwritten. |
+| `--sample NAME` | all | Encode one reference sample. |
+| `--contig NAME` | all | Encode one reference contig. |
+| `--start BP` | contig start | Start coordinate; requires `--contig`. |
+| `--end BP` | contig end | End coordinate; requires `--contig`. |
+| `--window-size BP` | `16384` | Base tile width. |
+| `--codec NAME` | `zstd-3` | `none`, `zstd-1`, `zstd-3`, or `zstd-6`. |
+| `--haplotypes MODE` | `anonymous-distinct-weighted-tile-paths` | Haplotype semantics; `distinct` is an alias. |
+| `--max-uncompressed-chunk-bytes N` | `8388608` | Split tiles above this decoded-size limit. |
+| `--min-window-size BP` | `1024` | Smallest adaptive tile; must not exceed `--window-size`. |
+| `--threads N` | up to 8 cores | Bounded tile and compression workers. |
+| `--max-queued-bytes N` | `268435456` | Raw plus compressed worker-queue memory limit. |
+| `--source-access MODE` | `disk` | `disk` for bounded RAM or `loaded` for the in-memory oracle. |
+| `--scratch-dir PATH` | output directory | Ephemeral disk-cache location. |
+| `--source-cache PATH` | none | Reuse an authenticated persistent cache; disk mode only. |
+| `--annotations PATH` | none | GFF3 file used to build named-locus search. |
+| `--annotation-sample NAME` | inferred if unique | Reference sample for GFF3 coordinates; required when multiple samples are encoded. |
+| `--annotation-feature-type TYPE` | `gene` | Exact GFF3 feature type; repeat to include more types. |
+| `--annotation-release ID` | none | Required with `--annotations`. |
+| `--annotation-assembly ID` | none | Required with `--annotations`. |
+| `--reference-assembly ID` | none | Reference assembly stored in archive metadata. |
+| `--dataset-title TEXT` | none | Deterministic archive title. |
+| `--dataset-description TEXT` | none | Deterministic archive description. |
+| `--source-uri URI` | none | Canonical source URI; local paths and `file:` URIs are rejected. |
+| `--keep-partial` | off | Keep the temporary sibling archive after failure. |
+| `--progress MODE` | terminal: plain; redirected: off | `auto`, `plain`, `json`, or `off`. |
+| `--progress-interval-seconds N` | `5` | Progress update interval. |
+| `--max-chunks N` | none | Research guard limiting one selected reference path. |
+| `--report PATH` | none | Write a JSON build report. |
+| `--help`, `-h` | — | Show CLI help. |
 
-```ts
-import { openPangenome } from "pangenome-range/reader";
-import { createPangenomeViewer } from "pangenome-range/viewer";
+## Reference
 
-const archive = await openPangenome("https://example.test/graph.pngr");
-const viewer = createPangenomeViewer(document.querySelector("#viewer")!, {
-  archive,
-  maxRenderedNodes: 2_000,
-  maxRenderedEdges: 4_000,
-  maxHaplotypeLanes: 24,
-  showRequestTrace: true,
-});
+- [File-format v1 specification](docs/FILE_FORMAT_V1.md)
+- [Architecture](docs/ARCHITECTURE.md) · [fixed-window archive](docs/FIXED_WINDOW_ARCHIVE.md) · [haplotype semantics](docs/HAPLOTYPE_SEMANTICS.md)
+- [Benchmarks](docs/BENCHMARKS.md) · [optimization log](docs/OPTIMIZATION_LOG.md) · [release checklist](docs/FORMAT_RELEASE_CHECKLIST.md)
+- [Architecture decisions](docs/adr/) · [distribution](docs/DISTRIBUTION.md) · [hosting](docs/HOSTING.md)
 
-await viewer.setRegion({
-  sample: "GRCh38",
-  contig: "chr6",
-  start: 31_498_145,
-  end: 31_511_124,
-  context: 100,
-});
-viewer.destroy();
-await archive.close();
-```
+## License
 
-The viewer renders weighted anonymous traversals as tile-local evidence, never
-as named individuals or globally stitchable samples. See the [live demo](docs/demo.md)
-and [archive hosting contract](docs/HOSTING.md).
-
-Run measurements with `--release`. Large data and benchmarks will remain
-opt-in; the default test suite uses synthetic bytes and stays fast.
-
-## Workspace
-
-- `pangenome-range-format`: normative v1 header/root/directory and regional
-  codecs, corruption checks, archive validation, `RangeSource`, local
-  positioned reads, exact trace metrics, and the network-cost model.
-- `pangenome-range-build`: GBZ source adapters, reference anchoring, tile
-  selection, the bounded encoder pipeline, build metrics, and candidate-layout
-  experiments.
-- `pangenome-range-query`: storage-independent graph/tile semantics, comparison,
-  and canonical BLAKE3 hashes.
-- `pangenome-range-cli`: the direct-write v1 encoder, GBZ inspection, source
-  tracing, and retained research benchmarks.
-- `packages/browser`: primary public ESM package with isolated reader, viewer,
-  Node, and native-CLI launcher surfaces, strict HTTP/Blob/memory/file range
-  sources, v1-only archive and record-preserving regional decoding, canonical
-  graph assembly, and optional query traces. The launcher lives only under
-  `bin/`; browser bundles do not reach it. The bounded progressive Canvas 2D
-  viewer lives only under the `/viewer` export.
-- `packages/benchmark`: private Node/Playwright benchmark CLI, strict local
-  range origin with controlled faults, versioned shared workloads, immutable
-  result writer, origin validator, Rust-vs-runtime comparison report, and
-  pure-JS/WASM decoder measurement.
-- `docs`: the existing research Markdown plus a VitePress site and reader/viewer
-  demo deployed under `/pangenome-range/`.
-
-`encode INPUT.gbz OUTPUT.pngr` is implemented with sample/contig/interval and
-`--max-chunks` pilot guards, bounded deterministic parallel tile construction,
-exact compressed local GBWT records, direct writing, JSON build reports,
-periodic progress through input/output checksumming, opaque source-loading
-heartbeats, coordinate-based encoding, and full archive validation. Validation
-snapshots include entry/page/payload counts, percent, throughput, elapsed time,
-and ETA before the atomic rename. It defaults to available parallelism capped
-at eight workers and a 256 MiB raw/compressed queue. An interactive terminal
-gets readable five-second progress by default; redirected output stays quiet
-unless `--progress plain` or `--progress json` is selected. The cadence is
-configurable with `--progress-interval-seconds`. Run
-`pangenome-range help` for the complete option list. `verify` compares an
-archive query against an independently extracted GBZ source oracle, including
-tile-local weighted traversal evidence; `--workload` reuses one source load for
-a retained JSON query array. `validate` rereads every directory page and
-decompresses and structurally checks every physical archive payload with the
-same periodic validation progress. The
-planned CLI names `build`, `query`, and `benchmark` remain reserved until there
-is a real experiment behind each one.
-
-## Data tiers
-
-1. Tier 0: tiny synthetic graphs/byte sources generated by tests.
-2. Tier 1: the 73,920-byte HPRC-derived MICB/KIR3DL1 GBZ fixture fetched from a
-   pinned `gbz-base` commit with SHA-256 verification.
-3. Tier 2: one HPRC chromosome (opt-in, not bootstrapped yet).
-4. Tier 3: whole-genome HPRC v2.1 (opt-in).
-5. Tier 4: the 5,008-haplotype 1000GP graph from the GBZ paper (future stress
-   target, not a routine development input).
-
-See [`docs/FILE_FORMAT_V1.md`](docs/FILE_FORMAT_V1.md),
-[`docs/RESEARCH.md`](docs/RESEARCH.md),
-[`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md), and
-[`docs/BENCHMARKS.md`](docs/BENCHMARKS.md) before adding a layout experiment.
+[MIT](LICENSE)
