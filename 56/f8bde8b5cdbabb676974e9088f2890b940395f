@@ -1,0 +1,42 @@
+results/2026-08-26-gencode-v50-whole-hprc/config.json
+  s_c6adeff06c2400::t_91900c677f1946 1-56
+CHANGELOG.md
+  s_c6adeff06c2400::t_99c7f9073c12f3 34-36
+  s_c6adeff06c2400::t_e9ef2d1ae6e396 52-55
+docs/FIXED_WINDOW_ARCHIVE.md
+  s_c6adeff06c2400::t_99c7f9073c12f3 43-46
+docs/BENCHMARKS.md
+  s_c6adeff06c2400::t_e9ef2d1ae6e396 195-201
+docs/OPTIMIZATION_LOG.md
+  s_c6adeff06c2400::t_e9ef2d1ae6e396 683-717
+results/2026-08-26-gencode-v50-whole-hprc/summary.json
+  s_c6adeff06c2400::t_91900c677f1946 1-84
+results/2026-08-26-gencode-v50-whole-hprc/REPORT.md
+  s_c6adeff06c2400::t_ba845c354d8eea 1-129
+README.md
+  s_c6adeff06c2400::t_99c7f9073c12f3 173-176
+crates/pangenome-range-build/src/features.rs
+  s_c6adeff06c2400::t_bb75cc6c94efbc 671-672,686
+  s_c6adeff06c2400::t_97b806c85d4099 689-697
+  s_c6adeff06c2400::t_99c7f9073c12f3 17,468-470,668-670,673-685,687-688,698-707
+  s_c6adeff06c2400::t_39ccf571b77163 708
+docs/FILE_FORMAT_V1.md
+  s_c6adeff06c2400::t_99c7f9073c12f3 191,193-195
+  s_c6adeff06c2400::t_c1b4835d5e0070 192
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.24",
+  "base_commit_sha": "56f8bde8b5cdbabb676974e9088f2890b940395f",
+  "prompts": {},
+  "sessions": {
+    "s_c6adeff06c2400": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a03eda-5280-7641-a2d1-995a448eacdd",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "aaron decker <aaron@ard.ninja>"
+    }
+  }
+}
