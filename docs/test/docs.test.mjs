@@ -6,6 +6,10 @@ const componentUrl = new URL(
   "../components/PangenomeDemo.vue",
   import.meta.url,
 );
+const evidenceComponentUrl = new URL(
+  "../components/explorer/EvidenceSheet.vue",
+  import.meta.url,
+);
 const configUrl = new URL("../.vitepress/config.ts", import.meta.url);
 const pagesWorkflowUrl = new URL(
   "../../.github/workflows/pages.yml",
@@ -33,6 +37,23 @@ test("the demo uses only public package exports and a configurable archive", asy
   assert.match(source, /remain local to each source tile/);
   assert.match(source, /not people, alleles, frequencies/);
   assert.match(source, /pangenome-explorer-active/);
+  assert.match(source, /maxRenderedNodes: 8_000/);
+  assert.match(source, /maxRenderedEdges: 12_000/);
+  assert.match(
+    source,
+    /phase\.value === "graph" \|\| phase\.value === "ready"/,
+  );
+});
+
+test("the bottom evidence bar reports progressive graph loading", async () => {
+  const source = await readFile(evidenceComponentUrl, "utf8");
+  assert.match(source, /props\.phase === "graph"/);
+  assert.match(
+    source,
+    /\$\{completedTiles\}\/\$\{props\.expectedTiles\} tiles/,
+  );
+  assert.match(source, /counts\.renderedNodes\.toLocaleString\(\)/);
+  assert.match(source, /data-loading="props\.phase === 'graph'"/);
 });
 
 test("the VitePress base path matches the repository Pages path", async () => {

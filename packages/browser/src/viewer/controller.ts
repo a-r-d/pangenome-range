@@ -107,6 +107,7 @@ export function createViewerController(
   let hoveredNodeId: bigint | undefined;
   let zoom = 1;
   let panX = 0;
+  let resetTransformOnNextTile = false;
   let displayMode: ViewerDisplayMode = options.initialDisplayMode ?? "detailed";
   let layers: ViewerLayerState = {
     ...DEFAULT_LAYERS,
@@ -247,8 +248,12 @@ export function createViewerController(
           selectedNodeId = undefined;
           hoveredNodeId = undefined;
           emit("selectionchange", undefined);
-          zoom = 1;
-          panX = 0;
+          resetTransformOnNextTile =
+            preserveRenderedRegion && (zoom !== 1 || panX !== 0);
+          if (!preserveRenderedRegion) {
+            zoom = 1;
+            panX = 0;
+          }
           loading = true;
           detailElement.textContent =
             "anonymous weighted traversals are local evidence, not named individuals";
@@ -259,6 +264,11 @@ export function createViewerController(
           const modelStarted = performance.now();
           builder?.addTile(tile);
           model = builder?.snapshot();
+          if (resetTransformOnNextTile) {
+            zoom = 1;
+            panX = 0;
+            resetTransformOnNextTile = false;
+          }
           modelUpdateMs += performance.now() - modelStarted;
           if (model === undefined || currentRegion === undefined) return;
           const summary = viewerSummary(model.counts);
@@ -276,12 +286,18 @@ export function createViewerController(
           scheduleRender();
         },
         onComplete: () => {
+          if (resetTransformOnNextTile) {
+            zoom = 1;
+            panX = 0;
+            resetTransformOnNextTile = false;
+          }
           queryCompleteMs = performance.now() - queryStartedAt;
           loading = false;
           render();
         },
       });
     } catch (cause) {
+      resetTransformOnNextTile = false;
       loading = false;
       const error = toError(cause);
       liveElement.textContent = error.message;
@@ -301,31 +317,9 @@ export function createViewerController(
     viewportTimer = globalThis.setTimeout(() => {
       viewportTimer = undefined;
       if (destroyed || currentRegion === undefined) return;
-      const interval = currentRegion.end - currentRegion.start;
       const plotWidth = Math.max(1, cssWidth - 78);
-      const start = Math.max(
-        0,
-        Math.floor(
-          currentRegion.start + (-panX / (plotWidth * zoom)) * interval,
-        ),
-      );
-      const end = Math.max(
-        start + 1,
-        Math.ceil(
-          currentRegion.start +
-            ((plotWidth - panX) / (plotWidth * zoom)) * interval,
-        ),
-      );
       emit("viewportchange", {
-        visualRegion: {
-          sample: currentRegion.sample,
-          contig: currentRegion.contig,
-          start,
-          end,
-          ...(currentRegion.context === undefined
-            ? {}
-            : { context: currentRegion.context }),
-        },
+        visualRegion: transformedRegion(currentRegion, zoom, panX, plotWidth),
         source,
       });
     }, 180);
@@ -591,6 +585,31 @@ export function createViewerController(
     void viewer.setRegion(options.initialRegion).catch(() => undefined);
   }
   return viewer;
+}
+
+/** Resolve a visual transform to the nearest non-empty integer genomic span. */
+export function transformedRegion(
+  region: Readonly<RegionQuery>,
+  zoom: number,
+  panX: number,
+  plotWidth: number,
+): RegionQuery {
+  const interval = region.end - region.start;
+  const safeZoom = Math.max(Number.EPSILON, zoom);
+  const safeWidth = Math.max(1, plotWidth);
+  const rawStart = region.start + (-panX / (safeWidth * safeZoom)) * interval;
+  const rawEnd =
+    region.start + ((safeWidth - panX) / (safeWidth * safeZoom)) * interval;
+  const span = Math.max(1, Math.round(rawEnd - rawStart));
+  const center = (rawStart + rawEnd) / 2;
+  const start = Math.max(0, Math.round(center - span / 2));
+  return {
+    sample: region.sample,
+    contig: region.contig,
+    start,
+    end: start + span,
+    ...(region.context === undefined ? {} : { context: region.context }),
+  };
 }
 
 function applyElementTheme(

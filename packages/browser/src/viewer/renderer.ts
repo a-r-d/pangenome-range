@@ -70,9 +70,7 @@ export function renderViewerCanvas(
     sequenceLabels: true,
   };
   if (layers.tileBoundaries) drawTileBoundaries(context, layout, colors);
-  const aggregateTopology =
-    options.displayMode !== "base" &&
-    layout.nodes.filter((node) => node.visible).length > 320;
+  const aggregateTopology = shouldAggregateTopology(layout);
   if (layers.topology) {
     if (aggregateTopology) {
       drawBundledEdges(context, layout, colors);
@@ -84,6 +82,37 @@ export function renderViewerCanvas(
   drawNodes(context, layout, options, layers, colors, aggregateTopology);
   drawLegend(context, layout, options.loading ?? false, colors);
   context.restore();
+}
+
+/**
+ * Decide whether individual topology would exceed the available screen-space
+ * density. Base resolution is not an exemption: a narrow query can still
+ * retain a complete fixed tile containing thousands of records.
+ */
+export function shouldAggregateTopology(
+  layout: Pick<ViewerLayout, "width" | "nodes" | "edges">,
+): boolean {
+  const plotWidth = Math.max(1, layout.width - 78);
+  const individualNodeBudget = clamp(Math.floor(plotWidth * 0.22), 120, 320);
+  const individualEdgeBudget = clamp(Math.floor(plotWidth * 0.3), 160, 480);
+  const visibleNodeCount = layout.nodes.reduce(
+    (count, node) => count + (node.visible ? 1 : 0),
+    0,
+  );
+  const visibleAlternateEdgeCount = layout.edges.reduce(
+    (count, edge) =>
+      count +
+      (!edge.reference &&
+      Math.max(edge.fromX, edge.toX) >= -100 &&
+      Math.min(edge.fromX, edge.toX) <= layout.width + 100
+        ? 1
+        : 0),
+    0,
+  );
+  return (
+    visibleNodeCount > individualNodeBudget ||
+    visibleAlternateEdgeCount > individualEdgeBudget
+  );
 }
 
 function drawBundledEdges(
@@ -394,6 +423,25 @@ function drawLegend(
   context.fillRect(150, 58, 14, 4);
   context.fillStyle = colors.muted;
   context.fillText("alternate topology", 170, 64);
+  const sourceStart = Math.min(
+    ...layout.tileBoundaries.map((boundary) => boundary.coreStart),
+  );
+  const sourceEnd = Math.max(
+    ...layout.tileBoundaries.map((boundary) => boundary.coreEnd),
+  );
+  if (
+    Number.isFinite(sourceStart) &&
+    Number.isFinite(sourceEnd) &&
+    (sourceStart < layout.query.start || sourceEnd > layout.query.end)
+  ) {
+    context.textAlign = "right";
+    context.fillText(
+      `${formatSpan(layout.query.end - layout.query.start)} focus · ` +
+        `${formatSpan(sourceEnd - sourceStart)} source-tile context`,
+      layout.width - 20,
+      64,
+    );
+  }
 }
 
 function sequenceLabel(node: ViewerLayoutNode): string {
@@ -411,4 +459,16 @@ function formatCoordinate(value: number): string {
   return new Intl.NumberFormat("en-US", { maximumFractionDigits: 0 }).format(
     value,
   );
+}
+
+function formatSpan(value: number): string {
+  const span = Math.max(1, Math.round(value));
+  if (span < 1_000) return `${span.toLocaleString("en-US")} bp`;
+  if (span < 1_000_000)
+    return `${(span / 1_000).toFixed(span >= 10_000 ? 1 : 2)} kb`;
+  return `${(span / 1_000_000).toFixed(2)} Mb`;
+}
+
+function clamp(value: number, minimum: number, maximum: number): number {
+  return Math.max(minimum, Math.min(maximum, value));
 }

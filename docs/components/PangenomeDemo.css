@@ -948,6 +948,7 @@
   background: var(--panel);
 }
 .evidence-toggle {
+  position: relative;
   display: grid;
   grid-template-columns: auto auto 1fr auto;
   width: min(560px, calc(100% - 32px));
@@ -962,6 +963,18 @@
   font-size: 11px;
   text-align: left;
   cursor: pointer;
+  overflow: hidden;
+}
+.evidence-toggle[data-loading="true"]::after {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  width: 38%;
+  height: 2px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, transparent, var(--teal), transparent);
+  content: "";
+  animation: evidence-stream 1.4s ease-in-out infinite;
 }
 .evidence-toggle strong {
   font-size: 12px;
@@ -1310,9 +1323,18 @@
     transform: translateX(100%);
   }
 }
+@keyframes evidence-stream {
+  from {
+    transform: translateX(-110%);
+  }
+  to {
+    transform: translateX(275%);
+  }
+}
 @media (prefers-reduced-motion: reduce) {
   .loading-orbit,
-  .skeleton::after {
+  .skeleton::after,
+  .evidence-toggle[data-loading="true"]::after {
     animation: none;
   }
 }

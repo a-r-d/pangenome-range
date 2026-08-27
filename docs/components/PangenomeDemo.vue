@@ -91,6 +91,11 @@ const RECENT_URLS_KEY = "pangenome-range:recent-urls:v1";
 const RECENT_SEARCHES_KEY = "pangenome-range:recent-searches:v1";
 const LAYERS_KEY = "pangenome-range:layers:v1";
 const THEME_KEY = "pangenome-range:theme:v2";
+const DETAIL_RENDER_BUDGETS = {
+  maxRenderedNodes: 8_000,
+  maxRenderedEdges: 12_000,
+  maxHaplotypeLanes: 16,
+} as const;
 const viewerHost = ref<HTMLElement>();
 const overviewStage = ref<{ getCanvas: () => HTMLCanvasElement | undefined }>();
 const commandBar = ref<{ focus: () => void }>();
@@ -197,15 +202,18 @@ const detailVisible = computed(
 const loadingVisible = computed(
   () =>
     phase.value === "opening" ||
+    (loadedRegion.value === undefined && phase.value === "summary") ||
     (loadedRegion.value === undefined &&
-      ["summary", "graph"].includes(phase.value)) ||
-    (screen.value === "explorer" &&
-      detailRequested.value &&
-      ["summary", "graph"].includes(phase.value)),
+      phase.value === "graph" &&
+      (progress.value?.counts.tiles ?? 0) === 0),
 );
 const graphSurfaceMode = computed<"hidden" | "preview" | "detail">(() => {
   if (screen.value === "showcase") return "preview";
-  if (detailVisible.value && phase.value === "ready") return "detail";
+  if (
+    detailVisible.value &&
+    (phase.value === "graph" || phase.value === "ready")
+  )
+    return "detail";
   return "hidden";
 });
 const overviewDisplayRegion = computed(
@@ -410,9 +418,7 @@ function createViewer(opened: PangenomeArchive): void {
     throw new Error("Viewer host did not mount.");
   const next = createPangenomeViewer(viewerHost.value, {
     archive: opened,
-    maxRenderedNodes: 160,
-    maxRenderedEdges: 260,
-    maxHaplotypeLanes: 6,
+    ...DETAIL_RENDER_BUDGETS,
     showRequestTrace: false,
     initialLayers: layers.value,
     initialTheme: "dark",
@@ -452,7 +458,7 @@ function createViewer(opened: PangenomeArchive): void {
   viewerUnsubscribers = [
     next.on("progress", (detail) => {
       progress.value = detail;
-      statusMessage.value = `Decoded ${detail.counts.tiles} graph tile${detail.counts.tiles === 1 ? "" : "s"}`;
+      statusMessage.value = "Loading more graph data";
     }),
     next.on("querytrace", (trace) => {
       queryTrace.value = trace;
@@ -463,7 +469,7 @@ function createViewer(opened: PangenomeArchive): void {
     }),
     next.on("viewportchange", ({ visualRegion: region }) => {
       visualRegion.value = clampRegion(region);
-      scheduleViewportSettlement();
+      settleViewerViewport();
     }),
     next.on("error", ({ error }) => {
       if (!isAbort(error)) fail(error, "Detailed graph loading failed.");
@@ -958,13 +964,27 @@ function useRecentUrl(url: string): void {
 function scheduleViewportSettlement(): void {
   drawSummary();
   if (viewportTimer !== undefined) clearTimeout(viewportTimer);
-  viewportTimer = setTimeout(() => {
-    const region = visualRegion.value;
-    if (region === undefined) return;
-    activeRegion.value = region;
-    updateUrlState("replace");
-    void loadRegion(region);
-  }, 180);
+  viewportTimer = setTimeout(commitViewportSettlement, 180);
+}
+
+function settleViewerViewport(): void {
+  drawSummary();
+  if (viewportTimer !== undefined) clearTimeout(viewportTimer);
+  viewportTimer = undefined;
+  commitViewportSettlement();
+}
+
+function commitViewportSettlement(): void {
+  viewportTimer = undefined;
+  const region = visualRegion.value;
+  if (region === undefined) return;
+  if (sameRegion(region, activeRegion.value)) {
+    viewer.value?.resetView();
+    return;
+  }
+  activeRegion.value = region;
+  updateUrlState("replace");
+  void loadRegion(region);
 }
 
 function panRegion(fraction: number): void {
@@ -1503,6 +1523,19 @@ function clampRegion(region: RegionQuery): RegionQuery {
   };
 }
 
+function sameRegion(
+  left: Readonly<RegionQuery>,
+  right: Readonly<RegionQuery> | undefined,
+): boolean {
+  return (
+    right !== undefined &&
+    left.sample === right.sample &&
+    left.contig === right.contig &&
+    left.start === right.start &&
+    left.end === right.end
+  );
+}
+
 function mergedReference(
   sample: string,
   contig: string,
@@ -1728,6 +1761,8 @@ function formatCompact(value: bigint | undefined): string {
       :open-ms="openMs"
       :summary-paint-ms="summaryPaintMs"
       :performance="viewerPerformance"
+      :progress="progress"
+      :expected-tiles="regionPlan?.selectedChunks ?? 0"
       :technical-mode="technicalMode"
       @toggle="evidenceOpen = !evidenceOpen"
       @update:technical-mode="technicalMode = $event"

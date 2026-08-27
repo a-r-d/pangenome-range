@@ -5,6 +5,7 @@ import type {
   RegionQuery,
   RegionTile,
 } from "../src/reader/types.js";
+import { transformedRegion } from "../src/viewer/controller.js";
 import {
   chooseViewerLod,
   DEFAULT_COMPLEXITY_BUDGETS,
@@ -22,7 +23,10 @@ import {
   parseGenomicCommand,
 } from "../src/viewer/navigation.js";
 import { ProgressiveTileQuery } from "../src/viewer/query-controller.js";
-import { renderViewerCanvas } from "../src/viewer/renderer.js";
+import {
+  renderViewerCanvas,
+  shouldAggregateTopology,
+} from "../src/viewer/renderer.js";
 
 const query: RegionQuery = {
   sample: "GRCh38",
@@ -137,6 +141,51 @@ describe("viewer model and layout", () => {
       expect.any(Number),
     );
   });
+
+  it("aggregates dense topology at base resolution", () => {
+    const builder = new ViewerModelBuilder(query, viewerBudgets());
+    builder.addTile(makeTile(0n));
+    const layout = layoutViewerModel(builder.snapshot(), {
+      width: 900,
+      height: 460,
+    });
+    const alternateNode = layout.nodes.find((node) => !node.reference);
+    const alternateEdge = layout.edges.find((edge) => !edge.reference);
+    if (alternateNode === undefined || alternateEdge === undefined) {
+      throw new Error("viewer fixture must contain alternate topology");
+    }
+    const nodes = Array.from({ length: 600 }, (_, index) => ({
+      ...alternateNode,
+      id: BigInt(index + 10),
+      x: 60 + (index % 300) * 2.5,
+      visible: true,
+    }));
+    const edges = Array.from({ length: 1_200 }, (_, index) => ({
+      ...alternateEdge,
+      from: BigInt(index + 10),
+      to: BigInt(index + 11),
+      fromX: 60 + (index % 180) * 4,
+      toX: 120 + (index % 180) * 4,
+    }));
+    const denseLayout = {
+      ...layout,
+      query: { ...layout.query, start: 150, end: 151 },
+      nodes,
+      edges,
+    };
+    const context = fakeCanvasContext();
+
+    expect(shouldAggregateTopology(denseLayout)).toBe(true);
+    renderViewerCanvas(context.value, denseLayout, { displayMode: "base" });
+
+    expect(context.quadraticCurveTo).not.toHaveBeenCalled();
+    expect(context.bezierCurveTo.mock.calls.length).toBeLessThanOrEqual(10);
+    expect(context.fillText).toHaveBeenCalledWith(
+      "1 bp focus · 100 bp source-tile context",
+      expect.any(Number),
+      64,
+    );
+  });
 });
 
 describe("genomic command parsing", () => {
@@ -186,6 +235,14 @@ describe("genomic command parsing", () => {
     expect(() => parseGenomicCommand("chr99:10-20", references)).toThrow(
       /no overlapping reference/,
     );
+  });
+});
+
+describe("viewer viewport transforms", () => {
+  it("resolves a two-base zoom to a one-base integer interval", () => {
+    expect(
+      transformedRegion({ ...query, start: 100, end: 102 }, 2.11, 0, 800),
+    ).toMatchObject({ start: 100, end: 101 });
   });
 });
 
@@ -433,11 +490,13 @@ function fakeCanvasContext(): {
   clearRect: ReturnType<typeof vi.fn>;
   fillRect: ReturnType<typeof vi.fn>;
   quadraticCurveTo: ReturnType<typeof vi.fn>;
+  bezierCurveTo: ReturnType<typeof vi.fn>;
   fillText: ReturnType<typeof vi.fn>;
 } {
   const clearRect = vi.fn();
   const fillRect = vi.fn();
   const quadraticCurveTo = vi.fn();
+  const bezierCurveTo = vi.fn();
   const fillText = vi.fn();
   const value = {
     save: vi.fn(),
@@ -448,12 +507,22 @@ function fakeCanvasContext(): {
     moveTo: vi.fn(),
     lineTo: vi.fn(),
     quadraticCurveTo,
+    bezierCurveTo,
     stroke: vi.fn(),
     fill: vi.fn(),
     rect: vi.fn(),
+    roundRect: vi.fn(),
     closePath: vi.fn(),
     setLineDash: vi.fn(),
+    measureText: vi.fn(() => ({ width: 60 })),
     fillText,
   } as unknown as CanvasRenderingContext2D;
-  return { value, clearRect, fillRect, quadraticCurveTo, fillText };
+  return {
+    value,
+    clearRect,
+    fillRect,
+    quadraticCurveTo,
+    bezierCurveTo,
+    fillText,
+  };
 }
