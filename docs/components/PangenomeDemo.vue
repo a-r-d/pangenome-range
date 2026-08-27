@@ -38,7 +38,12 @@ import {
   watch,
 } from "vue";
 
-type ArchiveChoice = "fixture" | "configured" | "custom" | "local";
+type ArchiveChoice =
+  | "fixture"
+  | "configured"
+  | "population"
+  | "custom"
+  | "local";
 type Phase = "idle" | "opening" | "summary" | "graph" | "ready" | "error";
 type SearchState =
   | "index-absent"
@@ -69,6 +74,12 @@ const configuredArchiveUrl =
   (
     import.meta.env.VITE_PANGENOME_RANGE_DEMO_ARCHIVE_URL as string | undefined
   )?.trim() ?? "";
+const populationArchiveUrl =
+  (
+    import.meta.env.VITE_PANGENOME_RANGE_DEMO_1000G_ARCHIVE_URL as
+      | string
+      | undefined
+  )?.trim() ?? "";
 const RECENT_URLS_KEY = "pangenome-range:recent-urls:v1";
 const RECENT_SEARCHES_KEY = "pangenome-range:recent-searches:v1";
 const LAYERS_KEY = "pangenome-range:layers:v1";
@@ -78,7 +89,11 @@ const summaryCanvas = ref<HTMLCanvasElement>();
 const commandInput = ref<HTMLInputElement>();
 const localFileInput = ref<HTMLInputElement>();
 const archiveChoice = ref<ArchiveChoice>(
-  configuredArchiveUrl.length === 0 ? "fixture" : "configured",
+  configuredArchiveUrl.length > 0
+    ? "configured"
+    : populationArchiveUrl.length > 0
+      ? "population"
+      : "fixture",
 );
 const customUrl = ref("");
 const localFile = shallowRef<File>();
@@ -664,7 +679,17 @@ function selectedSource(): {
     return {
       source: url,
       key: `url:${url}`,
-      label: "Configured large archive",
+      label: "HPRC v2.1 + GENCODE v50",
+    };
+  }
+  if (archiveChoice.value === "population") {
+    if (populationArchiveUrl.length === 0)
+      throw new Error("No 1000 Genomes archive is configured for this build.");
+    const url = new URL(populationArchiveUrl, window.location.href).href;
+    return {
+      source: url,
+      key: `url:${url}`,
+      label: "1000 Genomes hs38d1 — NA19239 haplotype 0",
     };
   }
   if (customUrl.value.trim().length === 0)
@@ -1057,6 +1082,8 @@ function restoreUrlState(): void {
   if (choice === "fixture") archiveChoice.value = "fixture";
   else if (choice === "configured" && configuredArchiveUrl.length > 0)
     archiveChoice.value = "configured";
+  else if (choice === "population" && populationArchiveUrl.length > 0)
+    archiveChoice.value = "population";
   else if (choice === "custom" && params.has("url")) {
     archiveChoice.value = "custom";
     customUrl.value = params.get("url") ?? "";
@@ -1383,7 +1410,7 @@ function formatStrand(value: LocusHit["strand"]): string {
 
     <div class="sr-status" role="status" aria-live="polite">{{ statusMessage }}</div>
     <div v-if="errorMessage" class="toast error-toast" role="alert"><strong>Explorer error</strong><span>{{ errorMessage }}</span><a :href="withBase('/HOSTING')">Origin requirements</a></div><div v-else-if="shareMessage" class="toast" role="status">{{ shareMessage }}</div>
-    <dialog :open="sourceOpen" class="source-dialog" aria-label="Archive source"><header><h2>Open archive</h2><button type="button" @click="sourceOpen = false">×</button></header><label><span>Source</span><select v-model="archiveChoice" aria-label="Archive source" @change="onSourceChange"><option value="configured" :disabled="configuredArchiveUrl.length === 0">Configured large archive</option><option value="fixture">Bundled deterministic fixture</option><option value="custom">Custom remote URL</option><option value="local">Local .pngr file</option></select></label><label v-if="archiveChoice === 'custom'"><span>Remote .pngr URL</span><input v-model="customUrl" aria-label="Remote archive URL" type="url" placeholder="https://archive.example/immutable.pngr" /></label><button v-if="archiveChoice === 'custom'" type="button" class="primary-button" @click="loadSource">Open remote archive</button><button v-if="archiveChoice === 'local'" type="button" class="primary-button" @click="localFileInput?.click()">Choose local file</button><input ref="localFileInput" class="visually-hidden" type="file" accept=".pngr,application/octet-stream" @change="onLocalFile" /><div v-if="recentUrls.length > 0" class="recent-list"><h3>Recently opened on this device</h3><button v-for="url in recentUrls" :key="url" type="button" @click="useRecentUrl(url)">{{ url }}</button></div><p>Custom URLs and local filenames stay in this browser. The application has no analytics or query backend.</p></dialog>
+    <dialog :open="sourceOpen" class="source-dialog" aria-label="Archive source"><header><h2>Open archive</h2><button type="button" @click="sourceOpen = false">×</button></header><label><span>Source</span><select v-model="archiveChoice" aria-label="Archive source" @change="onSourceChange"><option value="configured" :disabled="configuredArchiveUrl.length === 0">HPRC v2.1 + GENCODE v50 (GRCh38 / CHM13)</option><option value="population" :disabled="populationArchiveUrl.length === 0">1000 Genomes hs38d1 (NA19239#0, no annotations)</option><option value="fixture">Bundled deterministic fixture</option><option value="custom">Custom remote URL</option><option value="local">Local .pngr file</option></select></label><p v-if="archiveChoice === 'population'" class="source-coordinate-note"><strong>Population-path coordinates:</strong> this archive follows the real NA19239 haplotype-0 paths. It has no named-locus annotations and is not GRCh38.</p><label v-if="archiveChoice === 'custom'"><span>Remote .pngr URL</span><input v-model="customUrl" aria-label="Remote archive URL" type="url" placeholder="https://archive.example/immutable.pngr" /></label><button v-if="archiveChoice === 'custom'" type="button" class="primary-button" @click="loadSource">Open remote archive</button><button v-if="archiveChoice === 'local'" type="button" class="primary-button" @click="localFileInput?.click()">Choose local file</button><input ref="localFileInput" class="visually-hidden" type="file" accept=".pngr,application/octet-stream" @change="onLocalFile" /><div v-if="recentUrls.length > 0" class="recent-list"><h3>Recently opened on this device</h3><button v-for="url in recentUrls" :key="url" type="button" @click="useRecentUrl(url)">{{ url }}</button></div><p>Custom URLs and local filenames stay in this browser. The application has no analytics or query backend.</p></dialog>
     <dialog :open="shortcutsOpen" class="shortcut-dialog" aria-label="Keyboard shortcuts"><header><h2>Keyboard controls</h2><button type="button" @click="shortcutsOpen = false">×</button></header><dl><div><dt><kbd>⌘/Ctrl K</kbd> or <kbd>/</kbd></dt><dd>Focus command bar</dd></div><div><dt><kbd>←</kbd> <kbd>→</kbd></dt><dd>Pan graph viewport</dd></div><div><dt><kbd>+</kbd> <kbd>−</kbd></dt><dd>Zoom graph viewport</dd></div><div><dt><kbd>Home</kbd></dt><dd>Reset local graph transform</dd></div><div><dt><kbd>?</kbd></dt><dd>Toggle this help</dd></div><div><dt><kbd>Esc</kbd></dt><dd>Close transient panels</dd></div></dl></dialog>
   </main>
 </template>

@@ -27,6 +27,8 @@ const etag = `"sha256-${createHash("sha256").update(fixture).digest("hex")}"`;
 const requests = [];
 const configuredArchiveUrl =
   process.env.VITE_PANGENOME_RANGE_DEMO_ARCHIVE_URL ?? "";
+const populationArchiveUrl =
+  process.env.VITE_PANGENOME_RANGE_DEMO_1000G_ARCHIVE_URL ?? "";
 
 await stat(join(siteDirectory, "demo.html")).catch(() => {
   throw new Error("built Pages site is missing; run pnpm docs:build first");
@@ -88,10 +90,14 @@ const page = await browser.newPage({ viewport: { width: 1440, height: 1050 } });
 const browserErrors = [];
 page.on("pageerror", (error) => browserErrors.push(error.message));
 let configuredArchivePassed = false;
+let populationArchivePassed = false;
 
 try {
   if (configuredArchiveUrl.length > 0) {
     configuredArchivePassed = await exerciseConfiguredArchive(browser, baseUrl);
+  }
+  if (populationArchiveUrl.length > 0) {
+    populationArchivePassed = await exercisePopulationArchive(browser, baseUrl);
   }
   await page.goto(
     `${baseUrl}/demo?archive=fixture&sample=GRCh38&contig=chr1&start=100&end=102&context=100`,
@@ -277,6 +283,7 @@ try {
         cancellationPassed: true,
         actionableRangeErrorPassed: true,
         configuredArchivePassed,
+        populationArchivePassed,
         browserHistoryPassed: true,
         browserMatrix,
         timingEvidence,
@@ -330,6 +337,41 @@ async function exerciseConfiguredArchive(browser, baseUrl) {
     return true;
   } finally {
     await configuredPage.close();
+  }
+}
+
+async function exercisePopulationArchive(browser, baseUrl) {
+  const populationPage = await browser.newPage({
+    viewport: { width: 1280, height: 900 },
+  });
+  const errors = [];
+  populationPage.on("pageerror", (error) => errors.push(error.message));
+  try {
+    await populationPage.goto(
+      `${baseUrl}/demo?archive=population&sample=NA19239&contig=1&start=0&end=32768&context=100`,
+    );
+    await populationPage
+      .locator('.explorer[data-phase="ready"]')
+      .waitFor({ timeout: 45_000 });
+    await populationPage.locator(".source-button").click();
+    assert.equal(
+      await populationPage
+        .getByRole("combobox", { name: "Archive source" })
+        .inputValue(),
+      "population",
+    );
+    await populationPage.getByText(/real NA19239 haplotype-0 paths/i).waitFor();
+    await populationPage.locator(".source-dialog header button").click();
+    assert.match(
+      await populationPage
+        .getByLabel("Go to a locus or genomic coordinate")
+        .inputValue(),
+      /^NA19239#1:/,
+    );
+    assert.deepEqual(errors, []);
+    return true;
+  } finally {
+    await populationPage.close();
   }
 }
 

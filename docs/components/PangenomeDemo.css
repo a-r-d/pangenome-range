@@ -942,6 +942,15 @@ dd {
   color: var(--muted);
   font-size: 10px;
 }
+.source-dialog > .source-coordinate-note {
+  margin-bottom: 0;
+  padding: 9px 10px;
+  border: 1px solid color-mix(in srgb, var(--alternate) 35%, var(--line));
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--alternate) 8%, var(--panel));
+  color: var(--ink);
+  line-height: 1.45;
+}
 .recent-list {
   padding: 12px 14px 0;
 }
