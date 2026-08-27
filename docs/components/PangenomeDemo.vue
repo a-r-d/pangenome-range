@@ -26,7 +26,6 @@ import {
   type ViewerLodDecision,
   type ViewerPerformanceSnapshot,
   type ViewerProgress,
-  type ViewerSelectionDetail,
 } from "pangenome-range/viewer";
 import { withBase } from "vitepress";
 import {
@@ -38,38 +37,24 @@ import {
   shallowRef,
   watch,
 } from "vue";
-
-type ArchiveChoice =
-  | "fixture"
-  | "configured"
-  | "population"
-  | "custom"
-  | "local";
-type Phase = "idle" | "opening" | "summary" | "graph" | "ready" | "error";
-type SearchState =
-  | "index-absent"
-  | "index-empty"
-  | "ready"
-  | "searching"
-  | "no-matches"
-  | "results"
-  | "truncated"
-  | "failed";
-type SummaryMetric =
-  | "coveredBases"
-  | "tileCount"
-  | "encodedBytes"
-  | "decodedBytes"
-  | "nodeRecords"
-  | "edgeRecords"
-  | "gbwtRecords"
-  | "occurrences";
-type SummaryScale = "linear" | "log" | "normalized";
-type InspectorSelection =
-  | { kind: "archive" }
-  | ViewerSelectionDetail
-  | { kind: "summary"; bin: OverviewBin }
-  | { kind: "locus"; hit: LocusHit; matchedAlias: boolean };
+import DetailedGraphStage from "./explorer/DetailedGraphStage.vue";
+import EvidenceSheet from "./explorer/EvidenceSheet.vue";
+import ExplorerTopbar from "./explorer/ExplorerTopbar.vue";
+import InspectorDrawer from "./explorer/InspectorDrawer.vue";
+import LoadingCard from "./explorer/LoadingCard.vue";
+import OverviewStage from "./explorer/OverviewStage.vue";
+import SearchPalette from "./explorer/SearchPalette.vue";
+import ShowcaseStage from "./explorer/ShowcaseStage.vue";
+import ToolRail from "./explorer/ToolRail.vue";
+import type {
+  ArchiveChoice,
+  ExplorerPhase,
+  ExplorerScreen,
+  InspectorSelection,
+  SearchState,
+  SummaryMetric,
+  SummaryScale,
+} from "./explorer/types";
 
 const configuredArchiveUrl =
   (
@@ -105,10 +90,10 @@ const configuredDefaultPadding = Math.max(
 const RECENT_URLS_KEY = "pangenome-range:recent-urls:v1";
 const RECENT_SEARCHES_KEY = "pangenome-range:recent-searches:v1";
 const LAYERS_KEY = "pangenome-range:layers:v1";
-const THEME_KEY = "pangenome-range:theme:v1";
+const THEME_KEY = "pangenome-range:theme:v2";
 const viewerHost = ref<HTMLElement>();
-const summaryCanvas = ref<HTMLCanvasElement>();
-const commandInput = ref<HTMLInputElement>();
+const overviewStage = ref<{ getCanvas: () => HTMLCanvasElement | undefined }>();
+const commandBar = ref<{ focus: () => void }>();
 const localFileInput = ref<HTMLInputElement>();
 const archiveChoice = ref<ArchiveChoice>(
   configuredArchiveUrl.length > 0
@@ -125,7 +110,8 @@ const archive = shallowRef<PangenomeArchive>();
 const archiveInfo = shallowRef<ArchiveInfo>();
 const viewer = shallowRef<PangenomeViewer>();
 const references = ref<readonly ReferenceDescriptor[]>([]);
-const phase = ref<Phase>("idle");
+const phase = ref<ExplorerPhase>("idle");
+const screen = ref<ExplorerScreen>("showcase");
 const statusMessage = ref("Preparing the explorer…");
 const errorMessage = ref("");
 const activeArchiveLabel = ref("Not opened");
@@ -151,7 +137,7 @@ const progress = shallowRef<ViewerProgress>();
 const lodDecision = shallowRef<ViewerLodDecision>();
 const forceDetail = ref(false);
 const summaryMetric = ref<SummaryMetric>("nodeRecords");
-const summaryScale = ref<SummaryScale>("log");
+const summaryScale = ref<SummaryScale>("normalized");
 const inspector = shallowRef<InspectorSelection>({ kind: "archive" });
 const evidenceOpen = ref(false);
 const detailRequested = ref(false);
@@ -162,6 +148,9 @@ const shortcutsOpen = ref(false);
 const technicalMode = ref(false);
 const darkMode = ref(false);
 const shareMessage = ref("");
+const loadingContextRegion = shallowRef<RegionQuery>();
+const loadingContextBins = shallowRef<readonly OverviewBin[]>();
+const loadingContextPlan = shallowRef<RegionPlan>();
 const summaryPaintMs = ref<number>();
 const openMs = ref<number>();
 const queryWallMs = ref<number>();
@@ -171,7 +160,7 @@ const layers = ref<ViewerLayerState>({
   topology: true,
   traversals: true,
   tileBoundaries: true,
-  sequenceLabels: true,
+  sequenceLabels: false,
 });
 let sourceOperation = 0;
 let regionOperation = 0;
@@ -200,17 +189,37 @@ const displayMode = computed<ViewerDisplayMode>(
 );
 const detailVisible = computed(
   () =>
+    screen.value === "showcase" ||
     forceDetail.value ||
     archiveInfo.value?.summaries === undefined ||
     (detailRequested.value && lodDecision.value?.automaticDetail === true),
 );
-const initialLoading = computed(
+const loadingVisible = computed(
   () =>
     phase.value === "opening" ||
     (loadedRegion.value === undefined &&
+      ["summary", "graph"].includes(phase.value)) ||
+    (screen.value === "explorer" &&
+      detailRequested.value &&
       ["summary", "graph"].includes(phase.value)),
 );
+const graphSurfaceMode = computed<"hidden" | "preview" | "detail">(() => {
+  if (screen.value === "showcase") return "preview";
+  if (detailVisible.value && phase.value === "ready") return "detail";
+  return "hidden";
+});
+const overviewDisplayRegion = computed(
+  () => loadingContextRegion.value ?? visualRegion.value ?? activeRegion.value,
+);
+const overviewDisplayBins = computed(
+  () => loadingContextBins.value ?? summaryBins.value,
+);
+const overviewDisplayPlan = computed(
+  () => loadingContextPlan.value ?? regionPlan.value,
+);
 const recommendedDetailRegion = computed<RegionQuery | undefined>(() => {
+  const locus = selectedLocus.value;
+  if (locus !== undefined) return paddedLocus(locus);
   const plan = regionPlan.value;
   const region = visualRegion.value ?? activeRegion.value;
   if (plan === undefined || region === undefined || plan.ranges.length === 0)
@@ -272,6 +281,14 @@ const namedCommandActive = computed(() => {
   }
 });
 
+function getSummaryCanvas(): HTMLCanvasElement | undefined {
+  return overviewStage.value?.getCanvas();
+}
+
+function summaryViewportWidth(): number {
+  return Math.max(320, getSummaryCanvas()?.clientWidth || 900);
+}
+
 onMounted(async () => {
   document.body.classList.add("pangenome-explorer-active");
   restorePreferences();
@@ -279,9 +296,10 @@ onMounted(async () => {
   window.addEventListener("popstate", onPopState);
   window.addEventListener("keydown", onGlobalKeyDown, { capture: true });
   await nextTick();
-  if (summaryCanvas.value !== undefined) {
+  const canvas = getSummaryCanvas();
+  if (canvas !== undefined) {
     summaryResizeObserver = new ResizeObserver(drawSummary);
-    summaryResizeObserver.observe(summaryCanvas.value);
+    summaryResizeObserver.observe(canvas);
   }
   await loadSource().catch(() => undefined);
 });
@@ -368,7 +386,10 @@ async function loadSource(): Promise<void> {
     createViewer(opened);
     const restored = regionFromUrl();
     const initial = restored ?? (await defaultRegion(opened));
-    detailRequested.value = false;
+    screen.value = restored === undefined ? "showcase" : "explorer";
+    detailRequested.value =
+      restored === undefined ||
+      new URLSearchParams(window.location.search).get("view") === "detail";
     command.value =
       selectedLocus.value?.displayName ??
       formatGenomicCoordinate(
@@ -377,7 +398,7 @@ async function loadSource(): Promise<void> {
         initial.start,
         initial.end,
       );
-    await navigateTo(initial, restored === undefined ? "replace" : "none");
+    await navigateTo(initial, "none");
   } catch (cause) {
     if (operation !== sourceOperation || isAbort(cause)) return;
     fail(cause, "The archive could not be opened.");
@@ -389,12 +410,12 @@ function createViewer(opened: PangenomeArchive): void {
     throw new Error("Viewer host did not mount.");
   const next = createPangenomeViewer(viewerHost.value, {
     archive: opened,
-    maxRenderedNodes: 600,
-    maxRenderedEdges: 900,
-    maxHaplotypeLanes: 8,
+    maxRenderedNodes: 160,
+    maxRenderedEdges: 260,
+    maxHaplotypeLanes: 6,
     showRequestTrace: false,
     initialLayers: layers.value,
-    initialTheme: darkMode.value ? "dark" : "light",
+    initialTheme: "dark",
   });
   const viewerRoot = viewerHost.value.querySelector<HTMLElement>(
     '[data-pangenome-viewer="true"]',
@@ -408,7 +429,17 @@ function createViewer(opened: PangenomeArchive): void {
       height: "100%",
       minHeight: "0",
       flexDirection: "column",
+      border: "0",
+      borderRadius: "18px",
+      background: "transparent",
+      boxShadow: "none",
     });
+    for (const element of viewerRoot.querySelectorAll<HTMLElement>(
+      ":scope > div:not([role=status])",
+    )) {
+      element.style.borderColor = "#244160";
+      element.style.color = "#91a7c2";
+    }
   }
   if (viewerCanvas !== null) {
     Object.assign(viewerCanvas.style, {
@@ -428,17 +459,7 @@ function createViewer(opened: PangenomeArchive): void {
       viewerPerformance.value = next.getPerformanceSnapshot();
     }),
     next.on("selectionchange", (detail) => {
-      const locus = selectedLocus.value;
-      inspector.value =
-        detail !== undefined
-          ? detail
-          : locus === undefined
-            ? { kind: "archive" }
-            : {
-                kind: "locus",
-                hit: locus,
-                matchedAlias: locus.matchedName !== locus.displayName,
-              };
+      inspector.value = detail ?? { kind: "archive" };
     }),
     next.on("viewportchange", ({ visualRegion: region }) => {
       visualRegion.value = clampRegion(region);
@@ -519,9 +540,7 @@ async function loadRegion(region: RegionQuery): Promise<void> {
         opened.planRegion({ ...region, signal }),
         opened.summary({
           ...region,
-          maxBins: recommendedSummaryBins(
-            summaryCanvas.value?.clientWidth ?? 900,
-          ),
+          maxBins: recommendedSummaryBins(summaryViewportWidth()),
           signal,
           trace: true,
         }),
@@ -533,7 +552,7 @@ async function loadRegion(region: RegionQuery): Promise<void> {
       lodDecision.value = chooseViewerLod(
         result.bins,
         region,
-        summaryCanvas.value?.clientWidth ?? 900,
+        summaryViewportWidth(),
         DEFAULT_COMPLEXITY_BUDGETS,
         forceDetail.value,
         plan,
@@ -547,9 +566,7 @@ async function loadRegion(region: RegionQuery): Promise<void> {
       lodDecision.value = {
         mode: "detailed",
         automaticDetail: true,
-        bpPerPixel:
-          (region.end - region.start) /
-          (summaryCanvas.value?.clientWidth ?? 900),
+        bpPerPixel: (region.end - region.start) / summaryViewportWidth(),
         estimates: zeroBudgets(),
         budgets: DEFAULT_COMPLEXITY_BUDGETS,
         limitingMetrics: [],
@@ -573,6 +590,9 @@ async function loadRegion(region: RegionQuery): Promise<void> {
     prefetchedRegion.value = predictedAdjacentRegion(region);
     queryWallMs.value = performance.now() - started;
     phase.value = "ready";
+    loadingContextRegion.value = undefined;
+    loadingContextBins.value = undefined;
+    loadingContextPlan.value = undefined;
     statusMessage.value = detailVisible.value
       ? "Graph ready. Pan or zoom to settle a new genomic query."
       : "Summary ready. Zoom in or load the detailed graph explicitly.";
@@ -719,8 +739,12 @@ async function submitCommand(): Promise<void> {
   }
 }
 
-async function selectLocus(hit: LocusHit): Promise<void> {
-  detailRequested.value = false;
+async function selectLocus(
+  hit: LocusHit,
+  intent: "detail" | "overview" = locusIntent(hit),
+): Promise<void> {
+  screen.value = "explorer";
+  detailRequested.value = intent === "detail";
   selectedLocus.value = hit;
   inspector.value = {
     kind: "locus",
@@ -731,7 +755,16 @@ async function selectLocus(hit: LocusHit): Promise<void> {
   commandPaletteOpen.value = false;
   command.value = hit.displayName;
   rememberSearch(hit.displayName);
-  await navigateTo(paddedLocus(hit));
+  if (intent === "detail") captureLoadingContext();
+  await navigateTo(
+    intent === "detail" ? paddedLocus(hit) : overviewRegionForLocus(hit),
+  );
+}
+
+function locusIntent(hit: LocusHit): "detail" | "overview" {
+  return hit.reference.end - hit.reference.start <= 120_000
+    ? "detail"
+    : "overview";
 }
 
 function paddedLocus(hit: LocusHit, configuredPadding?: number): RegionQuery {
@@ -746,6 +779,70 @@ function paddedLocus(hit: LocusHit, configuredPadding?: number): RegionQuery {
   });
 }
 
+function overviewRegionForLocus(hit: LocusHit): RegionQuery {
+  const reference = mergedReference(hit.reference.sample, hit.reference.contig);
+  const baseSpan = archiveInfo.value?.summaries?.baseBinSpan ?? 1_048_576;
+  const locusSpan = hit.reference.end - hit.reference.start;
+  const span = Math.max(baseSpan * 10, locusSpan * 8, 2_000_000);
+  const center = (hit.reference.start + hit.reference.end) / 2;
+  return clampRegion({
+    sample: hit.reference.sample,
+    contig: hit.reference.contig,
+    start: Math.max(reference?.start ?? 0, Math.round(center - span / 2)),
+    end: Math.min(
+      reference?.end ?? Number.MAX_SAFE_INTEGER,
+      Math.round(center + span / 2),
+    ),
+    context: 100,
+  });
+}
+
+function captureLoadingContext(): void {
+  if (screen.value !== "explorer" || visualRegion.value === undefined) return;
+  loadingContextRegion.value = visualRegion.value;
+  loadingContextBins.value = summaryBins.value;
+  loadingContextPlan.value = regionPlan.value;
+}
+
+function openShowcase(): void {
+  screen.value = "showcase";
+  commandPaletteOpen.value = false;
+  const params = new URLSearchParams();
+  if (archiveChoice.value !== "configured")
+    params.set("archive", archiveChoice.value);
+  if (archiveChoice.value === "custom")
+    params.set("url", customUrl.value.trim());
+  const query = params.size === 0 ? "" : `?${params}`;
+  window.history.pushState(null, "", `${window.location.pathname}${query}`);
+}
+
+function openShowcaseDetail(): void {
+  screen.value = "explorer";
+  detailRequested.value = true;
+  const locus = selectedLocus.value;
+  const loaded = loadedRegion.value;
+  if (
+    locus !== undefined &&
+    (loaded === undefined ||
+      loaded.start > locus.reference.start ||
+      loaded.end < locus.reference.end ||
+      queryTrace.value === undefined)
+  ) {
+    captureLoadingContext();
+    void navigateTo(paddedLocus(locus));
+    return;
+  }
+  updateUrlState("push");
+}
+
+function openShowcaseOverview(): void {
+  const locus = selectedLocus.value;
+  if (locus === undefined) return;
+  screen.value = "explorer";
+  detailRequested.value = false;
+  void navigateTo(overviewRegionForLocus(locus));
+}
+
 function useRecentSearch(value: string): void {
   command.value = value;
   commandPaletteOpen.value = true;
@@ -755,6 +852,8 @@ function useRecentSearch(value: string): void {
 function openRecommendedDetail(): void {
   const region = recommendedDetailRegion.value;
   if (region === undefined) return;
+  captureLoadingContext();
+  screen.value = "explorer";
   detailRequested.value = true;
   forceDetail.value = false;
   void navigateTo(region);
@@ -765,6 +864,16 @@ function cancelCurrentLoad(): void {
   regionController?.abort();
   statusMessage.value =
     "Loading cancelled. The previous view remains available.";
+  if (loadingContextRegion.value !== undefined) {
+    activeRegion.value = loadingContextRegion.value;
+    visualRegion.value = loadingContextRegion.value;
+    summaryBins.value = loadingContextBins.value ?? summaryBins.value;
+    regionPlan.value = loadingContextPlan.value;
+    detailRequested.value = false;
+  }
+  loadingContextRegion.value = undefined;
+  loadingContextBins.value = undefined;
+  loadingContextPlan.value = undefined;
   if (loadedRegion.value !== undefined) phase.value = "ready";
 }
 
@@ -897,7 +1006,7 @@ function fitLocus(): void {
 
 function onSummaryWheel(event: WheelEvent): void {
   event.preventDefault();
-  const canvas = summaryCanvas.value;
+  const canvas = getSummaryCanvas();
   if (canvas === undefined) return;
   const rect = canvas.getBoundingClientRect();
   const focus = Math.min(
@@ -912,10 +1021,10 @@ function onSummaryPointerDown(event: PointerEvent): void {
   pointerId = event.pointerId;
   pointerStartX = event.clientX;
   pointerStartRegion = visualRegion.value;
-  summaryCanvas.value?.setPointerCapture?.(event.pointerId);
+  getSummaryCanvas()?.setPointerCapture?.(event.pointerId);
   if (summaryPointers.size === 2 && pointerStartRegion !== undefined) {
     const [first, second] = [...summaryPointers.values()];
-    const canvas = summaryCanvas.value;
+    const canvas = getSummaryCanvas();
     if (first !== undefined && second !== undefined && canvas !== undefined) {
       summaryPinchDistance = Math.max(
         1,
@@ -938,7 +1047,7 @@ function onSummaryPointerMove(event: PointerEvent): void {
     });
   }
   if (pointerStartRegion === undefined) return;
-  const canvas = summaryCanvas.value;
+  const canvas = getSummaryCanvas();
   if (canvas === undefined) return;
   if (summaryPointers.size === 2 && summaryPinchDistance > 0) {
     const [first, second] = [...summaryPointers.values()];
@@ -983,7 +1092,7 @@ function onSummaryPointerUp(event: PointerEvent): void {
   if (!summaryPointers.has(event.pointerId)) return;
   const wasPinching = summaryPointers.size > 1 || summaryPinchDistance > 0;
   const moved = Math.abs(event.clientX - pointerStartX) > 3;
-  summaryCanvas.value?.releasePointerCapture?.(event.pointerId);
+  getSummaryCanvas()?.releasePointerCapture?.(event.pointerId);
   summaryPointers.delete(event.pointerId);
   const remaining = summaryPointers.entries().next().value as
     | [number, { x: number; y: number }]
@@ -1003,7 +1112,7 @@ function onSummaryPointerUp(event: PointerEvent): void {
 }
 
 function selectSummaryAt(clientX: number): void {
-  const canvas = summaryCanvas.value;
+  const canvas = getSummaryCanvas();
   const region = visualRegion.value;
   if (canvas === undefined || region === undefined) return;
   const rect = canvas.getBoundingClientRect();
@@ -1019,8 +1128,8 @@ function selectSummaryAt(clientX: number): void {
 }
 
 function drawSummary(): void {
-  const canvas = summaryCanvas.value;
-  const region = visualRegion.value ?? activeRegion.value;
+  const canvas = getSummaryCanvas();
+  const region = overviewDisplayRegion.value;
   if (canvas === undefined || region === undefined) return;
   const width = Math.max(320, canvas.clientWidth || 900);
   const height = Math.max(120, canvas.clientHeight || 260);
@@ -1060,7 +1169,7 @@ function drawSummary(): void {
     left: 20,
     top: 18,
     width: width - 40,
-    height: height - (detailVisible.value ? 50 : 72),
+    height: height - 72,
   };
   for (let index = 0; index <= 6; index += 1) {
     const x = plot.left + (plot.width * index) / 6;
@@ -1076,33 +1185,53 @@ function drawSummary(): void {
   context.moveTo(plot.left, plot.top + plot.height);
   context.lineTo(plot.left + plot.width, plot.top + plot.height);
   context.stroke();
-  const visible = summaryBins.value.filter(
+  const visible = overviewDisplayBins.value.filter(
     (bin) =>
       bin.reference.start < region.end && bin.reference.end > region.start,
   );
   const span = Math.max(1, region.end - region.start);
   const xFor = (coordinate: number) =>
     plot.left + ((coordinate - region.start) / span) * plot.width;
-  const topologyValues = visible.map((bin) =>
-    Math.log1p(Number(bin.nodeRecords + bin.edgeRecords)),
+  const scaledSeries = (values: number[]) => {
+    const transformed =
+      summaryScale.value === "linear"
+        ? values
+        : values.map((value) => Math.log1p(value));
+    if (summaryScale.value === "normalized") {
+      const minimum = Math.min(...transformed);
+      const maximum = Math.max(...transformed);
+      const range = maximum - minimum;
+      return range === 0
+        ? transformed.map(() => 0.5)
+        : transformed.map((value) => (value - minimum) / range);
+    }
+    const maximum = Math.max(1, ...transformed);
+    return transformed.map((value) => value / maximum);
+  };
+  const topologyValues = scaledSeries(
+    visible.map((bin) => Number(bin.nodeRecords + bin.edgeRecords)),
   );
-  const traversalValues = visible.map((bin) =>
-    Math.log1p(Number(bin.occurrences)),
+  const traversalValues = scaledSeries(
+    visible.map((bin) => Number(bin.occurrences)),
   );
-  const topologyMaximum = Math.max(1, ...topologyValues);
-  const traversalMaximum = Math.max(1, ...traversalValues);
   const topologyBase = plot.top + plot.height * 0.62;
   context.beginPath();
   context.moveTo(plot.left, topologyBase);
   for (let index = 0; index < visible.length; index += 1) {
     const bin = visible[index] as OverviewBin;
-    const x1 = xFor(Math.max(region.start, bin.reference.start));
-    const x2 = xFor(Math.min(region.end, bin.reference.end));
+    const x = xFor(
+      Math.max(
+        region.start,
+        Math.min(region.end, (bin.reference.start + bin.reference.end) / 2),
+      ),
+    );
+    const score = topologyValues[index] ?? 0;
     const y =
       topologyBase -
-      ((topologyValues[index] ?? 0) / topologyMaximum) * plot.height * 0.52;
-    context.lineTo(x1, y);
-    context.lineTo(x2, y);
+      (summaryScale.value === "normalized" ? 0.28 + score * 0.72 : score) *
+        plot.height *
+        0.52;
+    context.lineTo(x, y);
   }
   context.lineTo(plot.left + plot.width, topologyBase);
   context.closePath();
@@ -1119,7 +1248,11 @@ function drawSummary(): void {
     const y =
       plot.top +
       plot.height * 0.82 -
-      ((traversalValues[index] ?? 0) / traversalMaximum) * plot.height * 0.16;
+      (summaryScale.value === "normalized"
+        ? 0.18 + (traversalValues[index] ?? 0) * 0.82
+        : (traversalValues[index] ?? 0)) *
+        plot.height *
+        0.16;
     if (index === 0) context.moveTo(x, y);
     else context.lineTo(x, y);
   }
@@ -1127,7 +1260,7 @@ function drawSummary(): void {
   context.lineWidth = 2.2;
   context.stroke();
 
-  const planned = regionPlan.value?.ranges ?? [];
+  const planned = overviewDisplayPlan.value?.ranges ?? [];
   const maximumTransfer = Math.max(
     1,
     ...planned.map((range) => Number(range.compressedBytes)),
@@ -1146,7 +1279,7 @@ function drawSummary(): void {
     );
   }
   const recommendation = recommendedDetailRegion.value;
-  if (recommendation !== undefined && !detailVisible.value) {
+  if (recommendation !== undefined) {
     const x1 = xFor(recommendation.start);
     const x2 = xFor(recommendation.end);
     context.strokeStyle = colors.highlight;
@@ -1201,7 +1334,7 @@ function toggleTheme(): void {
   document.documentElement.classList.toggle("dark", darkMode.value);
   const theme = darkMode.value ? "dark" : "light";
   localStorage.setItem(THEME_KEY, theme);
-  viewer.value?.setTheme(theme);
+  viewer.value?.setTheme("dark");
   drawSummary();
 }
 
@@ -1213,11 +1346,11 @@ function onGlobalKeyDown(event: KeyboardEvent): void {
     event.preventDefault();
     event.stopImmediatePropagation();
     commandPaletteOpen.value = true;
-    commandInput.value?.focus();
+    commandBar.value?.focus();
   } else if (event.key === "/" && !typing) {
     event.preventDefault();
     commandPaletteOpen.value = true;
-    commandInput.value?.focus();
+    commandBar.value?.focus();
   } else if (event.key === "?" && !typing) {
     shortcutsOpen.value = !shortcutsOpen.value;
   } else if (event.key === "Escape") {
@@ -1231,7 +1364,14 @@ function onGlobalKeyDown(event: KeyboardEvent): void {
 
 function onPopState(): void {
   const region = regionFromUrl();
-  if (region !== undefined) void navigateTo(region, "none");
+  if (region === undefined) {
+    screen.value = "showcase";
+    return;
+  }
+  screen.value = "explorer";
+  detailRequested.value =
+    new URLSearchParams(window.location.search).get("view") === "detail";
+  void navigateTo(region, "none");
 }
 
 function updateUrlState(mode: "push" | "replace"): void {
@@ -1242,6 +1382,7 @@ function updateUrlState(mode: "push" | "replace"): void {
   params.set("archive", archiveChoice.value);
   if (archiveChoice.value === "custom")
     params.set("url", customUrl.value.trim());
+  params.set("view", detailVisible.value ? "detail" : "overview");
   params.set("sample", region.sample);
   params.set("contig", region.contig);
   params.set("start", String(region.start));
@@ -1294,7 +1435,8 @@ function restorePreferences(): void {
     darkMode.value = false;
     document.documentElement.classList.remove("dark");
   } else {
-    darkMode.value = document.documentElement.classList.contains("dark");
+    darkMode.value = false;
+    document.documentElement.classList.remove("dark");
   }
   recentUrls.value = readStoredStrings(RECENT_URLS_KEY);
   recentSearches.value = readStoredStrings(RECENT_SEARCHES_KEY);
@@ -1464,38 +1606,43 @@ function formatMs(value: number | undefined): string {
   return value === undefined ? "—" : `${value.toFixed(1)} ms`;
 }
 
-function formatStrand(value: LocusHit["strand"]): string {
-  return value === "forward" ? "+" : value === "reverse" ? "−" : "unknown";
+function formatCompact(value: bigint | undefined): string {
+  if (value === undefined) return "—";
+  const numeric = Number(value);
+  if (numeric < 1_000) return numeric.toLocaleString();
+  if (numeric < 1_000_000) return `${Math.round(numeric / 1_000)}k`;
+  return `${(numeric / 1_000_000).toFixed(1)}m`;
 }
 </script>
 
 <template>
-  <main class="explorer" :class="{ dark: darkMode }" :data-phase="phase">
-    <header class="topbar">
-      <a class="brand" :href="withBase('/')" aria-label="pangenome-range documentation">
-        <span class="brand-mark" aria-hidden="true">P</span>
-        <span><strong>pangenome-range</strong><small>Pangenome explorer</small></span>
-      </a>
-      <form class="command" role="search" @submit.prevent="submitCommand">
-        <svg class="command-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"></circle><path d="m20 20-4-4"></path></svg>
-        <input ref="commandInput" v-model="command" aria-label="Go to a locus or genomic coordinate" aria-autocomplete="list" :aria-expanded="commandPaletteOpen" :aria-activedescendant="suggestions[activeSuggestion] === undefined ? undefined : `locus-option-${activeSuggestion}`" autocomplete="off" placeholder="Search genes, aliases, or coordinates" @focus="commandPaletteOpen = true; scheduleSuggestions()" @keydown="onCommandKeyDown" />
-        <kbd>⌘K</kbd><button class="command-submit" type="submit">Open</button>
-      </form>
-      <nav class="top-actions" aria-label="Explorer actions">
-        <button type="button" class="icon-button" title="Copy region link" aria-label="Copy region link" @click="copyRegionLink"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 3h7v7M10 14 21 3M21 14v5a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5"></path></svg></button>
-        <button type="button" class="icon-button" title="Toggle color theme" aria-label="Toggle color theme" @click="toggleTheme"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3a9 9 0 1 0 9 9c0-.5 0-1-.1-1.5A7 7 0 0 1 12 3Z"></path></svg></button>
-        <button type="button" class="source-button" @click="sourceOpen = !sourceOpen"><span class="source-dot" :data-state="phase"></span><span>{{ archiveTitle }}</span><small>{{ formatBytes(archiveInfo?.archiveBytes) }}</small></button>
-      </nav>
-    </header>
+  <main class="explorer" :class="{ dark: darkMode, 'palette-open': commandPaletteOpen }" :data-phase="phase" :data-screen="screen">
+    <ExplorerTopbar
+      ref="commandBar"
+      :command="command"
+      :palette-open="commandPaletteOpen"
+      :active-descendant="suggestions[activeSuggestion] === undefined ? undefined : `locus-option-${activeSuggestion}`"
+      :archive-title="archiveTitle"
+      :archive-size="formatBytes(archiveInfo?.archiveBytes)"
+      :phase="phase"
+      @update:command="command = $event"
+      @focus="commandPaletteOpen = true; scheduleSuggestions()"
+      @keydown="onCommandKeyDown"
+      @submit="submitCommand"
+      @copy-link="copyRegionLink"
+      @toggle-theme="toggleTheme"
+      @open-source="sourceOpen = !sourceOpen"
+      @open-home="openShowcase"
+    />
 
-    <nav class="tool-rail" aria-label="Explorer tools">
-      <button type="button" :aria-pressed="toolPanel === 'navigate'" title="Navigate" @click="toolPanel = toolPanel === 'navigate' ? null : 'navigate'"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"></circle><path d="m15.5 8.5-2 5-5 2 2-5 5-2Z"></path></svg><span>Navigate</span></button>
-      <button type="button" :aria-pressed="toolPanel === 'layers'" title="Layers" @click="toolPanel = toolPanel === 'layers' ? null : 'layers'"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m12 3 9 5-9 5-9-5 9-5Z"></path><path d="m3 12 9 5 9-5M3 16l9 5 9-5"></path></svg><span>Layers</span></button>
-      <button type="button" :aria-pressed="toolPanel === 'tracks'" title="Tracks" @click="toolPanel = toolPanel === 'tracks' ? null : 'tracks'"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 18V9M9 18V5M14 18v-7M19 18V3"></path></svg><span>Tracks</span></button>
-      <button type="button" :aria-pressed="toolPanel === 'detail'" title="Detail policy" @click="toolPanel = toolPanel === 'detail' ? null : 'detail'"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M4 12h10M4 18h7"></path><circle cx="18" cy="12" r="2"></circle><circle cx="15" cy="18" r="2"></circle></svg><span>Detail</span></button>
-      <button type="button" title="Archive source" @click="sourceOpen = true"><svg viewBox="0 0 24 24" aria-hidden="true"><ellipse cx="12" cy="5" rx="8" ry="3"></ellipse><path d="M4 5v7c0 1.7 3.6 3 8 3s8-1.3 8-3V5M4 12v7c0 1.7 3.6 3 8 3s8-1.3 8-3v-7"></path></svg><span>Source</span></button>
-      <button type="button" title="Keyboard help" @click="shortcutsOpen = true"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"></circle><path d="M9.8 9a2.4 2.4 0 1 1 3.5 2.1c-.9.5-1.3 1-1.3 2M12 17h.01"></path></svg><span>Help</span></button>
-    </nav>
+    <ToolRail
+      :screen="screen"
+      :active-panel="toolPanel"
+      @home="openShowcase"
+      @panel="toolPanel = toolPanel === $event ? null : $event"
+      @source="sourceOpen = true"
+      @help="shortcutsOpen = true"
+    />
 
     <aside v-if="toolPanel" class="tool-popover" :aria-label="`${toolPanel} controls`">
       <header><strong>{{ toolPanel === 'navigate' ? 'Navigate' : toolPanel === 'layers' ? 'Graph layers' : toolPanel === 'tracks' ? 'Overview tracks' : 'Detail policy' }}</strong><button type="button" aria-label="Close controls" @click="toolPanel = null">Close</button></header>
@@ -1505,32 +1652,99 @@ function formatStrand(value: LocusHit["strand"]): string {
       <template v-else><div class="mode-pill" :data-mode="displayMode">{{ displayMode }}</div><p>{{ lodDecision?.reason ?? 'Waiting for summary evidence.' }}</p><label class="check"><input v-model="forceDetail" type="checkbox" />Override the automatic request decision</label><p v-if="lodDecision?.usesPartialBinEstimates" class="semantics">Record counts are coverage-prorated whole-bin estimates. Transfer bytes and tile counts come from the exact directory plan.</p></template>
     </aside>
 
-    <section class="workspace" aria-label="Genomic viewport">
-      <header class="locus-heading"><div><h1>{{ selectedLocus?.displayName ?? currentReference?.contig ?? 'Pangenome' }}</h1><p>{{ canonicalCoordinate }}</p></div><span class="mode-label">{{ detailVisible ? displayMode + ' graph' : 'Regional overview' }}<small>{{ detailVisible ? `${regionPlan?.selectedChunks ?? 0} planned tiles` : 'Summary and directory only' }}</small></span></header>
-      <div class="visualization-card" :class="{ detailed: detailVisible }">
-        <div v-if="!detailVisible" class="overview-intro"><span>{{ currentReference?.contig ?? 'Reference' }}</span><h2>Move through the pangenome as a continuous landscape.</h2><div class="reference-ribbon" aria-label="Regional payload ribbon"><i v-for="range in regionPlan?.ranges ?? []" :key="range.offset.toString()" :title="`${formatCoordinate(range.coreStart)}–${formatCoordinate(range.coreEnd)}`"></i></div><strong v-if="selectedLocus">{{ selectedLocus.displayName }}</strong></div>
-        <div v-if="!detailVisible" class="overview-title"><div><h2>Pangenome complexity</h2><p>Archive tile-record estimates with exact transfer planning</p></div><div class="legend"><span><i class="topology"></i>Topology</span><span><i class="traversal"></i>Traversal evidence</span><span><i class="transfer"></i>Transfer cost</span></div></div>
-        <div v-show="detailVisible" class="detail-stage"><div class="detail-toolbar"><strong>{{ selectedLocus?.displayName ?? currentReference?.contig }}</strong><div class="segmented"><button type="button" :aria-pressed="layers.topology" @click="layers.topology = !layers.topology">Graph</button><button type="button" :aria-pressed="layers.traversals" @click="layers.traversals = !layers.traversals">Paths</button><button type="button" :aria-pressed="layers.sequenceLabels" @click="layers.sequenceLabels = !layers.sequenceLabels">Sequence</button></div></div><div ref="viewerHost" class="viewer-host"></div></div>
-        <div class="summary-stage" :class="{ compact: detailVisible, skeleton: phase === 'summary' && summaryBins.length === 0 }"><canvas ref="summaryCanvas" aria-label="Composite regional overview; drag to pan, wheel to zoom, click a bin to inspect" tabindex="0" @wheel="onSummaryWheel" @pointerdown="onSummaryPointerDown" @pointermove="onSummaryPointerMove" @pointerup="onSummaryPointerUp" @pointercancel="onSummaryPointerUp"></canvas><div class="summary-caption"><span>{{ summaryBins.length }} summary bin{{ summaryBins.length === 1 ? '' : 's' }} · {{ regionPlan?.selectedChunks ?? 0 }} exact payload range{{ regionPlan?.selectedChunks === 1 ? '' : 's' }}</span><span v-if="summaryBins[0]">level {{ summaryBins[0].level }} · {{ formatCoordinate(summaryBins[0].binSpan) }} bp/bin<span v-if="summaryBins[0].coverageFraction < 1"> · {{ Math.round(summaryBins[0].coverageFraction * 100) }}% bin coverage</span></span><span v-else-if="archiveInfo?.summaries === undefined">Summary index absent</span></div></div>
-        <div v-if="!detailVisible" class="regional-guidance"><div><strong>{{ lodDecision?.automaticDetail ? 'Orientation first: graph detail is ready when you are.' : 'This region is too complex to draw node-by-node at the current scale.' }}</strong><p>Zoom into the outlined range or open the recommended detail window. The overview stays useful without fetching graph payloads.</p></div><button type="button" class="primary-button" :disabled="recommendedDetailRegion === undefined" @click="openRecommendedDetail">Open recommended detail</button></div>
-        <div v-if="!detailVisible" class="stat-grid"><article><strong>{{ archiveInfo?.namedLoci.recordCount.toString() ?? '0' }}</strong><span>named loci</span></article><article><strong>{{ references.length }}</strong><span>reference paths</span></article><article><strong>{{ formatCoordinate(archiveInfo?.summaries?.baseBinSpan ?? 0) }} bp</strong><span>finest summary bin</span></article><article><strong>{{ formatBytes(archiveInfo?.archiveBytes) }}</strong><span>archive size</span></article></div>
-      </div>
-      <div class="scale-footer"><span>{{ formatCoordinate((visualRegion?.end ?? 0) - (visualRegion?.start ?? 0)) }} bp visible</span><span>Drag to pan</span><span>Scroll to zoom</span><button type="button" @click="copyCoordinate">Copy coordinate</button></div>
+    <ShowcaseStage
+      v-show="screen === 'showcase'"
+      :locus="selectedLocus?.displayName ?? configuredDefaultLocus"
+      :archive-size="formatBytes(archiveInfo?.archiveBytes)"
+      :named-loci="formatCompact(archiveInfo?.namedLoci.recordCount)"
+      :reference-paths="references.length.toLocaleString()"
+      :detail-transfer="formatBytes(queryTrace?.payloadBytes ?? regionPlan?.compressedBytes)"
+      :ready="phase === 'ready'"
+      @open-detail="openShowcaseDetail"
+      @open-overview="openShowcaseOverview"
+      @open-search="commandPaletteOpen = true; commandBar?.focus()"
+    />
 
-      <div v-if="initialLoading" class="initial-loading" role="status" aria-live="polite"><div class="loading-card"><div class="loading-orbit" aria-hidden="true"><span></span></div><h2>{{ phase === 'opening' ? 'Opening archive' : `Opening ${selectedLocus?.displayName ?? currentReference?.contig ?? 'region'}` }}</h2><p>Streaming only the region you asked for</p><ol><li :class="{ done: phase !== 'opening', active: phase === 'opening' }"><span></span><strong>Archive opened</strong><em>{{ phase === 'opening' ? 'connecting' : formatMs(openMs) }}</em></li><li :class="{ done: phase === 'graph' || phase === 'ready', active: phase === 'summary' }"><span></span><strong>Summary located</strong><em>{{ phase === 'opening' ? '—' : summaryBins.length > 0 ? formatBytes(summaryTrace?.totalBytes) : 'not present' }}</em></li><li :class="{ done: phase === 'ready', active: phase === 'graph' }"><span></span><strong>Graph tiles</strong><em>{{ phase === 'opening' ? '—' : `${progress?.counts.tiles ?? 0} of ${regionPlan?.selectedChunks ?? '—'}` }}</em></li><li :class="{ done: phase === 'ready' }"><span></span><strong>Integrity, layout, and paint</strong><em>{{ phase === 'ready' ? 'verified' : '—' }}</em></li></ol><div class="loading-progress"><i :style="{ width: `${phase === 'opening' ? 14 : regionPlan?.selectedChunks ? Math.min(100, ((progress?.counts.tiles ?? 0) / regionPlan.selectedChunks) * 100) : phase === 'summary' ? 42 : 14}%` }"></i></div><div class="loading-meta"><span>{{ phase === 'opening' ? 'Verifying range support' : regionPlan ? `${formatBytes(regionPlan.compressedBytes)} planned` : 'Locating byte ranges' }}</span><button type="button" @click="cancelCurrentLoad">Cancel</button></div></div></div>
-    </section>
+    <OverviewStage
+      v-show="screen === 'explorer' && graphSurfaceMode === 'hidden'"
+      ref="overviewStage"
+      :title="selectedLocus?.displayName ?? currentReference?.contig ?? 'Pangenome'"
+      :coordinate="canonicalCoordinate"
+      :region="overviewDisplayRegion"
+      :locus="selectedLocus"
+      :plan="overviewDisplayPlan"
+      :bins="overviewDisplayBins"
+      :archive-info="archiveInfo"
+      :reference-count="references.length"
+      :skeleton="phase === 'summary' && overviewDisplayBins.length === 0"
+      :can-open-detail="recommendedDetailRegion !== undefined"
+      :detail-reason="lodDecision?.automaticDetail ? 'This locus fits the bounded detail budget.' : 'Open a focused window to keep the graph legible.'"
+      :archive-size="formatBytes(archiveInfo?.archiveBytes)"
+      :base-bin-span="formatCoordinate(archiveInfo?.summaries?.baseBinSpan ?? 0) + ' bp'"
+      :scale="summaryScale"
+      @open-detail="openRecommendedDetail"
+      @wheel="onSummaryWheel"
+      @pointerdown="onSummaryPointerDown"
+      @pointermove="onSummaryPointerMove"
+      @pointerup="onSummaryPointerUp"
+      @copy-coordinate="copyCoordinate"
+    />
 
-    <aside v-if="inspector.kind !== 'archive'" class="right-panel" aria-label="Selection inspector"><header><span>Inspector</span><button type="button" aria-label="Close inspector" @click="inspector = { kind: 'archive' }">Close</button></header>
-      <section v-if="inspector.kind === 'node'"><p class="inspector-kind">Selected node</p><h2>N{{ inspector.node.id.toString() }}</h2><p>Reference-anchored graph node</p><dl><div><dt>Length</dt><dd>{{ inspector.node.sequenceLength }} bp</dd></div><div><dt>Orientation</dt><dd>{{ inspector.node.reverse ? 'Reverse' : 'Forward' }}</dd></div><div><dt>Topology</dt><dd>{{ inspector.node.branchKind }}</dd></div><div><dt>Neighbors</dt><dd>{{ inspector.incoming.length }} in · {{ inspector.outgoing.length }} out</dd></div><div><dt>Traversal evidence</dt><dd>{{ inspector.localTraversalWeights.length }} weighted</dd></div><div><dt>Source tiles</dt><dd>{{ inspector.node.sourceTiles.length }}</dd></div></dl><h3>Sequence</h3><code class="sequence">{{ inspector.node.sequence.slice(0, 180) }}{{ inspector.node.sequence.length > 180 ? '…' : '' }}</code><button type="button" class="primary-button" @click="copyNodeSequence">Copy sequence</button></section>
-      <section v-else-if="inspector.kind === 'edge'"><p class="inspector-kind">Selected edge</p><h2>{{ inspector.edge.from.toString() }} to {{ inspector.edge.to.toString() }}</h2><dl><div><dt>Topology</dt><dd>{{ inspector.edge.classification }}</dd></div><div><dt>Orientation</dt><dd>{{ inspector.edge.fromReverse ? 'reverse' : 'forward' }} to {{ inspector.edge.toReverse ? 'reverse' : 'forward' }}</dd></div><div><dt>Source tiles</dt><dd>{{ inspector.edge.sourceTiles.length }}</dd></div></dl></section>
-      <section v-else-if="inspector.kind === 'traversal'"><p class="inspector-kind">Local traversal evidence</p><h2>Weight {{ inspector.traversal.weight.toString() }}</h2><p class="explanation">Anonymous evidence from one source tile. It is not a named individual and is never stitched across tiles.</p><dl><div><dt>Core interval</dt><dd>{{ formatCoordinate(inspector.traversal.tileStart) }}–{{ formatCoordinate(inspector.traversal.tileEnd) }}</dd></div><div><dt>Oriented nodes</dt><dd>{{ inspector.traversal.orientedNodes.length }}</dd></div><div><dt>Compressed</dt><dd>{{ formatBytes(inspector.traversal.source.compressedBytes) }}</dd></div><div><dt>Decoded</dt><dd>{{ formatBytes(inspector.traversal.source.uncompressedBytes) }}</dd></div></dl></section>
-      <section v-else-if="inspector.kind === 'summary'"><p class="inspector-kind">Summary bin</p><h2>{{ inspector.bin.reference.contig }}:{{ formatCoordinate(inspector.bin.reference.start) }}–{{ formatCoordinate(inspector.bin.reference.end) }}</h2><dl><div><dt>Full bin</dt><dd>{{ formatCoordinate(inspector.bin.fullBinStart) }}–{{ formatCoordinate(inspector.bin.fullBinEnd) }}</dd></div><div><dt>Query coverage</dt><dd>{{ Math.round(inspector.bin.coverageFraction * 100) }}%</dd></div><div><dt>Regional tiles</dt><dd>{{ inspector.bin.tileCount.toString() }}</dd></div><div><dt>Encoded bytes</dt><dd>{{ formatBytes(inspector.bin.encodedBytes) }}</dd></div><div><dt>Decoded bytes</dt><dd>{{ formatBytes(inspector.bin.decodedBytes) }}</dd></div><div><dt>Node records</dt><dd>{{ inspector.bin.nodeRecords.toString() }}</dd></div><div><dt>Edge records</dt><dd>{{ inspector.bin.edgeRecords.toString() }}</dd></div><div><dt>Occurrences</dt><dd>{{ inspector.bin.occurrences.toString() }}</dd></div></dl><p class="explanation">Counters describe the complete underlying bin. They are not exact clipped-interval counts, unique variants, frequencies, or people.</p></section>
-      <section v-else-if="inspector.kind === 'locus'"><p class="inspector-kind">Selected locus</p><h2>{{ inspector.hit.displayName }}</h2><dl><div v-if="inspector.matchedAlias"><dt>Matched alias</dt><dd>{{ inspector.hit.matchedName }}</dd></div><div><dt>Stable ID</dt><dd>{{ inspector.hit.stableId }}</dd></div><div><dt>Feature type</dt><dd>{{ inspector.hit.featureType }}</dd></div><div><dt>Strand</dt><dd>{{ formatStrand(inspector.hit.strand) }}</dd></div><div><dt>Reference</dt><dd>{{ inspector.hit.reference.sample }}</dd></div><div><dt>Coordinates</dt><dd>{{ inspector.hit.reference.contig }}:{{ formatCoordinate(inspector.hit.reference.start) }}–{{ formatCoordinate(inspector.hit.reference.end) }}</dd></div></dl></section>
-    </aside>
+    <DetailedGraphStage
+      :mode="graphSurfaceMode"
+      :locus="selectedLocus?.displayName ?? currentReference?.contig ?? 'Pangenome'"
+      :coordinate="canonicalCoordinate"
+      :layers="layers"
+      @toggle-topology="layers.topology = !layers.topology"
+      @toggle-traversals="layers.traversals = !layers.traversals"
+      @toggle-sequence="layers.sequenceLabels = !layers.sequenceLabels"
+    ><div ref="viewerHost" class="viewer-host"></div></DetailedGraphStage>
 
-    <section class="evidence" :class="{ open: evidenceOpen }" aria-label="Range and performance evidence"><button type="button" class="evidence-toggle" :aria-expanded="evidenceOpen" @click="evidenceOpen = !evidenceOpen"><span class="source-dot" :data-state="phase"></span><strong>{{ phase === 'ready' ? (detailVisible ? 'Detailed graph ready' : 'Overview ready') : statusMessage }}</strong><span>{{ formatBytes(regionPlan?.compressedBytes ?? queryTrace?.payloadBytes ?? summaryTrace?.totalBytes) }} · {{ regionPlan?.selectedChunks ?? 0 }} tiles · {{ formatMs(queryWallMs) }}</span><svg viewBox="0 0 24 24" aria-hidden="true"><path :d="evidenceOpen ? 'm6 15 6-6 6 6' : 'm6 9 6 6 6-6'"></path></svg></button><div v-if="evidenceOpen" class="evidence-body"><div class="timing-strip"><article><span>Object open</span><strong>{{ formatMs(openMs) }}</strong></article><article><span>First summary paint</span><strong>{{ formatMs(summaryPaintMs) }}</strong></article><article><span>First graph tile</span><strong>{{ formatMs(viewerPerformance?.firstTilePaintMs) }}</strong></article><article><span>Query complete</span><strong>{{ formatMs(queryWallMs) }}</strong></article><article><span>Layout</span><strong>{{ formatMs(viewerPerformance?.layoutMs) }}</strong></article><article><span>Paint</span><strong>{{ formatMs(viewerPerformance?.paintMs) }}</strong></article></div><div class="waterfall"><div v-for="(range, index) in [...(summaryTrace?.requestRanges ?? []), ...(queryTrace?.requestRanges ?? [])]" :key="`${range.offset}:${range.length}:${index}`"><span>{{ range.layer }}</span><i :style="{ width: `${Math.max(2, Math.min(100, (range.length / Math.max(1, queryTrace?.totalBytes ?? summaryTrace?.totalBytes ?? range.length)) * 100))}%` }"></i><code>{{ range.offset.toString() }} + {{ formatBytes(range.length) }}</code></div><p v-if="summaryTrace === undefined && queryTrace === undefined">No traced request has completed yet.</p></div><label class="check"><input v-model="technicalMode" type="checkbox" />Technical evidence mode</label><p v-if="technicalMode" class="technical-note">Canonical hash {{ queryTrace?.canonicalHash ?? '—' }}. Integrity {{ formatMs(queryTrace?.integrityMs) }}, decompression wall {{ formatMs(queryTrace?.decompressionMs) }}, task aggregate {{ formatMs(queryTrace?.decompressionTaskMs) }}, regional decode {{ formatMs(queryTrace?.decodeMs) }}, graph merge {{ formatMs(queryTrace?.mergeMs) }}. Parallel task totals are not added to elapsed wall time.</p></div></section>
+    <LoadingCard
+      :visible="loadingVisible"
+      :phase="phase"
+      :locus="selectedLocus?.displayName ?? currentReference?.contig ?? 'region'"
+      :open-time="formatMs(openMs)"
+      :summary-bytes="formatBytes(summaryTrace?.totalBytes)"
+      :expected-transfer="formatBytes(regionPlan?.compressedBytes)"
+      :remote-ranges="regionPlan?.selectedChunks ?? 0"
+      :completed-tiles="progress?.counts.tiles ?? 0"
+      :planned-tiles="regionPlan?.selectedChunks ?? 0"
+      :reason="lodDecision?.automaticDetail ? 'Selected locus fits detail budgets' : 'Focused graph request'"
+      @cancel="cancelCurrentLoad"
+    />
 
-    <div v-if="commandPaletteOpen" class="palette-backdrop" @click="commandPaletteOpen = false"></div><section v-if="commandPaletteOpen" class="suggestions" role="listbox" aria-label="Locus suggestions"><header><span>Archive loci</span><button type="button" @click="commandPaletteOpen = false">Esc</button></header><div v-if="searchState === 'searching'" class="suggestion-state">Searching archive locus pages…</div><button v-for="(hit, index) in suggestions" :id="`locus-option-${index}`" :key="`${hit.stableId}:${hit.reference.sample}:${hit.reference.start}:${hit.matchedName}`" type="button" role="option" :aria-selected="index === activeSuggestion" @mouseenter="activeSuggestion = index" @click="selectLocus(hit)"><span><strong>{{ hit.displayName }}</strong><em>{{ hit.matchedName !== hit.displayName ? `matched alias ${hit.matchedName}` : hit.featureType }}</em></span><span>{{ hit.stableId }}</span><span>{{ hit.reference.sample }} · {{ hit.reference.contig }}:{{ formatCoordinate(hit.reference.start) }}–{{ formatCoordinate(hit.reference.end) }} · {{ formatStrand(hit.strand) }}</span></button><div v-if="suggestions.length === 0 && recentSearches.length > 0" class="recent-searches"><h3>Recent</h3><button v-for="recent in recentSearches" :key="recent" type="button" @click="useRecentSearch(recent)"><strong>{{ recent }}</strong><span>Open recent locus or coordinate</span></button></div><div v-if="searchState === 'index-absent'" class="suggestion-state">This archive has no named-locus index. Coordinate navigation remains available.</div><div v-else-if="searchState === 'index-empty'" class="suggestion-state">The named-locus index is present but empty.</div><div v-else-if="searchState === 'truncated'" class="suggestion-state">First {{ suggestions.length }} results shown · archive result limit reached</div><div v-else-if="searchState === 'no-matches'" class="suggestion-state">No matching archive locus</div><div v-else-if="searchState === 'failed'" class="suggestion-state error-text">{{ searchMessage }}</div><footer><span>Arrow keys to navigate</span><span>Enter to open</span><span>Exact and alias matches come from the archive</span></footer></section>
+    <InspectorDrawer v-if="screen === 'explorer'" :selection="inspector" @close="inspector = { kind: 'archive' }" @copy-sequence="copyNodeSequence" />
+
+    <EvidenceSheet
+      :open="evidenceOpen"
+      :phase="phase"
+      :label="phase === 'ready' ? (screen === 'showcase' ? 'Live archive ready' : detailVisible ? 'Detailed graph ready' : 'Overview ready') : statusMessage"
+      :summary-trace="summaryTrace"
+      :query-trace="queryTrace"
+      :bytes="queryTrace?.payloadBytes ?? regionPlan?.compressedBytes ?? summaryTrace?.totalBytes"
+      :tiles="regionPlan?.selectedChunks ?? 0"
+      :wall-ms="queryWallMs"
+      :open-ms="openMs"
+      :summary-paint-ms="summaryPaintMs"
+      :performance="viewerPerformance"
+      :technical-mode="technicalMode"
+      @toggle="evidenceOpen = !evidenceOpen"
+      @update:technical-mode="technicalMode = $event"
+    />
+
+    <SearchPalette
+      :open="commandPaletteOpen"
+      :suggestions="suggestions"
+      :active-suggestion="activeSuggestion"
+      :recent-searches="recentSearches"
+      :search-state="searchState"
+      :search-message="searchMessage"
+      @close="commandPaletteOpen = false"
+      @activate="activeSuggestion = $event"
+      @select="selectLocus"
+      @recent="useRecentSearch"
+    />
 
     <div class="sr-status" role="status" aria-live="polite">{{ statusMessage }}</div><div v-if="errorMessage" class="toast error-toast" role="alert"><strong>Explorer error</strong><span>{{ errorMessage }}</span><a :href="withBase('/HOSTING')">Origin requirements</a></div><div v-else-if="shareMessage" class="toast" role="status">{{ shareMessage }}</div>
     <dialog :open="sourceOpen" class="source-dialog" aria-label="Archive source"><header><div><span>Archive source</span><h2>Open a static pangenome object</h2></div><button type="button" @click="sourceOpen = false">Close</button></header><label><span>Source</span><select v-model="archiveChoice" aria-label="Archive source" @change="onSourceChange"><option value="configured" :disabled="configuredArchiveUrl.length === 0">Configured HPRC v2.1 + GENCODE v50</option><option value="population" :disabled="populationArchiveUrl.length === 0">1000 Genomes hs38d1 (NA19239#0)</option><option value="fixture">Bundled deterministic fixture</option><option value="custom">Custom remote URL</option><option value="local">Local .pngr file</option></select></label><p v-if="archiveChoice === 'population'" class="source-coordinate-note"><strong>Population-path coordinates:</strong> this archive follows real NA19239 haplotype-0 paths and is not GRCh38.</p><label v-if="archiveChoice === 'custom'"><span>Remote .pngr URL</span><input v-model="customUrl" aria-label="Remote archive URL" type="url" placeholder="https://archive.example/immutable.pngr" /></label><button v-if="archiveChoice === 'custom'" type="button" class="primary-button" @click="loadSource">Open remote archive</button><button v-if="archiveChoice === 'local'" type="button" class="primary-button" @click="localFileInput?.click()">Choose local file</button><input ref="localFileInput" class="visually-hidden" type="file" accept=".pngr,application/octet-stream" @change="onLocalFile" /><div class="archive-summary"><span class="source-dot" :data-state="phase"></span><div><strong>{{ archiveTitle }}</strong><small>{{ formatBytes(archiveInfo?.archiveBytes) }} · format v{{ archiveInfo?.formatVersion ?? '—' }}</small></div></div><dl><div><dt>Named loci</dt><dd>{{ archiveInfo?.namedLoci.state ?? '—' }} · {{ archiveInfo?.namedLoci.recordCount.toString() ?? '0' }}</dd></div><div><dt>Summary index</dt><dd>{{ archiveInfo?.summaries ? `${archiveInfo.summaries.baseBinSpan} bp base bins` : 'absent' }}</dd></div><div><dt>Semantics</dt><dd>{{ archiveInfo?.haplotypeSemantics ?? '—' }}</dd></div></dl><p>Custom URLs and local filenames stay in this browser. No query backend is used.</p></dialog>
@@ -1538,7 +1752,7 @@ function formatStrand(value: LocusHit["strand"]): string {
   </main>
 </template>
 
-<style scoped src="./PangenomeDemo.css"></style>
+<style src="./PangenomeDemo.css"></style>
 
 <style>
 body.pangenome-explorer-active {

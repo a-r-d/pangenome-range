@@ -24,15 +24,20 @@ The full-viewport `/demo` route uses a 64-pixel command header, a 56-pixel
 tool rail, one canvas-first workspace, contextual overlay inspectors, and a
 compact bottom evidence drawer. Controls are icon-first with text labels in
 tooltips or open popovers; raw timing and range data stays collapsed by
-default. A researcher can:
+default. The configured archive and default locus open immediately into a
+showcase that pairs the product promise with a live, budgeted graph preview.
+This makes the first screen useful while keeping overview, search, and focused
+detail one action away. A researcher can:
 
 1. open the configured object, fixture, arbitrary compatible remote URL, or a
    local file;
 2. navigate with canonical coordinates or the archive-native named-locus
    index, including prefix suggestions, aliases, recent searches, and keyboard
    selection;
-3. land on an orientation-first composite overview through `archive.summary()`
-   and `archive.planRegion()` without fetching graph payloads;
+3. open an orientation-first composite overview through `archive.summary()`
+   and `archive.planRegion()` without fetching graph payloads; for a locus
+   narrower than one base summary bin, the overview expands to a bounded
+   multi-bin context instead of pretending sub-bin values exist;
 4. load or progressively stream a detailed region through
    `archive.queryTiles()` when deterministic byte and record budgets allow it;
 5. pan, pinch, wheel, or use the keyboard while settled genomic requests are
@@ -59,10 +64,11 @@ bytes before payload fetch. Because summary counters cover whole underlying
 bins, partial edge bins are coverage-prorated for policy and labeled as
 estimates; they are never presented as exact clipped-interval counts.
 
-Even when a detailed query fits the budgets, a named-locus jump first presents
-the overview and an explicit recommended detail action. This keeps the initial
-workflow legible and lets the researcher understand the reference interval,
-complexity, traversal evidence, and transfer cost before graph materialization.
+Short named-locus results advertise and open bounded detail directly. Larger
+features advertise "overview first" and retain an explicit recommended detail
+action. The showcase starts the configured default locus in detail because it
+is both the product demonstration and a bounded real query; its overview CTA
+still exposes the wider summary landscape without graph payloads.
 
 - **Overview:** summary tracks only.
 - **Regional:** summary context plus an explicit decision to load detail.
@@ -100,7 +106,8 @@ The explorer supports visible focus, semantic buttons and inputs, an ARIA live
 status region, a keyboard-help panel, `Ctrl/Cmd+K`, arrow/Enter search
 selection, keyboard pan/zoom, Escape cancellation, high-DPI rendering,
 reduced-motion preferences, persistent layers/theme, and responsive tablet
-panels. Light and dark screenshots are retained as browser evidence.
+panels. The detailed graph remains a dark focus surface in either shell theme;
+light, dark, and tablet screenshots are retained as browser evidence.
 
 ## Acceptance and evidence
 

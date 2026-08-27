@@ -312,9 +312,13 @@ try {
         timingEvidence,
         screenshot: screenshotBase,
         overviewScreenshot: screenshotPath("overview"),
+        showcaseScreenshot:
+          configuredArchiveUrl.length > 0
+            ? screenshotPath("public-showcase")
+            : undefined,
         publicHlaScreenshot:
           configuredArchiveUrl.length > 0
-            ? screenshotPath("public-hla")
+            ? screenshotPath("public-overview")
             : undefined,
         publicSearchScreenshot:
           configuredArchiveUrl.length > 0
@@ -349,10 +353,34 @@ async function exerciseConfiguredArchive(browser, baseUrl) {
       .locator('.explorer[data-phase="ready"]')
       .waitFor({ timeout: 30_000 });
     await configuredPage
+      .getByRole("heading", { name: /Explore human pangenomes/i, level: 1 })
+      .waitFor();
+    await configuredPage.getByLabel("Detailed graph viewport").waitFor();
+    await configuredPage.screenshot({
+      path: screenshotPath("public-showcase"),
+      fullPage: true,
+    });
+    await configuredPage
+      .getByRole("button", { name: "Regional overview", exact: true })
+      .click();
+    await configuredPage
+      .locator('.explorer[data-phase="ready"][data-screen="explorer"]')
+      .waitFor({ timeout: 30_000 });
+    await configuredPage
       .getByRole("heading", { name: "HLA-B", level: 1 })
       .waitFor();
+    const summaryBinCount = Number.parseInt(
+      (await configuredPage.locator(".summary-caption").innerText()).match(
+        /^(\d+) summary bins?/,
+      )?.[1] ?? "0",
+      10,
+    );
+    assert(
+      summaryBinCount > 1,
+      `default regional overview should contain multiple honest summary bins, got ${summaryBinCount}`,
+    );
     await configuredPage.screenshot({
-      path: screenshotPath("public-hla"),
+      path: screenshotPath("public-overview"),
       fullPage: true,
     });
     const search = configuredPage.getByLabel(
@@ -440,7 +468,7 @@ async function assertHealthyDemo(page) {
     await page.getByLabel("Go to a locus or genomic coordinate").inputValue(),
     "GRCh38#chr1:100-102",
   );
-  assert.equal(await page.getByLabel("Genomic viewport").count(), 1);
+  assert.equal(await page.getByLabel("Detailed graph viewport").count(), 1);
   assert.equal(await page.getByLabel("Selection inspector").count(), 0);
 }
 
