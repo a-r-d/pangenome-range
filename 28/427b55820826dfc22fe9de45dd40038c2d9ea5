@@ -1,0 +1,254 @@
+packages/browser/test/viewer.test.ts
+  s_c6adeff06c2400::t_69e60d4005f7fc 216-217
+  s_c6adeff06c2400::t_895ad3f73e888e 185-192
+results/2026-08-26-release-hardening-v1/source-cache.json
+  s_c6adeff06c2400::t_b0f59cff7040d5 1-59
+crates/pangenome-range-build/src/disk_source.rs
+  s_c6adeff06c2400::t_b631e3487d8feb 18,62,65-72,519,530,541-547,593-594,606-607,616,621,651,656-661
+  s_c6adeff06c2400::t_386de2cf150ded 833-834,857-858,882-883,948,953-962,966,975-998
+  s_c6adeff06c2400::t_6e8171c43d1534 5,123,372-375,403-405,522,531,551-553,571-573,597-599,602-604,611-614,716-718,728-730,737-739,1170-1175,1397-1400
+  s_c6adeff06c2400::t_b0a482dc47bab2 727
+  s_c6adeff06c2400::t_f57e1567c28aaf 473,1298-1303
+  s_c6adeff06c2400::t_807cec93c75124 457-462,520-521,523-529,588-589
+  s_c6adeff06c2400::t_13a90b6336d690 999,1263-1270,1277-1297,1304-1332,1436
+  s_c6adeff06c2400::t_cae7b0329324c4 231,245-246,790-792,795-797
+  s_c6adeff06c2400::t_ccf6c39af0c13d 1416-1432
+  s_c6adeff06c2400::t_82f29577849660 1271-1276
+  s_c6adeff06c2400::t_64ff5ee0679eaf 692-701
+  s_c6adeff06c2400::t_d396bc66714e64 358-366,376-389,395-402,406-437,439-456,463-464,509,515-518,532-534,540,548-550,554-560,587,590-592,595-596,600-601,605,608-610,615,617-620,622-648,650,652-655,662-691,702-715,719-726,731-736,740-744,748-788
+  s_c6adeff06c2400::t_d88393aba31007 1,24-61,63-64,101,114-117,135-137,198-200,224-228,232,235
+  s_c6adeff06c2400::t_0f7d6fac5cbef6 561,567-570,574-586
+  s_c6adeff06c2400::t_c7cbe9ad5555b1 465-472,474-508
+  s_c6adeff06c2400::t_89d199329bd0e5 11,103,118-122,230,244,247,367-371,390-394,438,510-514,535-539,562-566,649
+  s_c6adeff06c2400::t_df58a39709e4a3 1349,1354,1440,1471
+  s_c6adeff06c2400::t_4db1cb528a7199 1356-1360,1391-1396,1401-1415,1433-1435
+  s_c6adeff06c2400::t_d205d28b8e58a8 1001-1073,1090,1096-1104,1120,1176-1181
+  s_c6adeff06c2400::t_14d9e97951d0bb 825,830,841,847,869,877,907,944
+  s_c6adeff06c2400::t_13368f3e4638e9 15,102,229,243,248-249,319-323
+  s_c6adeff06c2400::t_7c81ae2649d47e 789,1000,1437
+packages/browser/src/reader/archive.ts
+  s_c6adeff06c2400::t_991cd8534caea0 1364-1370,1374-1380
+  s_c6adeff06c2400::t_6e8171c43d1534 1202-1219,1232-1265
+  s_c6adeff06c2400::t_3241695ac32f13 5-6,26-27,626,1059,1121-1181,1533,1575-1591
+  s_c6adeff06c2400::t_69e60d4005f7fc 257
+  s_c6adeff06c2400::t_67cd6af1dd1565 7,19
+  s_c6adeff06c2400::t_6ee29291e4f910 733-780
+  s_c6adeff06c2400::t_ebc7413bd21a01 59-60,269,285,1051,1090-1092,1201,1222-1231,1269-1271,1330,1520-1521,1530,1633-1638,1718,2151-2152,2161
+  s_c6adeff06c2400::t_6ce09fef216bf9 979-983
+  s_c6adeff06c2400::t_d92a396695fdf8 1322-1329
+  s_c6adeff06c2400::t_b680a5fd3b074c 1592
+packages/browser/src/reader/types.ts
+  s_c6adeff06c2400::t_135c988ffde630 22-23,194-231,315
+  s_c6adeff06c2400::t_ebc7413bd21a01 60,185-186,243
+  s_c6adeff06c2400::t_7dcf115ca2ed0b 319
+docs/FORMAT_RELEASE_CHECKLIST.md
+  s_c6adeff06c2400::t_6ce09fef216bf9 64,79
+  s_c6adeff06c2400::t_3d267f29ef9904 104,122,131
+  s_c6adeff06c2400::t_2aac5b3e9b0629 132,134-136
+CHANGELOG.md
+  s_c6adeff06c2400::t_9255186b670249 49-54,77-81
+  s_c6adeff06c2400::t_cdf6584ed58e02 26-27
+  s_c6adeff06c2400::t_49346e77e54af1 7-11,15,18-25,28-35,85-87
+test-data/conformance/manifest.json
+  s_c6adeff06c2400::t_c6ccf7d3d1c44b 103-110,380-383,390,413-414,440-441
+  s_c6adeff06c2400::t_35028f31d3feb3 84-102,120-164
+.gitignore
+  s_c6adeff06c2400::t_df58a39709e4a3 159
+crates/pangenome-range-cli/src/main.rs
+  s_c6adeff06c2400::t_a8a22bd8bd75a6 757-760
+  s_c6adeff06c2400::t_6e8171c43d1534 6-8,807-809
+  s_c6adeff06c2400::t_aeab315b256783 226-276
+  s_c6adeff06c2400::t_0f7d6fac5cbef6 40,282-284,318,797-798
+  s_c6adeff06c2400::t_d8596a9c274637 321,806
+  s_c6adeff06c2400::t_09f12b5b3b8958 322-327,799,810-824
+packages/browser/src/reader/features.ts
+  s_c6adeff06c2400::t_c846749aef14ff 567
+  s_c6adeff06c2400::t_6e8171c43d1534 78-80,88-89,95-96,125-126,232-233
+  s_c6adeff06c2400::t_895ad3f73e888e 275-281,290-294,301-302
+  s_c6adeff06c2400::t_d92a396695fdf8 70-77,81-87,90-94,97-124,127-134
+  s_c6adeff06c2400::t_135c988ffde630 3,146-164,229-231,234-274,282-289,295-300,303-304
+  s_c6adeff06c2400::t_97949dc3d1fedd 305
+docs/ARCHITECTURE.md
+  s_c6adeff06c2400::t_3d267f29ef9904 66-67,95-98,103-107,196-197,204-205
+  s_c6adeff06c2400::t_019f5b73eaf017 110-116
+  s_c6adeff06c2400::t_11f32614e1ee9b 99-102
+crates/pangenome-range-format/src/lib.rs
+  s_c6adeff06c2400::t_2177ae20b1b832 42-43
+  s_c6adeff06c2400::t_f0e764dc1e2809 9,40-41,44
+scripts/benchmark-source-cache-layout.py
+  s_c6adeff06c2400::t_b83fe1485958d8 1-238
+README.md
+  s_c6adeff06c2400::t_49fc78673b8ebe 77-88,91-92,151,178-180,184-186,190-191,198
+  s_c6adeff06c2400::t_019f5b73eaf017 70-72
+  s_c6adeff06c2400::t_11f32614e1ee9b 89-90
+scripts/benchmark-locus-search.mjs
+  s_c6adeff06c2400::t_749bf124d05b54 1-4,10-35,42,44-117,121-129
+  s_c6adeff06c2400::t_355bb00f32422d 6-9,118-120
+  s_c6adeff06c2400::t_67cd6af1dd1565 5
+  s_c6adeff06c2400::t_27cf5a3c620836 36-41,43
+crates/pangenome-range-build/src/scale.rs
+  s_c6adeff06c2400::t_de80101c2dd494 519-520
+  s_c6adeff06c2400::t_52d342de780713 537,543
+  s_c6adeff06c2400::t_d8596a9c274637 67,102,160,266-268,272,276-293,320,499,601,1252
+  s_c6adeff06c2400::t_b220140315a84a 428,920-923
+  s_c6adeff06c2400::t_cdf6584ed58e02 562
+  s_c6adeff06c2400::t_4960f77458d731 1,3,60,95,130-131,139,141,314-319,419,425,457-461,463,471-476,571-572,580,582
+  s_c6adeff06c2400::t_f57e1567c28aaf 924-929
+  s_c6adeff06c2400::t_e92daa6129234a 1175,1215-1238,1243,1245-1251
+  s_c6adeff06c2400::t_ffbaff641ec82c 2
+  s_c6adeff06c2400::t_13576cf9e04f59 22,1244
+  s_c6adeff06c2400::t_6e8171c43d1534 338-385,426,464-470,1176,1239-1242
+  s_c6adeff06c2400::t_6c194b1b5d0363 17,68-73,103-108,161-166,265,269-271,273-275,500-518,602-607,998,1042
+  s_c6adeff06c2400::t_c40c9aa54fa3a9 140,420,441-449,456,462,581
+  s_c6adeff06c2400::t_4a0d67f2cf8d30 434-439
+packages/browser/bin/launcher.mjs
+  s_c6adeff06c2400::t_6e8171c43d1534 77,120-124
+  s_c6adeff06c2400::t_0574e5b50da9ec 54-65,73,75-76,78-83,86,107,111-119,125-160
+.github/workflows/pages.yml
+  s_c6adeff06c2400::t_df58a39709e4a3 51-52
+packages/browser/src/reader/sources.ts
+  s_c6adeff06c2400::t_cf74c9ddb84e44 193-198
+docs/FIXED_WINDOW_ARCHIVE.md
+  s_c6adeff06c2400::t_49fc78673b8ebe 15,18,36,38-39,43-44,128
+  s_c6adeff06c2400::t_019f5b73eaf017 129-132
+docs/DISTRIBUTION.md
+  s_c6adeff06c2400::t_2aac5b3e9b0629 127-145
+  s_c6adeff06c2400::t_3d267f29ef9904 53-56
+results/2026-08-26-release-hardening-v1/config.json
+  s_c6adeff06c2400::t_b0f59cff7040d5 1-39
+crates/pangenome-range-build/src/source.rs
+  s_c6adeff06c2400::t_6e8171c43d1534 335,371-380,382-386
+  s_c6adeff06c2400::t_06b4e1621db01f 241-257
+  s_c6adeff06c2400::t_4db1cb528a7199 575-605
+  s_c6adeff06c2400::t_7cc4b3b93b4021 5,7-13,153,223-240,258-334,336-370,381,387-391,477-520
+  s_c6adeff06c2400::t_e926724334eca6 521
+crates/pangenome-range-build/src/lib.rs
+  s_c6adeff06c2400::t_df58a39709e4a3 17-18
+  s_c6adeff06c2400::t_6e8171c43d1534 22-24
+  s_c6adeff06c2400::t_0f7d6fac5cbef6 20-21,25
+crates/pangenome-range-build/src/features.rs
+  s_c6adeff06c2400::t_13576cf9e04f59 144-145,164,489
+  s_c6adeff06c2400::t_11c8e464f4cdcb 624,1038-1041,1043-1061,1063
+  s_c6adeff06c2400::t_4bc2ec6a370b9b 964
+  s_c6adeff06c2400::t_784c50d03d5929 355-389
+  s_c6adeff06c2400::t_457645f6dce224 968-995,1002-1003,1010-1037
+  s_c6adeff06c2400::t_6e8171c43d1534 3,5-7,328-329,758-760,996-1001,1004-1009
+  s_c6adeff06c2400::t_d8596a9c274637 25,179,210-217,485-488,490-491,541,559,562-598,611-623,661,669,689,750,752-757,761-766
+  s_c6adeff06c2400::t_aa5f2b9942f73d 290-291,325,330-332,392
+  s_c6adeff06c2400::t_0cd95beacdf2c5 253,274,602-603
+  s_c6adeff06c2400::t_558719dd870b28 1042,1062
+  s_c6adeff06c2400::t_b220140315a84a 258
+  s_c6adeff06c2400::t_dbd828ce886ac5 542
+  s_c6adeff06c2400::t_f44c0d7c8d43db 2,26,108-109,118-139,165-173,266,272
+  s_c6adeff06c2400::t_2177ae20b1b832 275
+  s_c6adeff06c2400::t_b5f87456bb07d6 751,893,899,925
+  s_c6adeff06c2400::t_1d5c489c35da5b 14,31-33,36-43,146-153,175-176,178,180-181,187-190,196,199,220-227,255,273,390,543,558,604-609,625-627,647-653,767
+  s_c6adeff06c2400::t_d37ebf0ea06c4b 154-157,533-536
+  s_d3dc22001e81bf::t_c27dae1faad532 391,768
+results/2026-08-26-release-hardening-v1/summary.json
+  s_c6adeff06c2400::t_b0f59cff7040d5 1-82
+crates/pangenome-range-format/src/archive.rs
+  s_c6adeff06c2400::t_502dbe62b4fcda 611
+  s_c6adeff06c2400::t_52a6e63a68f035 571-574
+  s_c6adeff06c2400::t_6ce09fef216bf9 575-578,744-753
+crates/pangenome-range-format/src/regional.rs
+  s_c6adeff06c2400::t_6ce09fef216bf9 272,286-289,291-292
+docs/FILE_FORMAT_V1.md
+  s_c6adeff06c2400::t_a5f10a53accc83 270-313
+  s_c6adeff06c2400::t_1f7e528e95e465 118,120-124,130,197-220
+  s_c6adeff06c2400::t_c846749aef14ff 150
+  s_c6adeff06c2400::t_6ce09fef216bf9 453-456
+crates/pangenome-range-format/src/validation.rs
+  s_c6adeff06c2400::t_f0e764dc1e2809 247-249
+  s_c6adeff06c2400::t_2177ae20b1b832 3-8
+results/2026-08-26-release-hardening-v1/environment.json
+  s_c6adeff06c2400::t_b0f59cff7040d5 1-36
+.github/workflows/ci.yml
+  s_c6adeff06c2400::t_df58a39709e4a3 27-28
+crates/pangenome-range-format/src/metadata.rs
+  s_c6adeff06c2400::t_f0e764dc1e2809 1,3-32,39-73,80-101,105-165,168-216
+  s_c6adeff06c2400::t_763bb5424d0e87 166-167
+  s_c6adeff06c2400::t_99b52db5ce4585 33-38,74-79
+  s_c6adeff06c2400::t_2177ae20b1b832 2,102-104
+crates/pangenome-range-build/src/test_support.rs
+  s_c6adeff06c2400::t_df58a39709e4a3 1-7,9-20,22-26
+  s_c6adeff06c2400::t_7746bad8364e39 21
+  s_c6adeff06c2400::t_52a6e63a68f035 8
+packages/browser/test/reader.test.ts
+  s_c6adeff06c2400::t_e8ad766b4f7ca2 846
+  s_c6adeff06c2400::t_cc5897293e0fd9 965-972,980
+  s_c6adeff06c2400::t_32336abda51e8b 547-549,552
+  s_c6adeff06c2400::t_f540219ed956bc 8,312-340,345-355
+  s_c6adeff06c2400::t_ea01c6ecdd7eb9 5,113-117,553-554
+  s_c6adeff06c2400::t_d496deda4eb79c 217-226,748-765
+  s_c6adeff06c2400::t_67cd6af1dd1565 11
+  s_c6adeff06c2400::t_6a42902c845199 858-859
+  s_c6adeff06c2400::t_6e8171c43d1534 176-177,341-344,550-551,892-893,925-927
+  s_c6adeff06c2400::t_7dcf115ca2ed0b 153-175,178-205,356,878-891,894-924,928-942
+  s_c6adeff06c2400::t_2e52fd495f11d1 357,766,943
+packages/browser/src/reader/regional.ts
+  s_c6adeff06c2400::t_6ce09fef216bf9 346,357-363,365
+crates/pangenome-range-build/src/fixed.rs
+  s_c6adeff06c2400::t_aa38d9417bf5e4 26,95,116,2279-2282,2285,2639
+  s_c6adeff06c2400::t_d8596a9c274637 94,115,2218-2220,2638
+  s_c6adeff06c2400::t_c8bd5a77d3db2e 5172-5177
+  s_c6adeff06c2400::t_407c53447f1930 9,24,2910-2930
+  s_c6adeff06c2400::t_de80101c2dd494 1484,1502
+  s_c6adeff06c2400::t_ea01c6ecdd7eb9 4061,4221,4327,4453-4463,4584-4603,4619,4624,5169-5171
+  s_c6adeff06c2400::t_32336abda51e8b 2931,4293-4321,4431-4451,4473-4493,4506-4518
+  s_c6adeff06c2400::t_df58a39709e4a3 4861
+  s_c6adeff06c2400::t_051b8b859ec14c 10
+  s_c6adeff06c2400::t_4ce6c560e2b842 4874,4900-4918,4979-4985
+  s_c6adeff06c2400::t_3529225fb69b17 11-14
+  s_c6adeff06c2400::t_0cd95beacdf2c5 2787
+  s_c6adeff06c2400::t_e33ab93a47d51c 420-422,425-432,2780-2782,2785-2786,2788-2792
+  s_c6adeff06c2400::t_52a6e63a68f035 4494-4505
+  s_c6adeff06c2400::t_98b4c2ee392e10 96-97,117-118,1445,1482-1483,1485-1487,1500-1501,1503-1505,2370-2371,5263
+  s_c6adeff06c2400::t_037c50b343d6fa 2932,4452,4519
+test-data/README.md
+  s_c6adeff06c2400::t_df58a39709e4a3 3-5,19-20,36-39
+crates/pangenome-range-format/src/features.rs
+  s_c6adeff06c2400::t_c846749aef14ff 45
+results/2026-08-26-release-hardening-v1/search-queries.csv
+  s_c6adeff06c2400::t_b0f59cff7040d5 1-17
+docs/OPTIMIZATION_LOG.md
+  s_c6adeff06c2400::t_9d65fa53d37605 718-764
+test-data/golden/record-archive-v1.json
+  s_c6adeff06c2400::t_15d219eb39d946 8-9,13-23,55
+packages/browser/test/launcher.node-test.mjs
+  s_c6adeff06c2400::t_0574e5b50da9ec 58-76,130,133-148
+  s_c6adeff06c2400::t_fe9ea425720c2b 94-95,106,108
+  s_c6adeff06c2400::t_6e8171c43d1534 54-57,131-132
+  s_c6adeff06c2400::t_02365e97cf5155 149-150
+docs/adr/0001-v1-extension-directory.md
+  s_c6adeff06c2400::t_49346e77e54af1 98-101,103-105,119-122
+results/2026-08-26-release-hardening-v1/REPORT.md
+  s_c6adeff06c2400::t_6968036d9fed69 1-217
+  s_c6adeff06c2400::t_17381c4bf9f00f 218-285
+packages/browser/src/reader/index.ts
+  s_c6adeff06c2400::t_135c988ffde630 35-36
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.24",
+  "base_commit_sha": "28427b55820826dfc22fe9de45dd40038c2d9ea5",
+  "prompts": {},
+  "sessions": {
+    "s_c6adeff06c2400": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a03eda-5280-7641-a2d1-995a448eacdd",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "aaron decker <aaron@ard.ninja>"
+    },
+    "s_d3dc22001e81bf": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a040e2-99f0-7422-b89a-aa07809a51b3",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "aaron decker <aaron@ard.ninja>"
+    }
+  }
+}
