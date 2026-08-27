@@ -1,0 +1,37 @@
+crates/pangenome-range-cli/tests/cli.rs
+  s_43ab747f9fb823::t_7b382e246791fa 26-37
+crates/pangenome-range-build/src/fixed.rs
+  s_43ab747f9fb823::t_7b382e246791fa 2838-2852,2855
+  s_43ab747f9fb823::t_084e862141f39e 2837
+docs/OPTIMIZATION_LOG.md
+  s_43ab747f9fb823::t_73c4ec5bd0d1bb 806-829
+crates/pangenome-range-build/src/lib.rs
+  s_43ab747f9fb823::t_7b382e246791fa 32
+results/2026-08-27-1000gplons-hs38d1-na19239-h0/REPORT.md
+  s_43ab747f9fb823::t_75b0c78db38570 1-84
+results/2026-08-27-1000gplons-hs38d1-na19239-h0/summary.json
+  s_43ab747f9fb823::t_75b0c78db38570 1-63
+results/2026-08-27-1000gplons-hs38d1-na19239-h0/queries.csv
+  s_43ab747f9fb823::t_75b0c78db38570 1-8
+crates/pangenome-range-cli/src/main.rs
+  s_43ab747f9fb823::t_d3efd37c60a9b6 482,506-514
+  s_43ab747f9fb823::t_4a51f9aaeb0c7d 398-401
+  s_43ab747f9fb823::t_7b382e246791fa 9,403,412,426-428,474
+  s_43ab747f9fb823::t_164fd3a1db9de7 475,477-480,485,515-540,561-576,578,587,592-593
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.24",
+  "base_commit_sha": "121c6762beaa4df45744d564b1e3d33a450e2b4a",
+  "prompts": {},
+  "sessions": {
+    "s_43ab747f9fb823": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a040bc-c833-7c20-b3c3-9100cf534bde",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "aaron decker <aaron@ard.ninja>"
+    }
+  }
+}
