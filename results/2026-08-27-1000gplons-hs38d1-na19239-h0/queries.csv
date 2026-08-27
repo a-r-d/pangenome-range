@@ -1,0 +1,8 @@
+query_id,query_class,sample,contig,start,end,context,selected_chunks,haplotype_tiles_checked,canonical_hash,correctness,haplotype_tiles_correct
+chr1-start,boundary-start,NA19239,1,0,32768,100,2,2,69a49e43b088d15b90d7f51247ce0b53365b02f09b4b4877512c3d6d749f4124,true,true
+chr1-middle,autosome-middle,NA19239,1,124456524,124521060,100,5,5,5463d7e5e4595c4ad67f6bee2f8c07101837480e996d4a35ab718fdf5f183727,true,true
+chr6-middle,autosome-middle,NA19239,6,85367243,85432779,100,5,5,2eef5dd634d70816ed3f027ed00c534e320d48bb5c43c7738a77aa2e60d53e9d,true,true
+chr12-middle,autosome-middle,NA19239,12,66583890,66649426,100,5,5,6582e8294722ba0f51a7a22d5f890adc560261573a87b9f590ebd9a6f4f5a498,true,true
+chr22-end,boundary-end,NA19239,22,50751542,50817078,100,5,5,68b36a51406ed7ff050544a5b26ae2f8746b8a62d2f0373d2f9e948719d52de9,true,true
+chrX-middle,sex-chromosome-middle,NA19239,X,77986158,78051694,100,5,5,d2a02d6d5e1fd88678e6bc08bae2cf94eb520d51fd3406413bf4a7faafcbd74f,true,true
+chrY-end,boundary-end,NA19239,Y,57161874,57227410,100,5,5,42c2cba0908f9091a616d77874d2fe7e98ac0dbaf48a7eda53229509da9fe40b,true,true

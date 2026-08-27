@@ -2835,8 +2835,24 @@ pub fn source_oracle(
     path_index: &PathIndex,
     query: &QuerySpec,
 ) -> ExperimentResult<OracleResult> {
+    source_oracle_for_haplotype(graph, path_index, query, 0)
+}
+
+/// Extracts the canonical source result for a real named population
+/// haplotype used explicitly as the archive coordinate anchor.
+///
+/// # Errors
+///
+/// Returns an error when the query is invalid, the named haplotype is absent,
+/// or the requested source region cannot be extracted or encoded canonically.
+pub fn source_oracle_for_haplotype(
+    graph: &GBZ,
+    path_index: &PathIndex,
+    query: &QuerySpec,
+    haplotype: usize,
+) -> ExperimentResult<OracleResult> {
     query.validate()?;
-    let query_name = FullPathName::reference(&query.sample, &query.contig);
+    let query_name = FullPathName::haplotype(&query.sample, &query.contig, haplotype, 0);
     let (regional, _) = extract_local_region(
         graph,
         path_index,

@@ -6,7 +6,7 @@ use pangenome_range_build::{
     QuerySpec, build_persistent_source_cache, export_conformance_fixtures,
     inspect_persistent_source_cache, internal_gbz_base_query, prune_persistent_source_cache,
     run_encode, run_encoder_scale_experiment, run_fixed_window_experiment, source_oracle,
-    validate_fixed_archive_with_options,
+    source_oracle_for_haplotype, validate_fixed_archive_with_options,
 };
 use pangenome_range_format::{
     FileRangeSource, NetworkProfile, RangeSource, TracingRangeSource, ValidationMode,
@@ -395,8 +395,12 @@ fn fixtures(args: &mut impl Iterator<Item = String>) -> AppResult<()> {
     Ok(())
 }
 
+#[allow(
+    clippy::too_many_lines,
+    reason = "keeping the flat verifier option table in one place makes its oracle contract auditable"
+)]
 fn verify(args: &mut impl Iterator<Item = String>) -> AppResult<()> {
-    let usage = "usage: pangenome-range verify <input.pngr> --against <input.gbz> (--workload queries.json | --sample NAME --contig NAME --start BP --end BP) [options]";
+    let usage = "usage: pangenome-range verify <input.pngr> --against <input.gbz> (--workload queries.json | --sample NAME --contig NAME --start BP --end BP) [--reference-haplotype N] [options]";
     let archive = PathBuf::from(args.next().ok_or(usage)?);
     let mut against = None;
     let mut sample = None;
@@ -405,6 +409,7 @@ fn verify(args: &mut impl Iterator<Item = String>) -> AppResult<()> {
     let mut end = None;
     let mut workload = None;
     let mut report = None;
+    let mut reference_haplotype = None;
     let mut context = 100_u64;
     let mut coalescing_gap = 65_536_u64;
     let mut window_size = 16_384_u64;
@@ -418,6 +423,9 @@ fn verify(args: &mut impl Iterator<Item = String>) -> AppResult<()> {
             "--end" => end = Some(parse_option(args, &flag)?),
             "--workload" => workload = Some(PathBuf::from(option_value(args, &flag)?)),
             "--report" => report = Some(PathBuf::from(option_value(args, &flag)?)),
+            "--reference-haplotype" => {
+                reference_haplotype = Some(parse_option(args, &flag)?);
+            }
             "--context" => context = parse_option(args, &flag)?,
             "--coalescing-gap" => coalescing_gap = parse_option(args, &flag)?,
             "--window-size" => window_size = parse_option(args, &flag)?,
@@ -463,20 +471,18 @@ fn verify(args: &mut impl Iterator<Item = String>) -> AppResult<()> {
             context,
         }]
     };
-    let graph: GBZ = serialize::load_from(&against)?;
+    let mut graph: GBZ = serialize::load_from(&against)?;
+    select_explicit_reference_samples(&mut graph, &queries, reference_haplotype)?;
     let path_index = PathIndex::new(&graph, 1_000, false)?;
-    let archive_config = FixedArchiveConfig {
-        experiment_id: "cli-verify".into(),
-        window_size,
-        codec,
-        deduplicate_chunks: false,
-        max_uncompressed_chunk_bytes: 8 * 1024 * 1024,
-        min_window_size: 1_024,
+    let oracle = VerificationOracle {
+        graph: &graph,
+        path_index: &path_index,
+        reference_haplotype,
     };
+    let archive_config = verification_archive_config(window_size, codec);
     let mut reader = FixedArchiveReader::open(&archive)?;
     let measurements = verify_queries(
-        &graph,
-        &path_index,
+        &oracle,
         &mut reader,
         &archive_config,
         &queries,
@@ -494,6 +500,41 @@ fn verify(args: &mut impl Iterator<Item = String>) -> AppResult<()> {
         std::fs::write(report, output.as_bytes())?;
     }
     println!("{output}");
+    Ok(())
+}
+
+fn verification_archive_config(window_size: u64, codec: ChunkCodec) -> FixedArchiveConfig {
+    FixedArchiveConfig {
+        experiment_id: "cli-verify".into(),
+        window_size,
+        codec,
+        deduplicate_chunks: false,
+        max_uncompressed_chunk_bytes: 8 * 1024 * 1024,
+        min_window_size: 1_024,
+    }
+}
+
+fn select_explicit_reference_samples(
+    graph: &mut GBZ,
+    queries: &[QuerySpec],
+    reference_haplotype: Option<usize>,
+) -> AppResult<()> {
+    if reference_haplotype.is_none() {
+        return Ok(());
+    }
+    let reference_samples = queries
+        .iter()
+        .map(|query| query.sample.clone())
+        .collect::<BTreeSet<_>>();
+    let requested = reference_samples.len();
+    let reference_samples = reference_samples.into_iter().collect::<Vec<_>>();
+    let selected = graph.set_reference_samples(&reference_samples);
+    if selected != requested {
+        return Err(format!(
+            "could not select every explicit reference sample from the GBZ (requested {requested}, selected {selected})"
+        )
+        .into());
+    }
     Ok(())
 }
 
@@ -517,9 +558,24 @@ fn verification_output(
     }
 }
 
+struct VerificationOracle<'a> {
+    graph: &'a GBZ,
+    path_index: &'a PathIndex,
+    reference_haplotype: Option<usize>,
+}
+
+impl VerificationOracle<'_> {
+    fn extract(&self, query: &QuerySpec) -> AppResult<pangenome_range_build::OracleResult> {
+        Ok(if let Some(haplotype) = self.reference_haplotype {
+            source_oracle_for_haplotype(self.graph, self.path_index, query, haplotype)?
+        } else {
+            source_oracle(self.graph, self.path_index, query)?
+        })
+    }
+}
+
 fn verify_queries(
-    graph: &GBZ,
-    path_index: &PathIndex,
+    oracle: &VerificationOracle<'_>,
     reader: &mut FixedArchiveReader,
     archive_config: &FixedArchiveConfig,
     queries: &[QuerySpec],
@@ -528,13 +584,13 @@ fn verify_queries(
 ) -> AppResult<Vec<QueryMeasurement>> {
     let mut measurements = Vec::with_capacity(queries.len());
     for query in queries {
-        let oracle = source_oracle(graph, path_index, query)?;
+        let expected = oracle.extract(query)?;
         let measurement = reader.query(
             archive_config,
             query,
             coalescing_gap,
-            &oracle,
-            Some((graph, path_index)),
+            &expected,
+            Some((oracle.graph, oracle.path_index)),
         )?;
         if let Some(expected) = expected_hashes.get(&query.id)
             && measurement.canonical_hash != *expected

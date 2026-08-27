@@ -803,3 +803,27 @@ identity/no-transform, immutable caching, and exposed-range-header checks.
 Those single public observations are not loopback percentiles. Full raw
 evidence and screenshots are retained in
 `results/2026-08-27-viewer-explorer-v1/`.
+
+## 2026-08-27: untagged 1000 Genomes archive accepted with explicit real anchor
+
+The 17,771,541,912-byte 1000 Genomes hs38d1 GBZ has no tagged reference
+sample. Rebuilding a tagged GBZ through the upstream fully loaded path was
+rejected after an uncapped attempt exceeded safe memory. The accepted path
+does not add annotations or synthetic identity: it explicitly selects the real
+`NA19239` haplotype-0 paths as the coordinate anchor and labels the resulting
+coordinates as not GRCh38.
+
+Under an exact 4 GiB cgroup limit, the bounded disk-backed encoder completed in
+500.79 seconds with 586,276 KiB peak RSS and no swap. The 8,975,880,203-byte
+archive contains 190,958 physical payloads covering 24 paths and
+3,088,146,717 reference bases. It has SHA-256
+`71730fab7aad0dbbef81cf7c74b4fa8dbacbb3aad5bab0a797349120b18f6afb`.
+The mandatory pre-rename gate validated every directory entry and physical
+payload; 7/7 independent source-oracle queries and all 32 selected tile-local
+haplotype comparisons matched across autosomes, X, Y, and start/end boundaries.
+
+The content-addressed public object passed exact local size/SHA comparison,
+four strict `206` byte-equality probes including EOF, stable ETag, CORS and
+preflight, exposed range headers, identity encoding, and immutable/no-transform
+caching. Full evidence is retained in
+`results/2026-08-27-1000gplons-hs38d1-na19239-h0/`.

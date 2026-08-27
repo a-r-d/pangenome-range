@@ -1,0 +1,63 @@
+{
+  "schemaVersion": 1,
+  "verdict": "accepted",
+  "archive": {
+    "bytes": 8975880203,
+    "sha256": "71730fab7aad0dbbef81cf7c74b4fa8dbacbb3aad5bab0a797349120b18f6afb",
+    "url": "https://archives.ard.ninja/pangenome-range/sha256/71730fab7aad0dbbef81cf7c74b4fa8dbacbb3aad5bab0a797349120b18f6afb/1000gplons-hs38d1-na19239-h0-v1-t8-zstd3.pngr"
+  },
+  "source": {
+    "bytes": 17771541912,
+    "sha256": "10518b259e8ba0b1a7fa586301a7dcea46e5152f53ee09a3e1ad7507efd98063",
+    "uri": "https://cgl.gi.ucsc.edu/data/giraffe/mapping/graphs/for-NA19239/1000gplons/hs38d1/"
+  },
+  "referenceAnchor": {
+    "sample": "NA19239",
+    "haplotype": 0,
+    "coordinateSystem": "NA19239 haplotype 0; not GRCh38",
+    "contigs": 24,
+    "bases": 3088146717
+  },
+  "annotations": null,
+  "construction": {
+    "wholeWallSeconds": 500.79,
+    "constructionWallMs": 287453.446452,
+    "timeToFirstPayloadMs": 180462.92421,
+    "peakRssKiB": 586276,
+    "memoryMaxBytes": 4294967296,
+    "swaps": 0,
+    "threads": 8,
+    "directoryPages": 5901,
+    "directoryEntries": 190958,
+    "physicalPayloads": 190958,
+    "indexBytes": 24173045,
+    "payloadBytes": 8951707158,
+    "occurrenceIndexBytes": 0,
+    "payloadSpoolBytes": 0,
+    "scratchBytes": 0
+  },
+  "correctness": {
+    "mandatoryPreRenameValidationPassed": true,
+    "sourceOracleQueriesCorrect": 7,
+    "sourceOracleQueries": 7,
+    "sourceOracleTilesCorrect": 32,
+    "sourceOracleTiles": 32,
+    "optionalFullReconstructionPayloads": 10378,
+    "optionalFullReconstructionErrors": 0,
+    "optionalFullReconstructionCompleted": false
+  },
+  "publicOrigin": {
+    "passed": true,
+    "etag": "\"6a902c20-21701100b\"",
+    "rangeProbes": 4,
+    "allRangeBytesMatchLocal": true,
+    "cors": "*",
+    "cacheControl": "public, max-age=31536000, immutable, no-transform"
+  },
+  "encoder": {
+    "version": "0.1.0",
+    "gitCommit": "eb871999607e7a916589907adf3078159a059a10",
+    "workingDiffSha256": "64071de0dab1ef5049e36e32bccf4f976425caa0e4bde8ff7b46962d556c50a5",
+    "binarySha256": "dfb093776b0459212129069aa179920bfe549eb1e1804e5ce8bae9ff228548d7"
+  }
+}

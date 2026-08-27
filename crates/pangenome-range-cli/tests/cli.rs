@@ -23,3 +23,15 @@ fn encode_help_does_not_require_positional_arguments() {
     assert!(stdout.contains("pangenome-range encode <input.gbz> <output.pngr>"));
     assert!(output.stderr.is_empty());
 }
+
+#[test]
+fn verify_help_documents_explicit_reference_haplotype() {
+    let output = cli()
+        .args(["verify", "archive.pngr", "--help"])
+        .output()
+        .expect("run CLI");
+    assert!(output.status.success());
+    let stdout = String::from_utf8(output.stdout).expect("UTF-8 stdout");
+    assert!(stdout.contains("--reference-haplotype N"));
+    assert!(output.stderr.is_empty());
+}

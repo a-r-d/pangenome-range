@@ -29,7 +29,7 @@ pub use fixed::{
     ChunkCodec, FixedArchiveConfig, FixedArchiveReader, OracleResult, QueryMeasurement, QuerySpec,
     build_fixed_archive_from_source_with_options, build_fixed_archive_with_options,
     export_conformance_fixtures, internal_gbz_base_query, query_fixed_archive, source_oracle,
-    validate_fixed_archive, validate_fixed_archive_with_options,
+    source_oracle_for_haplotype, validate_fixed_archive, validate_fixed_archive_with_options,
     validate_fixed_archive_with_progress,
 };
 pub use scale::{
