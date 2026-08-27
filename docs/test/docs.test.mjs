@@ -21,10 +21,14 @@ test("the demo uses only public package exports and a configurable archive", asy
     source,
     /configuredArchiveUrl\.length === 0 \? "fixture" : "configured"/,
   );
-  assert.match(source, /choice === "fixture"/);
+  assert.match(source, /archiveChoice\.value === "fixture"/);
   assert.doesNotMatch(source, /packages\/browser\/src/);
-  assert.match(source, /local evidence within each source tile/);
-  assert.match(source, /not named people or globally/);
+  assert.match(source, /opened\.searchLoci/);
+  assert.match(source, /opened\.summary/);
+  assert.match(source, /chooseViewerLod/);
+  assert.match(source, /remain local to each source tile/);
+  assert.match(source, /not people, alleles, frequencies/);
+  assert.match(source, /pangenome-explorer-active/);
 });
 
 test("the VitePress base path matches the repository Pages path", async () => {

@@ -158,7 +158,10 @@ export interface QueryTrace {
   readonly payloadBytes: number;
   readonly cacheHits: QueryCacheHits;
   readonly integrityMs: number;
+  /** Wall time covered by the union of decompression task intervals. */
   readonly decompressionMs: number;
+  /** Sum of decompression task durations; may exceed elapsed wall time. */
+  readonly decompressionTaskMs: number;
   readonly decodeMs: number;
   readonly mergeMs: number;
   readonly selectedChunks: number;
@@ -242,7 +245,10 @@ export interface FeatureQueryTrace {
   readonly cacheHits: number;
   readonly pagesAvoidedByLimit: number;
   readonly integrityMs: number;
+  /** Wall time covered by the union of decompression task intervals. */
   readonly decompressionMs: number;
+  /** Sum of decompression task durations; may exceed elapsed wall time. */
+  readonly decompressionTaskMs: number;
   readonly decodeMs: number;
 }
 

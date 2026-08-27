@@ -23,6 +23,9 @@ export default defineConfig({
           { text: "Hosting", link: "/HOSTING" },
           { text: "Distribution", link: "/DISTRIBUTION" },
           { text: "Architecture", link: "/ARCHITECTURE" },
+          { text: "Viewer requirements", link: "/VIEWER_PRODUCT_REQUIREMENTS" },
+          { text: "Viewer performance", link: "/VIEWER_PERFORMANCE" },
+          { text: "Viewer format gaps", link: "/VIEWER_FORMAT_GAPS" },
         ],
       },
       {

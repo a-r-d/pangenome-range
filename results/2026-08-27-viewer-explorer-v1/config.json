@@ -1,0 +1,48 @@
+{
+  "schemaVersion": 1,
+  "command": "browser",
+  "archivePath": "/media/ard/eba76579-d702-4ff0-b5dd-eb503a726a4d/pangenome-range-data/runs/2026-08-26-gencode-v50-whole-hprc/hprc-v1-gencode-v50-disk-t8.pngr",
+  "workloadPath": "/media/ard/samsung-2tb/projects/pangenome-range/results/2026-08-27-viewer-explorer-v1/workload.json",
+  "workload": {
+    "schemaVersion": 1,
+    "archiveSha256": "ecf5ae4fa8c784a80307507f58bed894311b8560724b57de0fcc35237c324b63",
+    "seed": "retained-chm13-chr1-100kb",
+    "queries": [
+      {
+        "id": "chm13-chr1-100k",
+        "class": "retained-100kb-detailed",
+        "sample": "CHM13",
+        "contig": "chr1",
+        "start": 1000000,
+        "end": 1100000,
+        "context": 100,
+        "expectedCanonicalHash": "b191be02fc2a9556349d8b5b97b268c90c579b1c275cc600355bfaae5b499473"
+      }
+    ]
+  },
+  "browsers": [
+    "chromium"
+  ],
+  "decoders": [
+    "pure-js",
+    "wasm"
+  ],
+  "scenarios": [
+    "cold-library-transport-no-store",
+    "cold-library-normal-http-cache",
+    "warm-directory-cache",
+    "repeated-same-query",
+    "nearby-pan-query",
+    "distant-random-query"
+  ],
+  "libraryCache": {
+    "directoryBytes": 1048576,
+    "payloadBytes": 33554432
+  },
+  "origin": {
+    "cors": "*",
+    "exposedHeaders": true,
+    "cacheControl": "public, max-age=31536000, immutable, no-transform",
+    "contentEncoding": "identity"
+  }
+}

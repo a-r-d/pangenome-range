@@ -762,3 +762,44 @@ remains raw, byte-bounded, and integrity checked.
 
 Full evidence is retained in
 `results/2026-08-26-release-hardening-v1/`.
+
+## 2026-08-27: explorer and browser critical-path instrumentation accepted
+
+The application now uses archive-native named-locus and summary extensions as
+primary navigation rather than app-side indexes or eager graph queries. Wide
+views request summary bins; a deterministic encoded/decoded/node/edge/
+occurrence budget gates progressive regional payload streaming. The public
+viewer gained a reference-anchored stable layout, genomic viewport controls,
+layer/display/theme controls, selection and LOD events, and performance
+snapshots without taking ownership of storage or transport.
+
+The initial browser trace accumulated overlapping per-tile decompression and
+decode durations. A first attempted interval ledger still attributed scheduler
+delay to an `async` timing wrapper. That run was rejected. The accepted wrapper
+preserves a synchronous decoder's return boundary; interval unions report wall
+occupancy while aggregate task duration remains separately labeled.
+
+The exact retained `CHM13#chr1:1,000,000-1,100,000` query, context 100, archive
+SHA-256 `ecf5ae4f...24b63`, and canonical hash `b191be02...99473` produced:
+
+| Chromium loopback measurement | Retained before | Pure JS | WASM |
+| --- | ---: | ---: | ---: |
+| Cold no-store query wall | 1,678.3 ms | 1,565.3 ms | 1,458.1 ms |
+| Cold total / open | 1,717.3 / 27.3 ms | 1,577.7 / 12.2 ms | 1,485.3 / 12.4 ms |
+| Actual reads / bytes | 4 / 294,198 B | 4 / 294,358 B | 4 / 294,358 B |
+| Decompression wall / task | overlapping | 32.2 / 32.2 ms | 6.5 / 6.5 ms |
+| Integrity / regional decode / merge | overlapping | 32.8 / 1,373.4 / 55.5 ms | 32.8 / 1,288.5 / 63.4 ms |
+
+All results matched the exact canonical hash and planned ranges reconciled with
+origin observations. The requested 2x query target (`<=839.2 ms`) was not met.
+WASM cut zstd time but regional payload decoding and packed-GBWT reconstruction
+remain dominant, so WASM stays optional and workers/OffscreenCanvas were not
+adopted without a controlled end-to-end win.
+
+One public-path observation measured exact `HLA-B` at 125.5 ms cold and 1.2 ms
+warm, and the 100 kb summary at 106.2 ms cold and 0.3 ms warm. The public
+origin passed sampled local-byte equality, strict `206`, CORS/preflight,
+identity/no-transform, immutable caching, and exposed-range-header checks.
+Those single public observations are not loopback percentiles. Full raw
+evidence and screenshots are retained in
+`results/2026-08-27-viewer-explorer-v1/`.

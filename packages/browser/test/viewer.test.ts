@@ -5,6 +5,7 @@ import type {
   RegionQuery,
   RegionTile,
 } from "../src/reader/types.js";
+import { chooseViewerLod, recommendedSummaryBins } from "../src/viewer/lod.js";
 import {
   hitTestNode,
   layoutViewerModel,
@@ -12,6 +13,10 @@ import {
   viewerBudgets,
   viewerSummary,
 } from "../src/viewer/model.js";
+import {
+  formatGenomicCoordinate,
+  parseGenomicCommand,
+} from "../src/viewer/navigation.js";
 import { ProgressiveTileQuery } from "../src/viewer/query-controller.js";
 import { renderViewerCanvas } from "../src/viewer/renderer.js";
 
@@ -82,6 +87,32 @@ describe("viewer model and layout", () => {
     ).toBe(1n);
   });
 
+  it("produces a stable graph layout as progressive tiles arrive", () => {
+    const first = new ViewerModelBuilder(query, viewerBudgets());
+    first.addTile(makeTile(900n, 10n, 200));
+    first.addTile(makeTile(100n, 0n, 100));
+    const second = new ViewerModelBuilder(query, viewerBudgets());
+    second.addTile(makeTile(100n, 0n, 100));
+    second.addTile(makeTile(900n, 10n, 200));
+    const project = (builder: ViewerModelBuilder) =>
+      layoutViewerModel(builder.snapshot(), {
+        width: 900,
+        height: 460,
+      }).nodes.map(
+        ({ id, x, y, lane, branchKind, anchorStart, anchorEnd }) => ({
+          id: id.toString(),
+          x,
+          y,
+          lane,
+          branchKind,
+          anchorStart,
+          anchorEnd,
+        }),
+      );
+
+    expect(project(first)).toEqual(project(second));
+  });
+
   it("renders the bounded layout through Canvas 2D", () => {
     const builder = new ViewerModelBuilder(query, viewerBudgets());
     builder.addTile(makeTile(0n));
@@ -101,6 +132,101 @@ describe("viewer model and layout", () => {
       expect.any(Number),
       expect.any(Number),
     );
+  });
+});
+
+describe("genomic command parsing", () => {
+  const references = [
+    { sample: "GRCh38", contig: "chr6", start: 0, end: 200_000_000 },
+    { sample: "CHM13", contig: "chr1", start: 0, end: 248_000_000 },
+  ];
+
+  it.each([
+    ["chr6:31,498,145-31,511,124", "GRCh38", "chr6", 31_498_145, 31_511_124],
+    ["GRCh38 chr6:31498145-31511124", "GRCh38", "chr6", 31_498_145, 31_511_124],
+    ["CHM13#chr1:1000000-1100000", "CHM13", "chr1", 1_000_000, 1_100_000],
+  ])(
+    "resolves %s against real archive references",
+    (input, sample, contig, start, end) => {
+      const parsed = parseGenomicCommand(input as string, references, "GRCh38");
+      expect(parsed).toMatchObject({ kind: "coordinate", start, end });
+      if (parsed.kind === "coordinate") {
+        expect(parsed.reference).toMatchObject({ sample, contig });
+        expect(parsed.canonical).toBe(
+          formatGenomicCoordinate(
+            sample as string,
+            contig as string,
+            start as number,
+            end as number,
+          ),
+        );
+      }
+    },
+  );
+
+  it("routes names to the archive-native locus index", () => {
+    expect(parseGenomicCommand("HLA-B", references)).toEqual({
+      kind: "locus",
+      name: "HLA-B",
+    });
+  });
+
+  it("rejects ambiguous and absent coordinate references", () => {
+    const ambiguous = [
+      ...references,
+      { sample: "CHM13", contig: "chr6", start: 0, end: 200_000_000 },
+    ];
+    expect(() => parseGenomicCommand("chr6:10-20", ambiguous)).toThrow(
+      /multiple reference samples/,
+    );
+    expect(() => parseGenomicCommand("chr99:10-20", references)).toThrow(
+      /no overlapping reference/,
+    );
+  });
+});
+
+describe("summary-driven detail policy", () => {
+  const reference = {
+    sample: "GRCh38",
+    contig: "chr6",
+    start: 0,
+    end: 100_000,
+  };
+  const bin = {
+    reference,
+    level: 0,
+    binSpan: 10_000,
+    coveredBases: 10_000n,
+    tileCount: 1n,
+    encodedBytes: 10_000n,
+    decodedBytes: 100_000n,
+    nodeRecords: 500n,
+    edgeRecords: 700n,
+    gbwtRecords: 1_000n,
+    occurrences: 5_000n,
+  };
+
+  it("loads detail only when scale and every complexity counter fit", () => {
+    const decision = chooseViewerLod([bin], { start: 0, end: 100_000 }, 1_000);
+    expect(decision.mode).toBe("detailed");
+    expect(decision.automaticDetail).toBe(true);
+    expect(decision.limitingMetrics).toEqual([]);
+  });
+
+  it("declines detail when an archive-derived budget is exceeded", () => {
+    const decision = chooseViewerLod(
+      [{ ...bin, decodedBytes: 100_000_000n, occurrences: 3_000_000n }],
+      { start: 0, end: 100_000 },
+      1_000,
+    );
+    expect(decision.mode).toBe("regional");
+    expect(decision.automaticDetail).toBe(false);
+    expect(decision.limitingMetrics).toEqual(["decodedBytes", "occurrences"]);
+  });
+
+  it("requests approximately one bin per four horizontal pixels", () => {
+    expect(recommendedSummaryBins(1_200)).toBe(300);
+    expect(recommendedSummaryBins(100)).toBe(32);
   });
 });
 
@@ -132,22 +258,33 @@ describe("progressive viewer queries", () => {
   });
 });
 
-function makeTile(archiveOffset: bigint): RegionTile {
+function makeTile(
+  archiveOffset: bigint,
+  nodeShift = 0n,
+  coreStart = 100,
+): RegionTile {
   const sequenceBytes = new TextEncoder().encode("ACGTT");
-  const ids = BigUint64Array.from([1n, 2n, 3n, 4n]);
+  const ids = BigUint64Array.from([1n, 2n, 3n, 4n], (id) => id + nodeShift);
   const sequenceOffsets = Uint32Array.from([0, 1, 2, 4, 5]);
-  const edgeFrom = BigUint64Array.from([2n, 6n, 6n]);
-  const edgeTo = BigUint64Array.from([4n, 4n, 8n]);
-  const referenceTraversal = BigUint64Array.from([2n, 4n]);
+  const handleShift = nodeShift << 1n;
+  const edgeFrom = BigUint64Array.from([2n, 6n, 6n], (id) => id + handleShift);
+  const edgeTo = BigUint64Array.from([4n, 4n, 8n], (id) => id + handleShift);
+  const referenceTraversal = BigUint64Array.from(
+    [2n, 4n],
+    (id) => id + handleShift,
+  );
   const traversalOffsets = Uint32Array.from([0, 2, 5]);
-  const traversalNodes = BigUint64Array.from([2n, 4n, 2n, 6n, 4n]);
+  const traversalNodes = BigUint64Array.from(
+    [2n, 4n, 2n, 6n, 4n],
+    (id) => id + handleShift,
+  );
   const traversalWeights = BigUint64Array.from([10n, 3n]);
   return {
     reference: { sample: "GRCh38", contig: "chr1", start: 100, end: 200 },
-    coreStart: 100,
-    coreEnd: 200,
-    start: 100,
-    end: 200,
+    coreStart,
+    coreEnd: coreStart + 100,
+    start: coreStart,
+    end: coreStart + 100,
     semantics: "anonymous-distinct-weighted-tile-paths",
     nodes: { ids, sequenceOffsets, sequenceBytes },
     topology: { from: edgeFrom, to: edgeTo },
@@ -168,7 +305,10 @@ function makeTile(archiveOffset: bigint): RegionTile {
     nodeIds: ids,
     nodeSequenceOffsets: sequenceOffsets,
     nodeSequences: sequenceBytes,
-    edges: BigUint64Array.from([2n, 4n, 6n, 4n, 6n, 8n]),
+    edges: BigUint64Array.from(
+      [2n, 4n, 6n, 4n, 6n, 8n],
+      (id) => id + handleShift,
+    ),
     referenceTraversal,
     traversalOffsets,
     traversalNodes,
@@ -234,6 +374,7 @@ function makeTrace(start: number): QueryTrace {
     cacheHits: { bootstrap: 0, directory: 0, payload: 0 },
     integrityMs: 0,
     decompressionMs: 0,
+    decompressionTaskMs: 0,
     decodeMs: 0,
     mergeMs: 0,
     selectedChunks: 1,

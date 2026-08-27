@@ -1,0 +1,28 @@
+{
+  "schemaVersion": 1,
+  "route": "/demo?archive=fixture&sample=GRCh38&contig=chr1&start=100&end=102&context=100",
+  "origin": "strict loopback 206 Pages smoke",
+  "viewport": {
+    "width": 1440,
+    "height": 1050,
+    "deviceScaleFactor": 1
+  },
+  "timingsMs": {
+    "objectOpen": 13.6,
+    "firstSummaryPaint": 0.5,
+    "firstGraphTilePaint": 2.1,
+    "queryComplete": 2.6,
+    "layout": 0.1,
+    "paint": 0.5,
+    "frameP95": 1.2
+  },
+  "rangeResponses": 12,
+  "configuredPublicArchivePassed": true,
+  "browserBackForwardPassed": true,
+  "browserMatrix": ["chromium", "firefox", "webkit"],
+  "limitations": [
+    "Frame p95 is the viewer controller's bounded local sample, not a DevTools trace.",
+    "The tiny deterministic fixture establishes interaction and rendering behavior, not large-region performance.",
+    "A long-task observer corpus remains outstanding."
+  ]
+}

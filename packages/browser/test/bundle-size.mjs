@@ -43,8 +43,8 @@ assert(
   `node entry is ${measurements.node.rawBytes} bytes; budget is 8192`,
 );
 assert(
-  measurements.viewer.rawBytes <= 48 * 1024,
-  `viewer bundle is ${measurements.viewer.rawBytes} bytes; budget is 49152`,
+  measurements.viewer.rawBytes <= 64 * 1024,
+  `viewer bundle is ${measurements.viewer.rawBytes} bytes; budget is 65536`,
 );
 assert(
   measurements.viewer.gzipBytes <= 16 * 1024,

@@ -114,6 +114,24 @@ impl DiskGbzSource {
         Self::build_with_digest(input, scratch_parent).map(|(source, _)| source)
     }
 
+    /// Builds an ephemeral disk cache while using one real named sample/haplotype
+    /// as the archive reference, even when the GBWT does not tag that sample as
+    /// a reference.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error for unsupported/corrupt input or when the exact named
+    /// sample/haplotype has no nonempty paths.
+    pub fn build_for_reference_haplotype(
+        input: &Path,
+        scratch_parent: &Path,
+        sample: &str,
+        haplotype: usize,
+    ) -> io::Result<Self> {
+        Self::build_with_digest_for_reference_haplotype(input, scratch_parent, sample, haplotype)
+            .map(|(source, _)| source)
+    }
+
     /// Builds the ephemeral cache and hashes the source in the same sequential pass.
     ///
     /// # Errors
@@ -121,9 +139,33 @@ impl DiskGbzSource {
     /// Returns an error for unsupported/corrupt GBZ input, insufficient disk,
     /// cache I/O failures, or source-digest failures.
     pub fn build_with_digest(input: &Path, scratch_parent: &Path) -> io::Result<(Self, [u8; 32])> {
+        Self::build_with_digest_and_reference(input, scratch_parent, None)
+    }
+
+    /// Builds an ephemeral cache and hashes the source while explicitly
+    /// selecting one real named sample/haplotype as the reference anchor.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error for unsupported/corrupt input or when the exact named
+    /// sample/haplotype has no nonempty paths.
+    pub fn build_with_digest_for_reference_haplotype(
+        input: &Path,
+        scratch_parent: &Path,
+        sample: &str,
+        haplotype: usize,
+    ) -> io::Result<(Self, [u8; 32])> {
+        Self::build_with_digest_and_reference(input, scratch_parent, Some((sample, haplotype)))
+    }
+
+    fn build_with_digest_and_reference(
+        input: &Path,
+        scratch_parent: &Path,
+        explicit_reference: Option<(&str, usize)>,
+    ) -> io::Result<(Self, [u8; 32])> {
         fs::create_dir_all(scratch_parent)?;
         let cache_directory = create_cache_directory(scratch_parent)?;
-        match Self::build_in(input, &cache_directory) {
+        match Self::build_in(input, &cache_directory, explicit_reference) {
             Ok(source) => Ok(source),
             Err(error) => {
                 let _ = fs::remove_dir_all(&cache_directory);
@@ -132,7 +174,11 @@ impl DiskGbzSource {
         }
     }
 
-    fn build_in(input: &Path, cache_directory: &Path) -> io::Result<(Self, [u8; 32])> {
+    fn build_in(
+        input: &Path,
+        cache_directory: &Path,
+        explicit_reference: Option<(&str, usize)>,
+    ) -> io::Result<(Self, [u8; 32])> {
         let digesting = DigestingReader::new(File::open(input)?);
         let mut reader = BufReader::with_capacity(1024 * 1024, digesting);
 
@@ -231,7 +277,8 @@ impl DiskGbzSource {
                 path: Some(cache_directory.to_path_buf()),
             }),
         };
-        source.reference_seeds = source.build_reference_seeds(&metadata, &gbwt_tags)?;
+        source.reference_seeds =
+            source.build_reference_seeds(&metadata, &gbwt_tags, explicit_reference)?;
         Ok((source, source_sha256))
     }
 
@@ -251,6 +298,7 @@ impl DiskGbzSource {
         &self,
         metadata: &Metadata,
         gbwt_tags: &Tags,
+        explicit_reference: Option<(&str, usize)>,
     ) -> io::Result<Vec<SourceReferenceSeed>> {
         let endmarker_bytes = self
             .record_by_id(0)?
@@ -258,15 +306,30 @@ impl DiskGbzSource {
         let endmarker = Record::new(0, &endmarker_bytes)
             .ok_or_else(|| invalid_data("GBWT endmarker record is invalid"))?
             .decompress();
-        let mut reference_names = BTreeSet::new();
-        if let Some(names) = gbwt_tags.get(REFERENCE_SAMPLES_KEY) {
-            reference_names.extend(names.split(' ').map(str::to_owned));
-        }
-        reference_names.insert(GENERIC_SAMPLE.to_owned());
+        let reference_names = if explicit_reference.is_none() {
+            let mut names = BTreeSet::new();
+            if let Some(tagged) = gbwt_tags.get(REFERENCE_SAMPLES_KEY) {
+                names.extend(tagged.split(' ').map(str::to_owned));
+            }
+            names.insert(GENERIC_SAMPLE.to_owned());
+            Some(names)
+        } else {
+            None
+        };
         let mut seeds = Vec::new();
         for (path_id, path) in metadata.path_iter().enumerate() {
             let sample = metadata.sample_name(path.sample());
-            if !reference_names.contains(&sample) {
+            let selected = explicit_reference.map_or_else(
+                || {
+                    reference_names
+                        .as_ref()
+                        .is_some_and(|names| names.contains(&sample))
+                },
+                |(selected_sample, selected_haplotype)| {
+                    sample == selected_sample && path.phase() == selected_haplotype
+                },
+            );
+            if !selected {
                 continue;
             }
             let name = FullPathName::from_metadata(metadata, path_id)
@@ -284,6 +347,11 @@ impl DiskGbzSource {
             });
         }
         if seeds.is_empty() {
+            if let Some((sample, haplotype)) = explicit_reference {
+                return Err(invalid_data(format!(
+                    "GBZ has no nonempty paths for explicit reference sample '{sample}' haplotype {haplotype}"
+                )));
+            }
             return Err(invalid_data("GBZ has no reference paths"));
         }
         Ok(seeds)
@@ -1386,6 +1454,57 @@ mod tests {
         );
         drop(disk);
         assert!(!cache_directory.exists());
+    }
+
+    #[test]
+    fn explicit_reference_haplotype_selects_real_untagged_paths() {
+        let input = tiny_gbz_fixture();
+        let graph: GBZ = simple_sds::serialize::load_from(&input).unwrap();
+        let metadata = graph.metadata().unwrap();
+        let tagged: BTreeSet<_> = graph.reference_sample_ids(true).into_iter().collect();
+        let (sample, haplotype) = metadata
+            .path_iter()
+            .find_map(|path| {
+                (!tagged.contains(&path.sample()))
+                    .then(|| (metadata.sample_name(path.sample()), path.phase()))
+            })
+            .expect("fixture should contain a non-reference sample path");
+
+        let disk = DiskGbzSource::build_for_reference_haplotype(
+            &input,
+            &std::env::temp_dir(),
+            &sample,
+            haplotype,
+        )
+        .unwrap();
+        let seeds = disk.reference_seeds().unwrap();
+        assert!(!seeds.is_empty());
+        assert!(
+            seeds
+                .iter()
+                .all(|seed| { seed.name.sample == sample && seed.name.haplotype == haplotype })
+        );
+        let index = SourcePathIndex::new(&disk, 1_000).unwrap();
+        assert!(
+            index
+                .references(Some(&sample), None)
+                .iter()
+                .all(|path| { path.name.sample == sample && path.name.haplotype == haplotype })
+        );
+    }
+
+    #[test]
+    fn explicit_reference_haplotype_fails_closed_when_missing() {
+        let input = tiny_gbz_fixture();
+        let error = DiskGbzSource::build_for_reference_haplotype(
+            &input,
+            &std::env::temp_dir(),
+            "missing-sample",
+            0,
+        )
+        .err()
+        .expect("missing reference should fail");
+        assert!(error.to_string().contains("missing-sample"));
     }
 
     #[test]

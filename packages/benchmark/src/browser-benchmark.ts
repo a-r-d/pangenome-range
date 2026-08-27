@@ -66,6 +66,9 @@ interface RuntimeResult {
       readonly layer: string;
     }>;
     readonly totalBytes: number;
+    readonly integrityMs: number;
+    readonly decompressionMs: number;
+    readonly decompressionTaskMs: number;
     readonly cacheHits: {
       readonly bootstrap: number;
       readonly directory: number;
@@ -325,6 +328,9 @@ function measurement(
       payload: 0,
     },
     decompression: decompressionSummary(result.decompressionSamplesMs),
+    integrityMs: trace?.integrityMs ?? 0,
+    decompressionWallMs: trace?.decompressionMs ?? 0,
+    decompressionTaskMs: trace?.decompressionTaskMs ?? 0,
     decodeMs: trace?.decodeMs ?? 0,
     mergeMs: trace?.mergeMs ?? 0,
     selectedChunks: trace?.selectedChunks ?? 0,

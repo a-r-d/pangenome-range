@@ -1,0 +1,119 @@
+{
+  "schemaVersion": 1,
+  "url": "https://archives.ard.ninja/pangenome-range/sha256/ecf5ae4fa8c784a80307507f58bed894311b8560724b57de0fcc35237c324b63/hprc-v1-gencode-v50-disk-t8.pngr",
+  "passed": true,
+  "size": "8832749949",
+  "etag": "\"6a8f807b-20e79117d\"",
+  "expectedSha256": "ecf5ae4fa8c784a80307507f58bed894311b8560724b57de0fcc35237c324b63",
+  "ranges": [
+    {
+      "start": "0",
+      "end": "15",
+      "status": 206,
+      "bytes": 16,
+      "elapsedMs": 81.69983800000045,
+      "matchedLocal": true
+    },
+    {
+      "start": "8",
+      "end": "23",
+      "status": 206,
+      "bytes": 16,
+      "elapsedMs": 46.988328999999794,
+      "matchedLocal": true
+    },
+    {
+      "start": "24",
+      "end": "39",
+      "status": 206,
+      "bytes": 16,
+      "elapsedMs": 46.57953700000144,
+      "matchedLocal": true
+    },
+    {
+      "start": "8832749917",
+      "end": "8832749948",
+      "status": 206,
+      "bytes": 32,
+      "elapsedMs": 50.9398970000002,
+      "matchedLocal": true
+    }
+  ],
+  "checks": [
+    {
+      "name": "HEAD",
+      "passed": true,
+      "detail": "HTTP 200 in 199.202 ms"
+    },
+    {
+      "name": "Content-Length",
+      "passed": true,
+      "detail": "8832749949"
+    },
+    {
+      "name": "Accept-Ranges",
+      "passed": true,
+      "detail": "bytes"
+    },
+    {
+      "name": "ETag",
+      "passed": true,
+      "detail": "\"6a8f807b-20e79117d\""
+    },
+    {
+      "name": "identity encoding",
+      "passed": true,
+      "detail": "implicit identity"
+    },
+    {
+      "name": "no-transform",
+      "passed": true,
+      "detail": "public, max-age=31536000, immutable, no-transform"
+    },
+    {
+      "name": "CORS",
+      "passed": true,
+      "detail": "* (requested https://a-r-d.github.io)"
+    },
+    {
+      "name": "exposed range headers",
+      "passed": true,
+      "detail": "accept-ranges, content-range, content-length, etag"
+    },
+    {
+      "name": "CORS preflight",
+      "passed": true,
+      "detail": "HTTP 204, origin *, methods GET,HEAD,OPTIONS, headers range,if-range"
+    },
+    {
+      "name": "local size",
+      "passed": true,
+      "detail": "local 8832749949, remote 8832749949"
+    },
+    {
+      "name": "local SHA-256",
+      "passed": true,
+      "detail": "ecf5ae4fa8c784a80307507f58bed894311b8560724b57de0fcc35237c324b63"
+    },
+    {
+      "name": "range 0-15",
+      "passed": true,
+      "detail": "HTTP 206, 16 bytes, Content-Range bytes 0-15/8832749949, ETag \"6a8f807b-20e79117d\", local match true"
+    },
+    {
+      "name": "range 8-23",
+      "passed": true,
+      "detail": "HTTP 206, 16 bytes, Content-Range bytes 8-23/8832749949, ETag \"6a8f807b-20e79117d\", local match true"
+    },
+    {
+      "name": "range 24-39",
+      "passed": true,
+      "detail": "HTTP 206, 16 bytes, Content-Range bytes 24-39/8832749949, ETag \"6a8f807b-20e79117d\", local match true"
+    },
+    {
+      "name": "range 8832749917-8832749948",
+      "passed": true,
+      "detail": "HTTP 206, 32 bytes, Content-Range bytes 8832749917-8832749948/8832749949, ETag \"6a8f807b-20e79117d\", local match true"
+    }
+  ]
+}

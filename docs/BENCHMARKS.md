@@ -368,3 +368,20 @@ large archives use incompatible pre-reset bytes and cannot be relabeled as v1.
 The next evidence tranche is a current-v1 chromosome/GB-scale archive served by
 the configured public range origin, using this exact checksum-bound workload
 and origin validator.
+
+## Retained explorer evidence (2026-08-27)
+
+`results/2026-08-27-viewer-explorer-v1/` closes that evidence gap with the
+8,832,749,949-byte current-v1 GENCODE/HPRC object. Chromium ran the retained
+100 kb CHM13 query through both pure-JavaScript and optional WASM zstd across
+the six cache scenarios. All 12 canonical hashes passed and every reader trace
+reconciled with the strict loopback origin. Cold no-store pure-JS query wall was
+1,565.3 ms versus the prior 1,678.3 ms; WASM measured 1,458.1 ms. The 2x goal
+was not met because regional decode/reconstruction remains the critical phase.
+
+The same tranche retains public-origin exact-range/byte validation, one cold
+and warm native `HLA-B` search, a bounded/truncated prefix search, an absent
+search, cold and warm summary queries, Chromium/Firefox/WebKit application
+smoke, and desktop light/dark/tablet screenshots. See
+[Viewer performance](VIEWER_PERFORMANCE.md) for the phase definitions and
+limitations.

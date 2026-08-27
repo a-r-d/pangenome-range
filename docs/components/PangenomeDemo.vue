@@ -2,7 +2,10 @@
 // biome-ignore-all lint/correctness/noUnusedVariables: Vue template bindings are consumed outside the script AST.
 
 import {
-  type ArchiveCacheStats,
+  type ArchiveInfo,
+  type FeatureQueryTrace,
+  type LocusHit,
+  type OverviewBin,
   openPangenome,
   type PangenomeArchive,
   type QueryTrace,
@@ -10,9 +13,19 @@ import {
   type RegionQuery,
 } from "pangenome-range/reader";
 import {
+  chooseViewerLod,
   createPangenomeViewer,
+  DEFAULT_COMPLEXITY_BUDGETS,
+  formatGenomicCoordinate,
   type PangenomeViewer,
+  parseGenomicCommand,
+  recommendedSummaryBins,
+  type ViewerDisplayMode,
+  type ViewerLayerState,
+  type ViewerLodDecision,
+  type ViewerPerformanceSnapshot,
   type ViewerProgress,
+  type ViewerSelectionDetail,
 } from "pangenome-range/viewer";
 import { withBase } from "vitepress";
 import {
@@ -22,176 +35,601 @@ import {
   onMounted,
   ref,
   shallowRef,
+  watch,
 } from "vue";
 
 type ArchiveChoice = "fixture" | "configured" | "custom" | "local";
-type Phase = "idle" | "opening" | "querying" | "ready" | "error";
+type Phase = "idle" | "opening" | "summary" | "graph" | "ready" | "error";
+type SearchState =
+  | "index-absent"
+  | "index-empty"
+  | "ready"
+  | "searching"
+  | "no-matches"
+  | "results"
+  | "truncated"
+  | "failed";
+type SummaryMetric =
+  | "coveredBases"
+  | "tileCount"
+  | "encodedBytes"
+  | "decodedBytes"
+  | "nodeRecords"
+  | "edgeRecords"
+  | "gbwtRecords"
+  | "occurrences";
+type SummaryScale = "linear" | "log" | "normalized";
+type InspectorSelection =
+  | { kind: "archive" }
+  | ViewerSelectionDetail
+  | { kind: "summary"; bin: OverviewBin }
+  | { kind: "locus"; hit: LocusHit; matchedAlias: boolean };
 
 const configuredArchiveUrl =
   (
     import.meta.env.VITE_PANGENOME_RANGE_DEMO_ARCHIVE_URL as string | undefined
   )?.trim() ?? "";
+const RECENT_URLS_KEY = "pangenome-range:recent-urls:v1";
+const RECENT_SEARCHES_KEY = "pangenome-range:recent-searches:v1";
+const LAYERS_KEY = "pangenome-range:layers:v1";
+const THEME_KEY = "pangenome-range:theme:v1";
 const viewerHost = ref<HTMLElement>();
+const summaryCanvas = ref<HTMLCanvasElement>();
+const commandInput = ref<HTMLInputElement>();
+const localFileInput = ref<HTMLInputElement>();
 const archiveChoice = ref<ArchiveChoice>(
   configuredArchiveUrl.length === 0 ? "fixture" : "configured",
 );
 const customUrl = ref("");
 const localFile = shallowRef<File>();
+const recentUrls = ref<string[]>([]);
+const recentSearches = ref<string[]>([]);
 const archive = shallowRef<PangenomeArchive>();
+const archiveInfo = shallowRef<ArchiveInfo>();
 const viewer = shallowRef<PangenomeViewer>();
 const references = ref<readonly ReferenceDescriptor[]>([]);
-const sample = ref("GRCh38");
-const contig = ref("chr1");
-const start = ref(100);
-const end = ref(102);
-const context = ref(100);
 const phase = ref<Phase>("idle");
-const statusMessage = ref(
-  configuredArchiveUrl.length === 0
-    ? "Preparing the bundled deterministic fixture…"
-    : "Preparing the configured whole-genome archive…",
-);
+const statusMessage = ref("Preparing the explorer…");
 const errorMessage = ref("");
-const shareMessage = ref("");
 const activeArchiveLabel = ref("Not opened");
 const activeSourceKey = ref("");
-const progress = shallowRef<ViewerProgress>();
+const command = ref("");
+const suggestions = ref<readonly LocusHit[]>([]);
+const searchState = ref<SearchState>("ready");
+const searchTrace = shallowRef<FeatureQueryTrace>();
+const searchTruncated = ref(false);
+const searchMessage = ref("");
+const activeSuggestion = ref(0);
+const selectedLocus = shallowRef<LocusHit>();
+const activeRegion = shallowRef<RegionQuery>();
+const visualRegion = shallowRef<RegionQuery>();
+const requestedRegion = shallowRef<RegionQuery>();
+const loadedRegion = shallowRef<RegionQuery>();
+const prefetchedRegion = shallowRef<RegionQuery>();
+const summaryBins = shallowRef<readonly OverviewBin[]>([]);
+const summaryTrace = shallowRef<FeatureQueryTrace>();
 const queryTrace = shallowRef<QueryTrace>();
-const cacheStats = shallowRef<ArchiveCacheStats>();
+const progress = shallowRef<ViewerProgress>();
+const lodDecision = shallowRef<ViewerLodDecision>();
+const forceDetail = ref(false);
+const summaryMetric = ref<SummaryMetric>("nodeRecords");
+const summaryScale = ref<SummaryScale>("log");
+const inspector = shallowRef<InspectorSelection>({ kind: "archive" });
+const evidenceOpen = ref(false);
+const sourceOpen = ref(false);
+const shortcutsOpen = ref(false);
+const technicalMode = ref(false);
+const darkMode = ref(false);
+const shareMessage = ref("");
+const summaryPaintMs = ref<number>();
 const openMs = ref<number>();
-const queryMs = ref<number>();
-const totalMs = ref<number>();
-let operation = 0;
-let loadController: AbortController | undefined;
-let unsubscribeViewer: (() => void)[] = [];
+const queryWallMs = ref<number>();
+const viewerPerformance = shallowRef<ViewerPerformanceSnapshot>();
+const layers = ref<ViewerLayerState>({
+  reference: true,
+  topology: true,
+  traversals: true,
+  tileBoundaries: true,
+  sequenceLabels: true,
+});
+let sourceOperation = 0;
+let regionOperation = 0;
+let sourceController: AbortController | undefined;
+let regionController: AbortController | undefined;
+let searchController: AbortController | undefined;
+let searchTimer: ReturnType<typeof setTimeout> | undefined;
+let viewportTimer: ReturnType<typeof setTimeout> | undefined;
+let summaryResizeObserver: ResizeObserver | undefined;
+let viewerUnsubscribers: (() => void)[] = [];
+let pointerId: number | undefined;
+const summaryPointers = new Map<number, { x: number; y: number }>();
+let pointerStartX = 0;
+let pointerStartRegion: RegionQuery | undefined;
+let summaryPinchDistance = 0;
+let summaryPinchAnchor = 0;
 
-const samples = computed(() => [
-  ...new Set(references.value.map((reference) => reference.sample)),
-]);
-const contigs = computed(() => [
-  ...new Set(
-    references.value
-      .filter((reference) => reference.sample === sample.value)
-      .map((reference) => reference.contig),
-  ),
-]);
-const activeReference = computed(() =>
-  references.value.find(
-    (reference) =>
-      reference.sample === sample.value && reference.contig === contig.value,
-  ),
+const currentReference = computed(() => {
+  const region = visualRegion.value ?? activeRegion.value;
+  return region === undefined
+    ? undefined
+    : mergedReference(region.sample, region.contig);
+});
+const displayMode = computed<ViewerDisplayMode>(
+  () => lodDecision.value?.mode ?? "overview",
 );
-const isLoading = computed(
-  () => phase.value === "opening" || phase.value === "querying",
+const detailVisible = computed(
+  () =>
+    forceDetail.value ||
+    lodDecision.value?.automaticDetail === true ||
+    archiveInfo.value?.summaries === undefined,
 );
-const semantics = computed(
-  () => archive.value?.semantics ?? "anonymous-distinct-weighted-tile-paths",
+const canonicalCoordinate = computed(() => {
+  const region = visualRegion.value ?? activeRegion.value;
+  return region === undefined
+    ? "—"
+    : formatGenomicCoordinate(
+        region.sample,
+        region.contig,
+        region.start,
+        region.end,
+      );
+});
+const archiveTitle = computed(
+  () => archiveInfo.value?.provenance?.datasetTitle ?? activeArchiveLabel.value,
 );
+const metricLabel = computed(
+  () =>
+    ({
+      coveredBases: "covered reference bases",
+      tileCount: "regional tile count",
+      encodedBytes: "encoded regional bytes",
+      decodedBytes: "decoded regional bytes",
+      nodeRecords: "node-record count",
+      edgeRecords: "edge-record count",
+      gbwtRecords: "GBWT-record count",
+      occurrences: "occurrence count",
+    })[summaryMetric.value],
+);
+const namedCommandActive = computed(() => {
+  try {
+    return (
+      parseGenomicCommand(
+        command.value,
+        references.value,
+        activeRegion.value?.sample,
+      ).kind === "locus"
+    );
+  } catch {
+    return command.value.trim().length > 0;
+  }
+});
 
 onMounted(async () => {
+  document.body.classList.add("pangenome-explorer-active");
+  restorePreferences();
   restoreUrlState();
+  window.addEventListener("popstate", onPopState);
+  window.addEventListener("keydown", onGlobalKeyDown, { capture: true });
   await nextTick();
-  await load().catch(() => undefined);
+  if (summaryCanvas.value !== undefined) {
+    summaryResizeObserver = new ResizeObserver(drawSummary);
+    summaryResizeObserver.observe(summaryCanvas.value);
+  }
+  await loadSource().catch(() => undefined);
 });
 
 onBeforeUnmount(() => {
-  operation += 1;
-  loadController?.abort();
+  sourceOperation += 1;
+  regionOperation += 1;
+  sourceController?.abort();
+  regionController?.abort();
+  searchController?.abort();
+  if (searchTimer !== undefined) clearTimeout(searchTimer);
+  if (viewportTimer !== undefined) clearTimeout(viewportTimer);
+  summaryResizeObserver?.disconnect();
   detachViewer();
   void archive.value?.close();
-  archive.value = undefined;
+  window.removeEventListener("popstate", onPopState);
+  window.removeEventListener("keydown", onGlobalKeyDown, { capture: true });
+  document.body.classList.remove("pangenome-explorer-active");
 });
 
-async function load(): Promise<void> {
-  const currentOperation = ++operation;
-  errorMessage.value = "";
-  shareMessage.value = "";
-  const startedAt = performance.now();
-  try {
-    const source = selectedSource();
-    if (archive.value === undefined || activeSourceKey.value !== source.key) {
-      await openArchive(source, currentOperation);
-    } else {
-      openMs.value = 0;
-    }
-    if (currentOperation !== operation || archive.value === undefined) return;
-    const region = selectedRegion();
-    phase.value = "querying";
-    statusMessage.value = `Streaming ${region.sample} ${region.contig}:${region.start}-${region.end}`;
-    progress.value = undefined;
-    queryTrace.value = undefined;
-    const queryStartedAt = performance.now();
-    await viewer.value?.setRegion(region);
-    if (currentOperation !== operation) return;
-    queryMs.value = performance.now() - queryStartedAt;
-    totalMs.value = performance.now() - startedAt;
-    cacheStats.value = archive.value.cacheStats();
-    phase.value = "ready";
-    statusMessage.value =
-      "Region ready — scroll or use the buttons to zoom; drag to pan.";
-    updateUrlState();
-  } catch (cause) {
-    if (currentOperation !== operation || isAbort(cause)) return;
-    phase.value = "error";
-    errorMessage.value = actionableError(cause);
-    statusMessage.value = "The archive or region could not be loaded.";
-    throw cause;
-  }
-}
+watch(command, scheduleSuggestions);
+watch([summaryMetric, summaryScale], drawSummary);
+watch(
+  layers,
+  (value) => {
+    viewer.value?.setLayers(value);
+    localStorage.setItem(LAYERS_KEY, JSON.stringify(value));
+  },
+  { deep: true },
+);
+watch(forceDetail, () => {
+  const region = activeRegion.value;
+  if (region !== undefined) void loadRegion(region);
+});
 
-async function openArchive(
-  source: { source: string | Blob; key: string; label: string },
-  currentOperation: number,
-): Promise<void> {
-  loadController?.abort();
-  loadController = new AbortController();
+async function loadSource(): Promise<void> {
+  const operation = ++sourceOperation;
+  errorMessage.value = "";
+  sourceController?.abort();
+  sourceController = new AbortController();
+  regionController?.abort();
+  searchController?.abort();
+  const selected = selectedSource();
+  sourceOpen.value = false;
+  phase.value = "opening";
+  statusMessage.value = `Opening ${selected.label}`;
   detachViewer();
   await archive.value?.close();
   archive.value = undefined;
-  activeSourceKey.value = "";
-  phase.value = "opening";
-  statusMessage.value = `Opening ${source.label}`;
-  const startedAt = performance.now();
-  const opened = await openPangenome({
-    source: source.source,
-    signal: loadController.signal,
-    httpUseHead: false,
-  });
-  if (currentOperation !== operation) {
-    await opened.close();
-    return;
+  archiveInfo.value = undefined;
+  selectedLocus.value = undefined;
+  inspector.value = { kind: "archive" };
+  summaryBins.value = [];
+  const started = performance.now();
+  try {
+    const opened = await openPangenome({
+      source: selected.source,
+      signal: sourceController.signal,
+      httpUseHead: false,
+    });
+    if (operation !== sourceOperation) {
+      await opened.close();
+      return;
+    }
+    openMs.value = performance.now() - started;
+    archive.value = opened;
+    activeSourceKey.value = selected.key;
+    activeArchiveLabel.value = selected.label;
+    references.value = opened.references();
+    archiveInfo.value = await opened.info({ signal: sourceController.signal });
+    searchState.value =
+      archiveInfo.value.namedLoci.state === "absent"
+        ? "index-absent"
+        : archiveInfo.value.namedLoci.state === "present-empty"
+          ? "index-empty"
+          : "ready";
+    if (archiveChoice.value === "custom") rememberRemoteUrl(customUrl.value);
+    await nextTick();
+    createViewer(opened);
+    const restored = regionFromUrl();
+    const initial = restored ?? (await defaultRegion(opened));
+    command.value = formatGenomicCoordinate(
+      initial.sample,
+      initial.contig,
+      initial.start,
+      initial.end,
+    );
+    await navigateTo(initial, restored === undefined ? "replace" : "none");
+  } catch (cause) {
+    if (operation !== sourceOperation || isAbort(cause)) return;
+    fail(cause, "The archive could not be opened.");
   }
-  openMs.value = performance.now() - startedAt;
-  archive.value = opened;
-  activeSourceKey.value = source.key;
-  activeArchiveLabel.value = source.label;
-  references.value = opened.references();
-  selectAvailableReference();
-  await nextTick();
-  if (viewerHost.value === undefined) {
-    throw new Error("viewer host did not mount");
-  }
-  const nextViewer = createPangenomeViewer(viewerHost.value, {
+}
+
+function createViewer(opened: PangenomeArchive): void {
+  if (viewerHost.value === undefined)
+    throw new Error("Viewer host did not mount.");
+  const next = createPangenomeViewer(viewerHost.value, {
     archive: opened,
     maxRenderedNodes: 2_000,
     maxRenderedEdges: 4_000,
     maxHaplotypeLanes: 24,
-    showRequestTrace: true,
+    showRequestTrace: false,
+    initialLayers: layers.value,
+    initialTheme: darkMode.value ? "dark" : "light",
   });
-  viewer.value = nextViewer;
-  unsubscribeViewer = [
-    nextViewer.on("progress", (detail) => {
+  viewer.value = next;
+  viewerUnsubscribers = [
+    next.on("progress", (detail) => {
       progress.value = detail;
-      statusMessage.value = `Decoded ${detail.counts.tiles} tile${detail.counts.tiles === 1 ? "" : "s"}`;
+      statusMessage.value = `Decoded ${detail.counts.tiles} graph tile${detail.counts.tiles === 1 ? "" : "s"}`;
     }),
-    nextViewer.on("querytrace", (trace) => {
+    next.on("querytrace", (trace) => {
       queryTrace.value = trace;
-      cacheStats.value = opened.cacheStats();
+      viewerPerformance.value = next.getPerformanceSnapshot();
     }),
-    nextViewer.on("error", ({ error }) => {
-      if (!isAbort(error)) errorMessage.value = actionableError(error);
+    next.on("selectionchange", (detail) => {
+      const locus = selectedLocus.value;
+      inspector.value =
+        detail !== undefined
+          ? detail
+          : locus === undefined
+            ? { kind: "archive" }
+            : {
+                kind: "locus",
+                hit: locus,
+                matchedAlias: locus.matchedName !== locus.displayName,
+              };
+    }),
+    next.on("viewportchange", ({ visualRegion: region }) => {
+      visualRegion.value = clampRegion(region);
+      scheduleViewportSettlement();
+    }),
+    next.on("error", ({ error }) => {
+      if (!isAbort(error)) fail(error, "Detailed graph loading failed.");
     }),
   ];
+}
+
+async function defaultRegion(opened: PangenomeArchive): Promise<RegionQuery> {
+  const first = references.value[0];
+  if (first === undefined) throw new Error("Archive contains no references.");
+  if (opened.capabilities().namedLoci) {
+    try {
+      const result = await opened.searchLoci({
+        name: "HLA-B",
+        mode: "exact",
+        limit: 1,
+      });
+      const hit = result.hits[0];
+      if (hit !== undefined) return paddedLocus(hit);
+    } catch {
+      // Coordinate exploration remains available if an optional index fails.
+    }
+  }
+  const preferred =
+    references.value.find(
+      (reference) =>
+        reference.sample === "GRCh38" && reference.contig === "chr1",
+    ) ?? first;
+  return {
+    sample: preferred.sample,
+    contig: preferred.contig,
+    start: preferred.start,
+    end: Math.min(preferred.end, preferred.start + 100_000),
+    context: 100,
+  };
+}
+
+async function navigateTo(
+  region: RegionQuery,
+  history: "push" | "replace" | "none" = "push",
+): Promise<void> {
+  const bounded = clampRegion(region);
+  activeRegion.value = bounded;
+  visualRegion.value = bounded;
+  if (history !== "none") updateUrlState(history);
+  await loadRegion(bounded);
+}
+
+async function loadRegion(region: RegionQuery): Promise<void> {
+  const opened = archive.value;
+  if (opened === undefined) return;
+  const operation = ++regionOperation;
+  regionController?.abort();
+  regionController = new AbortController();
+  const signal = regionController.signal;
+  requestedRegion.value = region;
+  errorMessage.value = "";
+  summaryTrace.value = undefined;
+  queryTrace.value = undefined;
+  progress.value = undefined;
+  queryWallMs.value = undefined;
+  lodDecision.value = undefined;
+  const started = performance.now();
+  try {
+    if (opened.capabilities().multiscaleSummaries) {
+      phase.value = "summary";
+      statusMessage.value = `Reading multiscale summary for ${formatShortRegion(region)}`;
+      const summaryStarted = performance.now();
+      const result = await opened.summary({
+        ...region,
+        maxBins: recommendedSummaryBins(
+          summaryCanvas.value?.clientWidth ?? 900,
+        ),
+        signal,
+        trace: true,
+      });
+      if (operation !== regionOperation) return;
+      summaryBins.value = result.bins;
+      summaryTrace.value = result.trace;
+      lodDecision.value = chooseViewerLod(
+        result.bins,
+        region,
+        summaryCanvas.value?.clientWidth ?? 900,
+        DEFAULT_COMPLEXITY_BUDGETS,
+        forceDetail.value,
+      );
+      await nextTick();
+      drawSummary();
+      summaryPaintMs.value = performance.now() - summaryStarted;
+    } else {
+      summaryBins.value = [];
+      lodDecision.value = {
+        mode: "detailed",
+        automaticDetail: true,
+        bpPerPixel:
+          (region.end - region.start) /
+          (summaryCanvas.value?.clientWidth ?? 900),
+        estimates: zeroBudgets(),
+        budgets: DEFAULT_COMPLEXITY_BUDGETS,
+        limitingMetrics: [],
+        reason: "Summary index absent; using bounded detailed graph fallback.",
+      };
+      await nextTick();
+      drawSummary();
+      summaryPaintMs.value = performance.now() - started;
+    }
+    if (operation !== regionOperation) return;
+    if (detailVisible.value) {
+      phase.value = "graph";
+      statusMessage.value = `Streaming detailed graph for ${formatShortRegion(region)}`;
+      viewer.value?.setDisplayMode(displayMode.value);
+      await viewer.value?.setViewport({ ...region, signal });
+      if (operation !== regionOperation) return;
+      viewerPerformance.value = viewer.value?.getPerformanceSnapshot();
+    }
+    loadedRegion.value = region;
+    prefetchedRegion.value = predictedAdjacentRegion(region);
+    queryWallMs.value = performance.now() - started;
+    phase.value = "ready";
+    statusMessage.value = detailVisible.value
+      ? "Graph ready. Pan or zoom to settle a new genomic query."
+      : "Summary ready. Zoom in or load the detailed graph explicitly.";
+  } catch (cause) {
+    if (operation !== regionOperation || isAbort(cause)) return;
+    fail(cause, "This genomic viewport could not be loaded.");
+  }
+}
+
+function scheduleSuggestions(): void {
+  if (searchTimer !== undefined) clearTimeout(searchTimer);
+  searchController?.abort();
+  suggestions.value = [];
+  activeSuggestion.value = 0;
+  searchTruncated.value = false;
+  searchMessage.value = "";
+  const opened = archive.value;
+  if (opened === undefined || command.value.trim().length === 0) return;
+  try {
+    const parsed = parseGenomicCommand(
+      command.value,
+      references.value,
+      activeRegion.value?.sample,
+    );
+    if (parsed.kind === "coordinate") {
+      searchState.value = "ready";
+      return;
+    }
+  } catch (cause) {
+    searchMessage.value =
+      cause instanceof Error ? cause.message : String(cause);
+    return;
+  }
+  if (!opened.capabilities().namedLoci) {
+    searchState.value = "index-absent";
+    return;
+  }
+  if (archiveInfo.value?.namedLoci.state === "present-empty") {
+    searchState.value = "index-empty";
+    return;
+  }
+  searchTimer = setTimeout(() => void searchPrefix(), 180);
+}
+
+function onCommandKeyDown(event: KeyboardEvent): void {
+  if (suggestions.value.length === 0) {
+    if (event.key === "Escape") suggestions.value = [];
+    return;
+  }
+  if (event.key === "ArrowDown") {
+    event.preventDefault();
+    activeSuggestion.value =
+      (activeSuggestion.value + 1) % suggestions.value.length;
+  } else if (event.key === "ArrowUp") {
+    event.preventDefault();
+    activeSuggestion.value =
+      (activeSuggestion.value - 1 + suggestions.value.length) %
+      suggestions.value.length;
+  } else if (event.key === "Enter") {
+    event.preventDefault();
+    const hit = suggestions.value[activeSuggestion.value];
+    if (hit !== undefined) void selectLocus(hit);
+  } else if (event.key === "Escape") {
+    event.preventDefault();
+    suggestions.value = [];
+  }
+}
+
+async function searchPrefix(): Promise<void> {
+  const opened = archive.value;
+  if (opened === undefined) return;
+  searchController?.abort();
+  searchController = new AbortController();
+  const input = command.value.trim();
+  searchState.value = "searching";
+  try {
+    const result = await opened.searchLoci({
+      name: input,
+      mode: "prefix",
+      limit: 12,
+      signal: searchController.signal,
+      trace: true,
+    });
+    suggestions.value = result.hits;
+    searchTrace.value = result.trace;
+    searchTruncated.value = result.truncated;
+    searchState.value = result.truncated
+      ? "truncated"
+      : result.hits.length === 0
+        ? "no-matches"
+        : "results";
+  } catch (cause) {
+    if (isAbort(cause)) return;
+    searchState.value = "failed";
+    searchMessage.value = actionableError(cause);
+  }
+}
+
+async function submitCommand(): Promise<void> {
+  try {
+    searchController?.abort();
+    const parsed = parseGenomicCommand(
+      command.value,
+      references.value,
+      activeRegion.value?.sample,
+    );
+    rememberSearch(command.value.trim());
+    if (parsed.kind === "coordinate") {
+      selectedLocus.value = undefined;
+      suggestions.value = [];
+      await navigateTo({
+        sample: parsed.reference.sample,
+        contig: parsed.reference.contig,
+        start: parsed.start,
+        end: parsed.end,
+        context: 100,
+      });
+      return;
+    }
+    const opened = archive.value;
+    if (opened === undefined) return;
+    searchState.value = "searching";
+    const exact = await opened.searchLoci({
+      name: parsed.name,
+      mode: "exact",
+      limit: 20,
+      trace: true,
+    });
+    searchTrace.value = exact.trace;
+    if (exact.hits.length === 1) {
+      await selectLocus(exact.hits[0] as LocusHit);
+    } else {
+      suggestions.value = exact.hits;
+      searchTruncated.value = exact.truncated;
+      searchState.value = exact.hits.length === 0 ? "no-matches" : "results";
+    }
+  } catch (cause) {
+    searchState.value = "failed";
+    searchMessage.value = actionableError(cause);
+  }
+}
+
+async function selectLocus(hit: LocusHit): Promise<void> {
+  selectedLocus.value = hit;
+  inspector.value = {
+    kind: "locus",
+    hit,
+    matchedAlias: hit.matchedName !== hit.displayName,
+  };
+  suggestions.value = [];
+  command.value = hit.displayName;
+  rememberSearch(hit.displayName);
+  await navigateTo(paddedLocus(hit));
+}
+
+function paddedLocus(hit: LocusHit): RegionQuery {
+  const span = hit.reference.end - hit.reference.start;
+  const padding = Math.max(1_000, Math.round(span * 0.15));
+  return clampRegion({
+    sample: hit.reference.sample,
+    contig: hit.reference.contig,
+    start: Math.max(0, hit.reference.start - padding),
+    end: hit.reference.end + padding,
+    context: 100,
+  });
 }
 
 function selectedSource(): {
@@ -208,169 +646,584 @@ function selectedSource(): {
       label: `${file.name} (local file)`,
     };
   }
-  let url: string;
-  let label: string;
   if (archiveChoice.value === "fixture") {
-    url = new URL(withBase("/fixtures/format-v1.pngr"), window.location.href)
-      .href;
-    label = "deterministic synthetic fixture";
-  } else if (archiveChoice.value === "configured") {
-    if (configuredArchiveUrl.length === 0) {
-      throw new Error(
-        "No external archive is configured. Set VITE_PANGENOME_RANGE_DEMO_ARCHIVE_URL when building the site.",
-      );
-    }
-    url = new URL(configuredArchiveUrl, window.location.href).href;
-    label = "configured immutable archive";
-  } else {
-    if (customUrl.value.trim().length === 0)
-      throw new Error("Enter an archive URL.");
-    url = new URL(customUrl.value.trim(), window.location.href).href;
-    label = "custom remote archive";
+    const url = new URL(
+      withBase("/fixtures/format-v1.pngr"),
+      window.location.href,
+    ).href;
+    return {
+      source: url,
+      key: `url:${url}`,
+      label: "Bundled deterministic fixture",
+    };
   }
-  return { source: url, key: `url:${url}`, label };
-}
-
-function selectedRegion(): RegionQuery {
-  if (!Number.isSafeInteger(start.value) || !Number.isSafeInteger(end.value)) {
-    throw new Error("Start and end must be safe integer coordinates.");
+  if (archiveChoice.value === "configured") {
+    if (configuredArchiveUrl.length === 0)
+      throw new Error("No external archive is configured for this build.");
+    const url = new URL(configuredArchiveUrl, window.location.href).href;
+    return {
+      source: url,
+      key: `url:${url}`,
+      label: "Configured large archive",
+    };
   }
-  if (end.value <= start.value)
-    throw new Error("End must be greater than start.");
-  if (
-    !Number.isSafeInteger(context.value) ||
-    context.value < 0 ||
-    context.value > 100
-  ) {
-    throw new Error("Context must be an integer from 0 through 100.");
+  if (customUrl.value.trim().length === 0)
+    throw new Error("Enter an archive URL.");
+  const url = new URL(customUrl.value.trim(), window.location.href).href;
+  return { source: url, key: `url:${url}`, label: "Custom remote archive" };
+}
+
+function onSourceChange(): void {
+  errorMessage.value = "";
+  if (archiveChoice.value === "local" && localFile.value === undefined) {
+    localFileInput.value?.click();
+    return;
   }
-  return {
-    sample: sample.value,
-    contig: contig.value,
-    start: start.value,
-    end: end.value,
-    context: context.value,
-  };
-}
-
-function selectAvailableReference(): void {
-  if (activeReference.value !== undefined) return;
-  const first = references.value[0];
-  if (first === undefined)
-    throw new Error("Archive contains no reference descriptors.");
-  sample.value = first.sample;
-  contig.value = first.contig;
-  applyReferenceBounds(first);
-}
-
-function onSampleChange(): void {
-  const first = references.value.find(
-    (reference) => reference.sample === sample.value,
-  );
-  if (first === undefined) return;
-  contig.value = first.contig;
-  applyReferenceBounds(first);
-}
-
-function onContigChange(): void {
-  if (activeReference.value !== undefined)
-    applyReferenceBounds(activeReference.value);
-}
-
-function onPresetChange(event: Event): void {
-  const index = Number((event.currentTarget as HTMLSelectElement).value);
-  const reference = references.value[index];
-  if (reference === undefined) return;
-  sample.value = reference.sample;
-  contig.value = reference.contig;
-  applyReferenceBounds(reference);
-}
-
-function applyReferenceBounds(reference: ReferenceDescriptor): void {
-  start.value = reference.start;
-  end.value = Math.min(reference.end, reference.start + 100_000);
+  if (archiveChoice.value === "custom") {
+    sourceOpen.value = true;
+    return;
+  }
+  void loadSource();
 }
 
 function onLocalFile(event: Event): void {
-  const input = event.currentTarget as HTMLInputElement;
-  localFile.value = input.files?.[0];
-  if (localFile.value !== undefined) archiveChoice.value = "local";
+  const file = (event.currentTarget as HTMLInputElement).files?.[0];
+  if (file === undefined) return;
+  localFile.value = file;
+  archiveChoice.value = "local";
+  void loadSource();
 }
 
-function detachViewer(): void {
-  for (const unsubscribe of unsubscribeViewer) unsubscribe();
-  unsubscribeViewer = [];
-  viewer.value?.destroy();
-  viewer.value = undefined;
+function useRecentUrl(url: string): void {
+  customUrl.value = url;
+  archiveChoice.value = "custom";
+  void loadSource();
+}
+
+function scheduleViewportSettlement(): void {
+  drawSummary();
+  if (viewportTimer !== undefined) clearTimeout(viewportTimer);
+  viewportTimer = setTimeout(() => {
+    const region = visualRegion.value;
+    if (region === undefined) return;
+    activeRegion.value = region;
+    updateUrlState("replace");
+    void loadRegion(region);
+  }, 180);
+}
+
+function panRegion(fraction: number): void {
+  const region = visualRegion.value;
+  if (region === undefined) return;
+  const delta = Math.round((region.end - region.start) * fraction);
+  visualRegion.value = clampRegion({
+    ...region,
+    start: region.start + delta,
+    end: region.end + delta,
+  });
+  scheduleViewportSettlement();
+}
+
+function zoomRegion(factor: number, focus = 0.5): void {
+  const region = visualRegion.value;
+  if (region === undefined) return;
+  const span = region.end - region.start;
+  const nextSpan = Math.max(1, Math.round(span * factor));
+  const anchor = region.start + span * focus;
+  const start = Math.round(anchor - nextSpan * focus);
+  visualRegion.value = clampRegion({
+    ...region,
+    start,
+    end: start + nextSpan,
+  });
+  scheduleViewportSettlement();
+}
+
+function fitReference(): void {
+  const reference = currentReference.value;
+  if (reference !== undefined) void navigateTo({ ...reference, context: 100 });
+}
+
+function fitLocus(): void {
+  if (selectedLocus.value !== undefined)
+    void navigateTo(paddedLocus(selectedLocus.value));
+}
+
+function onSummaryWheel(event: WheelEvent): void {
+  event.preventDefault();
+  const canvas = summaryCanvas.value;
+  if (canvas === undefined) return;
+  const rect = canvas.getBoundingClientRect();
+  const focus = Math.min(
+    1,
+    Math.max(0, (event.clientX - rect.left) / rect.width),
+  );
+  zoomRegion(Math.exp(event.deltaY * 0.0015), focus);
+}
+
+function onSummaryPointerDown(event: PointerEvent): void {
+  summaryPointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
+  pointerId = event.pointerId;
+  pointerStartX = event.clientX;
+  pointerStartRegion = visualRegion.value;
+  summaryCanvas.value?.setPointerCapture?.(event.pointerId);
+  if (summaryPointers.size === 2 && pointerStartRegion !== undefined) {
+    const [first, second] = [...summaryPointers.values()];
+    const canvas = summaryCanvas.value;
+    if (first !== undefined && second !== undefined && canvas !== undefined) {
+      summaryPinchDistance = Math.max(
+        1,
+        Math.hypot(first.x - second.x, first.y - second.y),
+      );
+      const rect = canvas.getBoundingClientRect();
+      const focus = ((first.x + second.x) / 2 - rect.left) / rect.width;
+      summaryPinchAnchor =
+        pointerStartRegion.start +
+        (pointerStartRegion.end - pointerStartRegion.start) * focus;
+    }
+  }
+}
+
+function onSummaryPointerMove(event: PointerEvent): void {
+  if (summaryPointers.has(event.pointerId)) {
+    summaryPointers.set(event.pointerId, {
+      x: event.clientX,
+      y: event.clientY,
+    });
+  }
+  if (pointerStartRegion === undefined) return;
+  const canvas = summaryCanvas.value;
+  if (canvas === undefined) return;
+  if (summaryPointers.size === 2 && summaryPinchDistance > 0) {
+    const [first, second] = [...summaryPointers.values()];
+    if (first === undefined || second === undefined) return;
+    const distance = Math.max(
+      1,
+      Math.hypot(first.x - second.x, first.y - second.y),
+    );
+    const rect = canvas.getBoundingClientRect();
+    const focus = Math.min(
+      1,
+      Math.max(0, ((first.x + second.x) / 2 - rect.left) / rect.width),
+    );
+    const startSpan = pointerStartRegion.end - pointerStartRegion.start;
+    const span = Math.max(
+      1,
+      Math.round(startSpan * (summaryPinchDistance / distance)),
+    );
+    const start = Math.round(summaryPinchAnchor - span * focus);
+    visualRegion.value = clampRegion({
+      ...pointerStartRegion,
+      start,
+      end: start + span,
+    });
+    drawSummary();
+    return;
+  }
+  if (pointerId !== event.pointerId) return;
+  const span = pointerStartRegion.end - pointerStartRegion.start;
+  const delta = Math.round(
+    ((pointerStartX - event.clientX) / Math.max(1, canvas.clientWidth)) * span,
+  );
+  visualRegion.value = clampRegion({
+    ...pointerStartRegion,
+    start: pointerStartRegion.start + delta,
+    end: pointerStartRegion.end + delta,
+  });
+  drawSummary();
+}
+
+function onSummaryPointerUp(event: PointerEvent): void {
+  if (!summaryPointers.has(event.pointerId)) return;
+  const wasPinching = summaryPointers.size > 1 || summaryPinchDistance > 0;
+  const moved = Math.abs(event.clientX - pointerStartX) > 3;
+  summaryCanvas.value?.releasePointerCapture?.(event.pointerId);
+  summaryPointers.delete(event.pointerId);
+  const remaining = summaryPointers.entries().next().value as
+    | [number, { x: number; y: number }]
+    | undefined;
+  pointerId = remaining?.[0];
+  if (remaining !== undefined) {
+    pointerStartX = remaining[1].x;
+    pointerStartRegion = visualRegion.value;
+  } else {
+    pointerStartRegion = undefined;
+    summaryPinchDistance = 0;
+  }
+  if (summaryPointers.size === 0) {
+    if (moved || wasPinching) scheduleViewportSettlement();
+    else selectSummaryAt(event.clientX);
+  }
+}
+
+function selectSummaryAt(clientX: number): void {
+  const canvas = summaryCanvas.value;
+  const region = visualRegion.value;
+  if (canvas === undefined || region === undefined) return;
+  const rect = canvas.getBoundingClientRect();
+  const coordinate =
+    region.start +
+    ((clientX - rect.left) / rect.width) * (region.end - region.start);
+  const bin = summaryBins.value.find(
+    (candidate) =>
+      candidate.reference.start <= coordinate &&
+      candidate.reference.end > coordinate,
+  );
+  if (bin !== undefined) inspector.value = { kind: "summary", bin };
+}
+
+function drawSummary(): void {
+  const canvas = summaryCanvas.value;
+  const region = visualRegion.value ?? activeRegion.value;
+  if (canvas === undefined || region === undefined) return;
+  const width = Math.max(320, canvas.clientWidth || 900);
+  const height = Math.max(140, canvas.clientHeight || 190);
+  const ratio = Math.max(1, window.devicePixelRatio || 1);
+  if (canvas.width !== Math.round(width * ratio))
+    canvas.width = Math.round(width * ratio);
+  if (canvas.height !== Math.round(height * ratio))
+    canvas.height = Math.round(height * ratio);
+  const context = canvas.getContext("2d");
+  if (context === null) return;
+  context.setTransform(ratio, 0, 0, ratio, 0, 0);
+  const dark = darkMode.value;
+  const colors = dark
+    ? {
+        background: "#10151d",
+        grid: "#293342",
+        text: "#9aaabd",
+        accent: "#52c7bd",
+        coverage: "#7767c5",
+      }
+    : {
+        background: "#fbfcfd",
+        grid: "#dfe5eb",
+        text: "#647386",
+        accent: "#087f75",
+        coverage: "#7367b8",
+      };
+  context.fillStyle = colors.background;
+  context.fillRect(0, 0, width, height);
+  context.font = "11px ui-monospace, SFMono-Regular, Menlo, monospace";
+  context.fillStyle = colors.text;
+  context.fillText(
+    `${metricLabel.value} · ${summaryScale.value} scale`,
+    16,
+    20,
+  );
+  const plot = { left: 16, top: 38, width: width - 32, height: height - 68 };
+  context.strokeStyle = colors.grid;
+  context.beginPath();
+  context.moveTo(plot.left, plot.top + plot.height);
+  context.lineTo(plot.left + plot.width, plot.top + plot.height);
+  context.stroke();
+  const visible = summaryBins.value.filter(
+    (bin) =>
+      bin.reference.start < region.end && bin.reference.end > region.start,
+  );
+  const values = visible.map((bin) => Number(metricValue(bin)));
+  const maximum = Math.max(1, ...values);
+  for (let index = 0; index < visible.length; index += 1) {
+    const bin = visible[index] as OverviewBin;
+    const raw = values[index] ?? 0;
+    const scaled =
+      summaryScale.value === "log"
+        ? Math.log1p(raw) / Math.log1p(maximum)
+        : raw / maximum;
+    const x1 =
+      plot.left +
+      ((bin.reference.start - region.start) / (region.end - region.start)) *
+        plot.width;
+    const x2 =
+      plot.left +
+      ((bin.reference.end - region.start) / (region.end - region.start)) *
+        plot.width;
+    const barHeight = Math.max(1, scaled * plot.height);
+    context.fillStyle = colors.accent;
+    context.globalAlpha = 0.82;
+    context.fillRect(
+      x1,
+      plot.top + plot.height - barHeight,
+      Math.max(1, x2 - x1 - 1),
+      barHeight,
+    );
+    const coverage = Number(bin.coveredBases) / Math.max(1, bin.binSpan);
+    context.fillStyle = colors.coverage;
+    context.globalAlpha = 0.9;
+    context.fillRect(
+      x1,
+      height - 20,
+      Math.max(1, x2 - x1),
+      Math.max(2, coverage * 6),
+    );
+  }
+  context.globalAlpha = 1;
+  context.fillStyle = colors.text;
+  context.textAlign = "left";
+  context.fillText(formatCoordinate(region.start), plot.left, height - 6);
+  context.textAlign = "right";
+  context.fillText(
+    formatCoordinate(region.end),
+    plot.left + plot.width,
+    height - 6,
+  );
+}
+
+async function copyRegionLink(): Promise<void> {
+  if (archiveChoice.value === "local") {
+    shareMessage.value =
+      "Local files stay local and cannot be embedded in a link.";
+    return;
+  }
+  updateUrlState("replace");
+  await copyText(window.location.href, "Region link copied.");
+}
+
+async function copyCoordinate(): Promise<void> {
+  await copyText(canonicalCoordinate.value, "Canonical coordinate copied.");
+}
+
+async function copyNodeSequence(): Promise<void> {
+  if (inspector.value.kind !== "node") return;
+  await copyText(inspector.value.node.sequence, "Node sequence copied.");
+}
+
+async function copyText(value: string, success: string): Promise<void> {
+  try {
+    await navigator.clipboard.writeText(value);
+    shareMessage.value = success;
+  } catch {
+    shareMessage.value =
+      "Clipboard unavailable; select and copy the visible value.";
+  }
+}
+
+function toggleTheme(): void {
+  darkMode.value = !darkMode.value;
+  document.documentElement.classList.toggle("dark", darkMode.value);
+  const theme = darkMode.value ? "dark" : "light";
+  localStorage.setItem(THEME_KEY, theme);
+  viewer.value?.setTheme(theme);
+  drawSummary();
+}
+
+function onGlobalKeyDown(event: KeyboardEvent): void {
+  const target = event.target as HTMLElement | null;
+  const typing =
+    target?.matches("input, textarea, select, [contenteditable=true]") === true;
+  if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {
+    event.preventDefault();
+    event.stopImmediatePropagation();
+    commandInput.value?.focus();
+  } else if (event.key === "/" && !typing) {
+    event.preventDefault();
+    commandInput.value?.focus();
+  } else if (event.key === "?" && !typing) {
+    shortcutsOpen.value = !shortcutsOpen.value;
+  } else if (event.key === "Escape") {
+    suggestions.value = [];
+    sourceOpen.value = false;
+    shortcutsOpen.value = false;
+  }
+}
+
+function onPopState(): void {
+  const region = regionFromUrl();
+  if (region !== undefined) void navigateTo(region, "none");
+}
+
+function updateUrlState(mode: "push" | "replace"): void {
+  if (archiveChoice.value === "local") return;
+  const region = activeRegion.value;
+  if (region === undefined) return;
+  const params = new URLSearchParams();
+  params.set("archive", archiveChoice.value);
+  if (archiveChoice.value === "custom")
+    params.set("url", customUrl.value.trim());
+  params.set("sample", region.sample);
+  params.set("contig", region.contig);
+  params.set("start", String(region.start));
+  params.set("end", String(region.end));
+  if (selectedLocus.value !== undefined)
+    params.set("locus", selectedLocus.value.displayName);
+  const url = `${window.location.pathname}?${params}`;
+  if (mode === "push") window.history.pushState(null, "", url);
+  else window.history.replaceState(null, "", url);
 }
 
 function restoreUrlState(): void {
   const params = new URLSearchParams(window.location.search);
   const choice = params.get("archive");
-  if (choice === "fixture") {
-    archiveChoice.value = "fixture";
-  } else if (choice === "configured" && configuredArchiveUrl.length > 0) {
+  if (choice === "fixture") archiveChoice.value = "fixture";
+  else if (choice === "configured" && configuredArchiveUrl.length > 0)
     archiveChoice.value = "configured";
-  } else if (choice === "custom" && params.has("url")) {
+  else if (choice === "custom" && params.has("url")) {
     archiveChoice.value = "custom";
     customUrl.value = params.get("url") ?? "";
   }
-  sample.value = params.get("sample") ?? sample.value;
-  contig.value = params.get("contig") ?? contig.value;
-  start.value = safeUrlInteger(params.get("start"), start.value);
-  end.value = safeUrlInteger(params.get("end"), end.value);
-  context.value = safeUrlInteger(params.get("context"), context.value);
 }
 
-function updateUrlState(): void {
-  if (archiveChoice.value === "local") return;
-  const params = new URLSearchParams();
-  params.set("archive", archiveChoice.value);
-  if (archiveChoice.value === "custom")
-    params.set("url", customUrl.value.trim());
-  params.set("sample", sample.value);
-  params.set("contig", contig.value);
-  params.set("start", String(start.value));
-  params.set("end", String(end.value));
-  params.set("context", String(context.value));
-  window.history.replaceState(
-    null,
-    "",
-    `${window.location.pathname}?${params}`,
+function regionFromUrl(): RegionQuery | undefined {
+  const params = new URLSearchParams(window.location.search);
+  const sample = params.get("sample");
+  const contig = params.get("contig");
+  const start = safeInteger(params.get("start"));
+  const end = safeInteger(params.get("end"));
+  if (
+    sample === null ||
+    contig === null ||
+    start === undefined ||
+    end === undefined ||
+    end <= start
+  )
+    return undefined;
+  if (mergedReference(sample, contig) === undefined) return undefined;
+  return clampRegion({ sample, contig, start, end, context: 100 });
+}
+
+function restorePreferences(): void {
+  const storedTheme = localStorage.getItem(THEME_KEY);
+  if (storedTheme === "dark") {
+    darkMode.value = true;
+    document.documentElement.classList.add("dark");
+  } else if (storedTheme === "light") {
+    darkMode.value = false;
+    document.documentElement.classList.remove("dark");
+  } else {
+    darkMode.value = document.documentElement.classList.contains("dark");
+  }
+  recentUrls.value = readStoredStrings(RECENT_URLS_KEY);
+  recentSearches.value = readStoredStrings(RECENT_SEARCHES_KEY);
+  try {
+    const stored = JSON.parse(
+      localStorage.getItem(LAYERS_KEY) ?? "null",
+    ) as Partial<ViewerLayerState> | null;
+    if (stored !== null) layers.value = { ...layers.value, ...stored };
+  } catch {
+    // Ignore invalid local preferences.
+  }
+}
+
+function rememberRemoteUrl(value: string): void {
+  const normalized = value.trim();
+  if (normalized.length === 0) return;
+  recentUrls.value = [
+    normalized,
+    ...recentUrls.value.filter((item) => item !== normalized),
+  ].slice(0, 5);
+  localStorage.setItem(RECENT_URLS_KEY, JSON.stringify(recentUrls.value));
+}
+
+function rememberSearch(value: string): void {
+  if (value.length === 0) return;
+  recentSearches.value = [
+    value,
+    ...recentSearches.value.filter((item) => item !== value),
+  ].slice(0, 8);
+  localStorage.setItem(
+    RECENT_SEARCHES_KEY,
+    JSON.stringify(recentSearches.value),
   );
 }
 
-async function copyShareLink(): Promise<void> {
-  if (archiveChoice.value === "local") {
-    shareMessage.value = "Local files cannot be embedded in a shareable URL.";
-    return;
-  }
-  updateUrlState();
+function readStoredStrings(key: string): string[] {
   try {
-    await navigator.clipboard.writeText(window.location.href);
-    shareMessage.value = "Shareable region URL copied.";
+    const value = JSON.parse(localStorage.getItem(key) ?? "[]") as unknown;
+    return Array.isArray(value)
+      ? value.filter((item): item is string => typeof item === "string")
+      : [];
   } catch {
-    shareMessage.value =
-      "The URL now contains this region; copy it from the address bar.";
+    return [];
   }
 }
 
-function safeUrlInteger(value: string | null, fallback: number): number {
-  if (value === null || !/^\d+$/.test(value)) return fallback;
-  const number = Number(value);
-  return Number.isSafeInteger(number) ? number : fallback;
+function clampRegion(region: RegionQuery): RegionQuery {
+  const reference = mergedReference(region.sample, region.contig);
+  if (reference === undefined) return region;
+  const span = Math.min(
+    reference.end - reference.start,
+    Math.max(1, region.end - region.start),
+  );
+  const start = Math.max(
+    reference.start,
+    Math.min(reference.end - span, region.start),
+  );
+  return {
+    sample: region.sample,
+    contig: region.contig,
+    start,
+    end: start + span,
+    context: region.context ?? 100,
+  };
+}
+
+function mergedReference(
+  sample: string,
+  contig: string,
+): ReferenceDescriptor | undefined {
+  const matches = references.value.filter(
+    (reference) => reference.sample === sample && reference.contig === contig,
+  );
+  if (matches.length === 0) return undefined;
+  return {
+    sample,
+    contig,
+    start: Math.min(...matches.map((reference) => reference.start)),
+    end: Math.max(...matches.map((reference) => reference.end)),
+    orientation: "forward",
+  };
+}
+
+function predictedAdjacentRegion(region: RegionQuery): RegionQuery {
+  const span = region.end - region.start;
+  return clampRegion({
+    ...region,
+    start: region.end,
+    end: region.end + span,
+  });
+}
+
+function metricValue(bin: OverviewBin): bigint {
+  return bin[summaryMetric.value];
+}
+
+function zeroBudgets() {
+  return {
+    compressedBytes: 0n,
+    decodedBytes: 0n,
+    nodeRecords: 0n,
+    edgeRecords: 0n,
+    occurrences: 0n,
+  };
+}
+
+function detachViewer(): void {
+  for (const unsubscribe of viewerUnsubscribers) unsubscribe();
+  viewerUnsubscribers = [];
+  viewer.value?.destroy();
+  viewer.value = undefined;
+}
+
+function fail(cause: unknown, fallback: string): void {
+  phase.value = "error";
+  errorMessage.value = actionableError(cause);
+  statusMessage.value = fallback;
 }
 
 function actionableError(cause: unknown): string {
   const message = cause instanceof Error ? cause.message : String(cause);
-  if (/failed to fetch|cors|networkerror/i.test(message)) {
-    return `${message} The remote origin must allow this Pages origin with CORS and expose range headers; see Hosting an archive below.`;
-  }
+  if (/failed to fetch|cors|networkerror/i.test(message))
+    return `${message} The origin must allow this site with CORS and expose the range headers.`;
   if (
     /206|content-range|range request|returned 200|full response/i.test(message)
-  ) {
-    return `${message} The origin must honor byte ranges with 206 Partial Content and an exact Content-Range; the reader will not silently download a large object.`;
-  }
+  )
+    return `${message} The origin must return exact 206 Partial Content responses; large whole-object fallbacks are rejected.`;
+  if (/etag|object.*changed|identity/i.test(message))
+    return `${message} Use an immutable URL with one stable strong ETag.`;
+  if (/unsupported.*version|magic/i.test(message))
+    return `${message} Regenerate the archive with the current v1 encoder.`;
+  if (/integrity|corrupt|checksum|decompress/i.test(message))
+    return `${message} The range failed archive integrity validation; retry only after checking the immutable object.`;
   return message;
 }
 
@@ -378,262 +1231,189 @@ function isAbort(cause: unknown): boolean {
   return cause instanceof DOMException && cause.name === "AbortError";
 }
 
-function formatBytes(bytes: number | undefined): string {
-  if (bytes === undefined) return "—";
-  if (bytes < 1_024) return `${bytes} B`;
-  if (bytes < 1_048_576) return `${(bytes / 1_024).toFixed(1)} KiB`;
-  return `${(bytes / 1_048_576).toFixed(1)} MiB`;
+function safeInteger(value: string | null): number | undefined {
+  if (value === null || !/^\d+$/.test(value)) return undefined;
+  const parsed = Number(value);
+  return Number.isSafeInteger(parsed) ? parsed : undefined;
 }
 
-function formatMs(milliseconds: number | undefined): string {
-  return milliseconds === undefined ? "—" : `${milliseconds.toFixed(1)} ms`;
+function formatShortRegion(region: RegionQuery): string {
+  return `${region.sample} ${region.contig}:${formatCoordinate(region.start)}–${formatCoordinate(region.end)}`;
+}
+
+function formatCoordinate(value: number): string {
+  return new Intl.NumberFormat("en-US", { maximumFractionDigits: 0 }).format(
+    value,
+  );
+}
+
+function formatBytes(value: number | bigint | undefined): string {
+  if (value === undefined) return "—";
+  const bytes = typeof value === "bigint" ? Number(value) : value;
+  if (bytes < 1_024) return `${bytes} B`;
+  if (bytes < 1_048_576) return `${(bytes / 1_024).toFixed(1)} KiB`;
+  if (bytes < 1_073_741_824) return `${(bytes / 1_048_576).toFixed(1)} MiB`;
+  return `${(bytes / 1_073_741_824).toFixed(2)} GiB`;
+}
+
+function formatMs(value: number | undefined): string {
+  return value === undefined ? "—" : `${value.toFixed(1)} ms`;
+}
+
+function formatStrand(value: LocusHit["strand"]): string {
+  return value === "forward" ? "+" : value === "reverse" ? "−" : "unknown";
 }
 </script>
 
 <template>
-  <section class="demo-shell" aria-labelledby="demo-title">
-    <header class="demo-hero">
-      <div>
-        <p class="eyebrow">Static object · real byte ranges</p>
-        <h1 id="demo-title">Regional pangenome explorer</h1>
-        <p>
-          Open a remote immutable <code>.pngr</code> object or a local file, then stream
-          and render one reference interval without a query server.
-        </p>
-      </div>
-      <div class="phase" :data-phase="phase">
-        <span aria-hidden="true"></span>{{ phase }}
-      </div>
+  <main class="explorer" :class="{ dark: darkMode }" :data-phase="phase">
+    <header class="topbar">
+      <a class="brand" :href="withBase('/')" aria-label="pangenome-range documentation">
+        <span class="brand-mark" aria-hidden="true">P</span>
+        <span><strong>pangenome-range</strong><small>Explorer</small></span>
+      </a>
+      <form class="command" role="search" @submit.prevent="submitCommand">
+        <span class="command-icon" aria-hidden="true">⌕</span>
+        <input ref="commandInput" v-model="command" aria-label="Go to a locus or genomic coordinate" aria-autocomplete="list" :aria-activedescendant="suggestions[activeSuggestion] === undefined ? undefined : `locus-option-${activeSuggestion}`" autocomplete="off" placeholder="Gene, alias, or sample#contig:start-end" @focus="scheduleSuggestions" @keydown="onCommandKeyDown" />
+        <kbd>⌘K</kbd><button type="submit">Go</button>
+        <div v-if="suggestions.length > 0 || (namedCommandActive && ['index-absent', 'index-empty', 'searching', 'no-matches', 'truncated', 'failed'].includes(searchState))" class="suggestions" role="listbox" aria-label="Locus suggestions">
+          <div v-if="searchState === 'searching'" class="suggestion-state">Searching archive locus pages…</div>
+          <button v-for="(hit, index) in suggestions" :id="`locus-option-${index}`" :key="`${hit.stableId}:${hit.reference.sample}:${hit.reference.start}:${hit.matchedName}`" type="button" role="option" :aria-selected="index === activeSuggestion" @mouseenter="activeSuggestion = index" @click="selectLocus(hit)">
+            <span><strong>{{ hit.displayName }}</strong><em v-if="hit.matchedName !== hit.displayName">matched alias {{ hit.matchedName }}</em></span>
+            <span>{{ hit.featureType }} · {{ hit.stableId }}</span>
+            <span>{{ hit.reference.sample }} · {{ hit.reference.contig }}:{{ formatCoordinate(hit.reference.start) }}–{{ formatCoordinate(hit.reference.end) }} · {{ formatStrand(hit.strand) }}</span>
+          </button>
+          <div v-if="searchState === 'index-absent'" class="suggestion-state">This archive has no named-locus index. Coordinate navigation remains available.</div>
+          <div v-else-if="searchState === 'index-empty'" class="suggestion-state">The named-locus index is present but contains no records.</div>
+          <div v-else-if="searchState === 'truncated'" class="suggestion-state">First {{ suggestions.length }} results shown · archive result limit reached</div>
+          <div v-else-if="searchState === 'no-matches'" class="suggestion-state">No matching archive locus</div>
+          <div v-else-if="searchState === 'failed'" class="suggestion-state error-text">{{ searchMessage }}</div>
+        </div>
+      </form>
+      <nav class="top-actions" aria-label="Explorer actions">
+        <button type="button" class="icon-button" title="Copy region link" @click="copyRegionLink">↗</button>
+        <button type="button" class="icon-button" title="Toggle color theme" @click="toggleTheme">◐</button>
+        <button type="button" class="icon-button" title="Keyboard help" @click="shortcutsOpen = !shortcutsOpen">?</button>
+        <button type="button" class="source-button" @click="sourceOpen = !sourceOpen"><span class="source-dot" :data-state="phase"></span><span>{{ archiveTitle }}</span><small>{{ formatBytes(archiveInfo?.archiveBytes) }}</small></button>
+      </nav>
     </header>
 
-    <form class="control-panel" @submit.prevent="load">
-      <label>
-        <span>Archive</span>
-        <select v-model="archiveChoice" aria-label="Archive source">
-          <option value="fixture">Bundled synthetic fixture</option>
-          <option value="configured" :disabled="configuredArchiveUrl.length === 0">
-            {{ configuredArchiveUrl.length === 0 ? "External archive (not configured)" : "Configured external archive" }}
-          </option>
-          <option value="custom">Custom remote URL</option>
-          <option value="local">Local .pngr file</option>
-        </select>
-      </label>
-      <label v-if="archiveChoice === 'custom'" class="wide">
-        <span>Remote archive URL</span>
-        <input v-model="customUrl" type="url" placeholder="https://archive.example/data.pngr" />
-      </label>
-      <label :class="{ wide: archiveChoice !== 'custom' }">
-        <span>Local file</span>
-        <input type="file" accept=".pngr,application/octet-stream" @change="onLocalFile" />
-      </label>
+    <aside class="left-panel" aria-label="Layers and display controls">
+      <section><h2>Viewport</h2><div class="coordinate-readout">{{ canonicalCoordinate }}</div><div class="button-row"><button type="button" title="Pan left" @click="panRegion(-0.35)">←</button><button type="button" title="Zoom out" @click="zoomRegion(2)">−</button><button type="button" title="Zoom in" @click="zoomRegion(0.5)">+</button><button type="button" title="Pan right" @click="panRegion(0.35)">→</button></div><button type="button" class="text-button" @click="fitReference">Fit reference</button><button type="button" class="text-button" :disabled="selectedLocus === undefined" @click="fitLocus">Fit active locus</button></section>
+      <section><h2>Graph layers</h2><label class="check"><input v-model="layers.reference" type="checkbox" /><span class="swatch reference"></span>Reference traversal</label><label class="check"><input v-model="layers.topology" type="checkbox" /><span class="swatch alternate"></span>Alternate topology</label><label class="check"><input v-model="layers.traversals" type="checkbox" /><span class="swatch traversal"></span>Local traversals</label><label class="check"><input v-model="layers.tileBoundaries" type="checkbox" /><span class="swatch tile"></span>Tile boundaries</label><label class="check"><input v-model="layers.sequenceLabels" type="checkbox" />Sequence labels</label></section>
+      <section><h2>Summary track</h2><label class="field-label" for="summary-metric">Tile-record metric</label><select id="summary-metric" v-model="summaryMetric"><option value="coveredBases">Covered reference bases</option><option value="tileCount">Regional tile count</option><option value="encodedBytes">Encoded regional bytes</option><option value="decodedBytes">Decoded regional bytes</option><option value="nodeRecords">Node-record count</option><option value="edgeRecords">Edge-record count</option><option value="gbwtRecords">GBWT-record count</option><option value="occurrences">Occurrence count</option></select><div class="segmented"><button v-for="scale in (['linear', 'log', 'normalized'] as const)" :key="scale" type="button" :aria-pressed="summaryScale === scale" @click="summaryScale = scale">{{ scale }}</button></div></section>
+      <section><h2>Detail policy</h2><div class="mode-pill" :data-mode="displayMode">{{ displayMode }}</div><p>{{ lodDecision?.reason ?? 'Waiting for summary evidence.' }}</p><label class="check"><input v-model="forceDetail" type="checkbox" />Override automatic decision</label></section>
+      <section class="semantics"><h2>Evidence semantics</h2><p>Anonymous weighted traversals remain local to each source tile. They are not people, alleles, frequencies, or globally stitchable samples.</p></section>
+    </aside>
 
-      <label>
-        <span>Reference / sample</span>
-        <select v-model="sample" :disabled="samples.length === 0" @change="onSampleChange">
-          <option v-for="item in samples" :key="item" :value="item">{{ item }}</option>
-        </select>
-      </label>
-      <label>
-        <span>Contig</span>
-        <select v-model="contig" :disabled="contigs.length === 0" @change="onContigChange">
-          <option v-for="item in contigs" :key="item" :value="item">{{ item }}</option>
-        </select>
-      </label>
-      <label>
-        <span>Start</span>
-        <input v-model.number="start" type="number" min="0" step="1" />
-      </label>
-      <label>
-        <span>End</span>
-        <input v-model.number="end" type="number" min="1" step="1" />
-      </label>
-      <label>
-        <span>Context (0–100 bp)</span>
-        <input v-model.number="context" type="number" min="0" max="100" step="1" />
-      </label>
-      <label>
-        <span>Preset region</span>
-        <select aria-label="Preset region" :disabled="references.length === 0" @change="onPresetChange">
-          <option value="">Choose a reference interval…</option>
-          <option v-for="(reference, index) in references" :key="`${reference.sample}:${reference.contig}:${reference.start}`" :value="index">
-            {{ reference.sample }} · {{ reference.contig }} · {{ reference.start }}–{{ Math.min(reference.end, reference.start + 100_000) }}
-          </option>
-        </select>
-      </label>
-      <div class="actions wide">
-        <button class="primary" type="submit">
-          {{ isLoading ? "Load selection (cancel current)" : "Load region" }}
-        </button>
-        <button type="button" :disabled="phase !== 'ready'" @click="copyShareLink">
-          Copy region link
-        </button>
-        <span class="action-note">{{ shareMessage || statusMessage }}</span>
-      </div>
-    </form>
-
-    <div v-if="errorMessage" class="error-panel" role="alert">
-      <strong>Range load failed.</strong> {{ errorMessage }}
-      <a :href="withBase('/HOSTING')">Check the required origin headers.</a>
-    </div>
-
-    <section class="viewer-panel" aria-label="Pangenome graph visualization">
-      <div class="viewer-toolbar">
-        <div>
-          <strong>{{ activeArchiveLabel }}</strong>
-          <span>format v{{ archive?.formatVersion ?? "—" }}</span>
-        </div>
-        <div class="view-actions" aria-label="View controls">
-          <button type="button" aria-label="Pan left" @click="viewer?.panBy(60)">←</button>
-          <button type="button" aria-label="Pan right" @click="viewer?.panBy(-60)">→</button>
-          <button type="button" aria-label="Zoom out" @click="viewer?.zoomBy(0.8)">−</button>
-          <button type="button" aria-label="Zoom in" @click="viewer?.zoomBy(1.25)">+</button>
-          <button type="button" @click="viewer?.resetView()">Reset view</button>
-        </div>
-      </div>
-      <div ref="viewerHost" class="viewer-host"></div>
-      <p class="semantics-note">
-        <strong>Semantics:</strong> {{ semantics }}. Weighted anonymous traversals are
-        local evidence within each source tile. They are not named people or globally
-        stitchable samples.
-      </p>
+    <section class="workspace" aria-label="Genomic viewport">
+      <div class="viewport-header"><div><span class="mode-label">{{ displayMode }} mode</span><strong>{{ canonicalCoordinate }}</strong></div><div class="stage-progress" aria-hidden="true"><span :class="{ active: phase === 'opening', done: !['idle', 'opening'].includes(phase) }">Open</span><span :class="{ active: phase === 'summary', done: ['graph', 'ready'].includes(phase) }">Summary</span><span :class="{ active: phase === 'graph', done: phase === 'ready' && detailVisible }">Graph</span><span :class="{ done: phase === 'ready' }">Ready</span></div></div>
+      <div class="summary-stage" :class="{ skeleton: phase === 'summary' && summaryBins.length === 0 }"><canvas ref="summaryCanvas" aria-label="Multiscale archive summary; drag to pan, wheel to zoom, click a bin to inspect" tabindex="0" @wheel="onSummaryWheel" @pointerdown="onSummaryPointerDown" @pointermove="onSummaryPointerMove" @pointerup="onSummaryPointerUp" @pointercancel="onSummaryPointerUp"></canvas><div class="summary-caption"><span>{{ summaryBins.length }} bins · {{ metricLabel }}</span><span v-if="summaryBins[0]">level {{ summaryBins[0].level }} · {{ formatCoordinate(summaryBins[0].binSpan) }} bp/bin</span><span v-else-if="archiveInfo?.summaries === undefined">Summary index absent</span></div></div>
+      <div class="detail-stage" :class="{ hidden: !detailVisible }"><div v-if="!detailVisible" class="detail-placeholder"><strong>Detailed payloads were not requested.</strong><p>{{ lodDecision?.reason }}</p><button type="button" @click="forceDetail = true">Load detailed graph</button></div><div ref="viewerHost" class="viewer-host"></div><div v-if="phase === 'graph'" class="loading-overlay" aria-hidden="true"><span></span>Streaming verified graph tiles…</div></div>
+      <div class="scale-footer"><span>{{ formatCoordinate((visualRegion?.end ?? 0) - (visualRegion?.start ?? 0)) }} bp visible</span><span class="scale-line"></span><span>{{ lodDecision?.bpPerPixel.toFixed(1) ?? '—' }} bp / px</span><button type="button" @click="copyCoordinate">Copy coordinate</button></div>
     </section>
 
-    <section class="metrics-grid" aria-label="Query evidence">
-      <article>
-        <h2>Decoded view</h2>
+    <aside class="right-panel" aria-label="Selection inspector">
+      <header><span>Inspector</span><button type="button" title="Show archive information" @click="inspector = { kind: 'archive' }">Archive</button></header>
+      <section v-if="inspector.kind === 'node'">
+        <p class="inspector-kind">Graph node</p><h2>Node {{ inspector.node.id.toString() }}</h2>
         <dl>
-          <div><dt>Tiles</dt><dd>{{ progress?.counts.tiles ?? 0 }}</dd></div>
-          <div><dt>Nodes</dt><dd>{{ progress?.counts.renderedNodes ?? 0 }} / {{ progress?.counts.decodedNodes ?? 0 }}</dd></div>
-          <div><dt>Edges</dt><dd>{{ progress?.counts.renderedEdges ?? 0 }} / {{ progress?.counts.decodedEdges ?? 0 }}</dd></div>
-          <div><dt>Local traversals</dt><dd>{{ progress?.counts.renderedHaplotypeLanes ?? 0 }} / {{ progress?.counts.decodedTraversals ?? 0 }}</dd></div>
+          <div><dt>Sequence length</dt><dd>{{ inspector.node.sequenceLength }} bp</dd></div>
+          <div><dt>Orientation</dt><dd>{{ inspector.node.reverse ? 'reverse' : 'forward' }}</dd></div>
+          <div><dt>Classification</dt><dd>{{ inspector.node.branchKind }}</dd></div>
+          <div><dt>Branch lane</dt><dd>{{ inspector.node.lane }}</dd></div>
+          <div><dt>Anchor interval</dt><dd>{{ formatCoordinate(inspector.node.anchorStart) }}–{{ formatCoordinate(inspector.node.anchorEnd) }}</dd></div>
+          <div><dt>Neighbors</dt><dd>{{ inspector.incoming.length }} incoming · {{ inspector.outgoing.length }} outgoing</dd></div>
+          <div><dt>Local traversal evidence</dt><dd>{{ inspector.localTraversalWeights.length }} weighted records</dd></div>
+          <div><dt>Source tiles</dt><dd>{{ inspector.node.sourceTiles.length }}</dd></div>
         </dl>
-        <p v-if="progress?.summary" class="budget-note">{{ progress.summary }}</p>
-      </article>
-      <article>
-        <h2>Range I/O</h2>
-        <dl>
-          <div><dt>Requests</dt><dd>{{ queryTrace?.requestRanges.length ?? 0 }}</dd></div>
-          <div><dt>Total bytes</dt><dd>{{ formatBytes(queryTrace?.totalBytes) }}</dd></div>
-          <div><dt>Unique bytes</dt><dd>{{ formatBytes(queryTrace?.uniqueBytes) }}</dd></div>
-          <div><dt>Dependency rounds</dt><dd>{{ queryTrace?.dependencyRounds ?? "—" }}</dd></div>
-        </dl>
-      </article>
-      <article>
-        <h2>Timing</h2>
-        <dl>
-          <div><dt>Open</dt><dd>{{ formatMs(openMs) }}</dd></div>
-          <div><dt>Query wall</dt><dd>{{ formatMs(queryMs) }}</dd></div>
-          <div><dt>Decompress</dt><dd>{{ formatMs(queryTrace?.decompressionMs) }}</dd></div>
-          <div><dt>Decode</dt><dd>{{ formatMs(queryTrace?.decodeMs) }}</dd></div>
-          <div><dt>Total action</dt><dd>{{ formatMs(totalMs) }}</dd></div>
-        </dl>
-      </article>
-      <article>
-        <h2>Library cache</h2>
-        <dl>
-          <div><dt>Directory entries</dt><dd>{{ cacheStats?.directoryEntries ?? 0 }}</dd></div>
-          <div><dt>Directory bytes</dt><dd>{{ formatBytes(cacheStats?.directoryBytes) }}</dd></div>
-          <div><dt>Payload entries</dt><dd>{{ cacheStats?.payloadEntries ?? 0 }}</dd></div>
-          <div><dt>Payload bytes</dt><dd>{{ formatBytes(cacheStats?.payloadBytes) }}</dd></div>
-        </dl>
-      </article>
+        <h3>Sequence preview</h3><code class="sequence">{{ inspector.node.sequence.slice(0, 240) }}{{ inspector.node.sequence.length > 240 ? '…' : '' }}</code><button type="button" class="primary-button" @click="copyNodeSequence">Copy sequence</button>
+        <h3>Payload provenance</h3><ul class="plain-list"><li v-for="source in inspector.node.sourceTiles" :key="source.archiveOffset.toString()">{{ formatCoordinate(source.coreStart) }}–{{ formatCoordinate(source.coreEnd) }} · byte {{ source.archiveOffset.toString() }} + {{ formatBytes(source.compressedBytes) }}</li></ul>
+      </section>
+      <section v-else-if="inspector.kind === 'edge'">
+        <p class="inspector-kind">Graph edge</p><h2>{{ inspector.edge.from.toString() }} → {{ inspector.edge.to.toString() }}</h2>
+        <dl><div><dt>Classification</dt><dd>{{ inspector.edge.classification }}</dd></div><div><dt>From orientation</dt><dd>{{ inspector.edge.fromReverse ? 'reverse' : 'forward' }}</dd></div><div><dt>To orientation</dt><dd>{{ inspector.edge.toReverse ? 'reverse' : 'forward' }}</dd></div><div><dt>Source tiles</dt><dd>{{ inspector.edge.sourceTiles.length }}</dd></div></dl>
+        <ul class="plain-list"><li v-for="source in inspector.edge.sourceTiles" :key="source.archiveOffset.toString()">{{ formatCoordinate(source.coreStart) }}–{{ formatCoordinate(source.coreEnd) }} · byte {{ source.archiveOffset.toString() }} + {{ formatBytes(source.compressedBytes) }}</li></ul>
+      </section>
+      <section v-else-if="inspector.kind === 'traversal'">
+        <p class="inspector-kind">Tile-local traversal</p><h2>Weight {{ inspector.traversal.weight.toString() }}</h2>
+        <p class="explanation">Anonymous traversal evidence from one source tile. It is not a named individual and is never stitched across tiles.</p>
+        <dl><div><dt>Core interval</dt><dd>{{ formatCoordinate(inspector.traversal.tileStart) }}–{{ formatCoordinate(inspector.traversal.tileEnd) }}</dd></div><div><dt>Oriented nodes</dt><dd>{{ inspector.traversal.orientedNodes.length }}</dd></div><div><dt>Compressed payload</dt><dd>{{ formatBytes(inspector.traversal.source.compressedBytes) }}</dd></div><div><dt>Decoded payload</dt><dd>{{ formatBytes(inspector.traversal.source.uncompressedBytes) }}</dd></div><div><dt>Archive range</dt><dd>{{ inspector.traversal.source.archiveOffset.toString() }} + {{ formatBytes(inspector.traversal.source.compressedBytes) }}</dd></div></dl>
+        <code class="sequence">{{ inspector.traversal.orientedNodes.map((handle) => handle.toString()).join(' ') }}</code>
+      </section>
+      <section v-else-if="inspector.kind === 'summary'"><p class="inspector-kind">Summary bin</p><h2>{{ inspector.bin.reference.contig }}:{{ formatCoordinate(inspector.bin.reference.start) }}–{{ formatCoordinate(inspector.bin.reference.end) }}</h2><dl><div><dt>Level / span</dt><dd>{{ inspector.bin.level }} / {{ formatCoordinate(inspector.bin.binSpan) }} bp</dd></div><div><dt>Covered bases</dt><dd>{{ inspector.bin.coveredBases.toString() }}</dd></div><div><dt>Regional tiles</dt><dd>{{ inspector.bin.tileCount.toString() }}</dd></div><div><dt>Encoded bytes</dt><dd>{{ formatBytes(inspector.bin.encodedBytes) }}</dd></div><div><dt>Decoded bytes</dt><dd>{{ formatBytes(inspector.bin.decodedBytes) }}</dd></div><div><dt>Node records</dt><dd>{{ inspector.bin.nodeRecords.toString() }}</dd></div><div><dt>Edge records</dt><dd>{{ inspector.bin.edgeRecords.toString() }}</dd></div><div><dt>GBWT records</dt><dd>{{ inspector.bin.gbwtRecords.toString() }}</dd></div><div><dt>Occurrences</dt><dd>{{ inspector.bin.occurrences.toString() }}</dd></div></dl><p class="explanation">These are exact tile-record totals. They are not unique variants, allele frequencies, or individual counts.</p></section>
+      <section v-else-if="inspector.kind === 'locus'"><p class="inspector-kind">Named locus</p><h2>{{ inspector.hit.displayName }}</h2><dl><div v-if="inspector.matchedAlias"><dt>Matched alias</dt><dd>{{ inspector.hit.matchedName }}</dd></div><div><dt>Stable ID</dt><dd>{{ inspector.hit.stableId }}</dd></div><div><dt>Feature type</dt><dd>{{ inspector.hit.featureType }}</dd></div><div><dt>Strand</dt><dd>{{ formatStrand(inspector.hit.strand) }}</dd></div><div><dt>Reference</dt><dd>{{ inspector.hit.reference.sample }}</dd></div><div><dt>Coordinates</dt><dd>{{ inspector.hit.reference.contig }}:{{ formatCoordinate(inspector.hit.reference.start) }}–{{ formatCoordinate(inspector.hit.reference.end) }}</dd></div><div><dt>Annotation</dt><dd>{{ archiveInfo?.provenance?.annotationRelease ?? 'declared index' }}</dd></div></dl></section>
+      <section v-else><p class="inspector-kind">Archive</p><h2>{{ archiveTitle }}</h2><p>{{ archiveInfo?.provenance?.datasetDescription ?? 'Static range-addressable pangenome archive.' }}</p><dl><div><dt>Format</dt><dd>v{{ archiveInfo?.formatVersion ?? '—' }}</dd></div><div><dt>Object size</dt><dd>{{ formatBytes(archiveInfo?.archiveBytes) }}</dd></div><div><dt>Object identity</dt><dd class="truncate" :title="archiveInfo?.strongRemoteIdentity">{{ archiveInfo?.strongRemoteIdentity ?? 'local object' }}</dd></div><div><dt>References</dt><dd>{{ archiveInfo?.references.length ?? 0 }}</dd></div><div><dt>Named loci</dt><dd>{{ archiveInfo?.namedLoci.state ?? '—' }} · {{ archiveInfo?.namedLoci.recordCount.toString() ?? '0' }}</dd></div><div><dt>Summary index</dt><dd>{{ archiveInfo?.summaries ? `${archiveInfo.summaries.baseBinSpan} bp base bins` : 'absent' }}</dd></div><div><dt>Reference assembly</dt><dd>{{ archiveInfo?.provenance?.referenceAssembly ?? 'not declared' }}</dd></div><div><dt>Annotation</dt><dd>{{ archiveInfo?.provenance?.annotationRelease ?? 'not declared' }}</dd></div><div><dt>Semantics</dt><dd>{{ archiveInfo?.haplotypeSemantics ?? '—' }}</dd></div></dl><h3>Available reference samples</h3><div class="chips"><span v-for="sample in [...new Set(references.map((reference) => reference.sample))]" :key="sample">{{ sample }}</span></div></section>
+    </aside>
+
+    <section class="evidence" :class="{ open: evidenceOpen }" aria-label="Range and performance evidence">
+      <button type="button" class="evidence-toggle" :aria-expanded="evidenceOpen" @click="evidenceOpen = !evidenceOpen">
+        <span>Range & performance</span>
+        <strong>{{ queryTrace?.requestRanges.length ?? summaryTrace?.requestRanges.length ?? 0 }} reads · {{ formatBytes(queryTrace?.totalBytes ?? summaryTrace?.totalBytes) }}</strong>
+        <span>{{ formatMs(queryWallMs) }} wall</span>
+        <span aria-hidden="true">{{ evidenceOpen ? '⌄' : '⌃' }}</span>
+      </button>
+      <div v-if="evidenceOpen" class="evidence-body">
+        <div class="timing-strip">
+          <article><span>Object open</span><strong>{{ formatMs(openMs) }}</strong></article>
+          <article><span>First summary paint</span><strong>{{ formatMs(summaryPaintMs) }}</strong></article>
+          <article><span>First graph tile</span><strong>{{ formatMs(viewerPerformance?.firstTilePaintMs) }}</strong></article>
+          <article><span>Query complete</span><strong>{{ formatMs(queryWallMs) }}</strong></article>
+          <article><span>Layout</span><strong>{{ formatMs(viewerPerformance?.layoutMs) }}</strong></article>
+          <article><span>Paint</span><strong>{{ formatMs(viewerPerformance?.paintMs) }}</strong></article>
+          <article><span>Frame p95</span><strong>{{ formatMs(viewerPerformance?.frameP95Ms) }}</strong></article>
+        </div>
+        <div class="waterfall">
+          <div v-for="(range, index) in [...(summaryTrace?.requestRanges ?? []), ...(queryTrace?.requestRanges ?? [])]" :key="`${range.offset}:${range.length}:${index}`">
+            <span>{{ range.layer }}</span><i :style="{ width: `${Math.max(2, Math.min(100, (range.length / Math.max(1, queryTrace?.totalBytes ?? summaryTrace?.totalBytes ?? range.length)) * 100))}%` }"></i><code>{{ range.offset.toString() }} + {{ formatBytes(range.length) }}</code>
+          </div>
+          <p v-if="summaryTrace === undefined && queryTrace === undefined">No traced request has completed yet.</p>
+        </div>
+        <div class="evidence-meta">
+          <span>Visual {{ visualRegion ? formatShortRegion(visualRegion) : '—' }}</span>
+          <span>Requested {{ requestedRegion ? formatShortRegion(requestedRegion) : '—' }}</span>
+          <span>Loaded {{ loadedRegion ? formatShortRegion(loadedRegion) : '—' }}</span>
+          <span>Predicted adjacent {{ prefetchedRegion ? formatShortRegion(prefetchedRegion) : '—' }} (not fetched)</span>
+          <span v-if="queryTrace">Canonical hash {{ queryTrace.canonicalHash }}</span>
+        </div>
+        <label class="check"><input v-model="technicalMode" type="checkbox" />Technical evidence mode</label>
+        <p v-if="technicalMode" class="technical-note">Integrity, decompression, and decode timings are displayed independently and are never added together as elapsed wall time. Current reader fields: integrity {{ formatMs(queryTrace?.integrityMs) }}, decompression interval-union wall {{ formatMs(queryTrace?.decompressionMs) }}, decompression task aggregate {{ formatMs(queryTrace?.decompressionTaskMs) }}, regional decode {{ formatMs(queryTrace?.decodeMs) }}, graph merge {{ formatMs(queryTrace?.mergeMs) }}.</p>
+      </div>
     </section>
 
-    <details class="trace-panel" :open="Boolean(queryTrace)">
-      <summary>Exact request trace and correctness hash</summary>
-      <p v-if="queryTrace" class="hash"><strong>Canonical hash:</strong> {{ queryTrace.canonicalHash }}</p>
-      <div class="trace-table-wrap">
-        <table>
-          <thead><tr><th>Layer</th><th>Offset</th><th>Length</th></tr></thead>
-          <tbody>
-            <tr v-for="(range, index) in queryTrace?.requestRanges ?? []" :key="`${range.offset}:${index}`">
-              <td>{{ range.layer }}</td><td>{{ range.offset.toString() }}</td><td>{{ formatBytes(range.length) }}</td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
-    </details>
-  </section>
+    <div class="sr-status" role="status" aria-live="polite">{{ statusMessage }}</div>
+    <div v-if="errorMessage" class="toast error-toast" role="alert"><strong>Explorer error</strong><span>{{ errorMessage }}</span><a :href="withBase('/HOSTING')">Origin requirements</a></div><div v-else-if="shareMessage" class="toast" role="status">{{ shareMessage }}</div>
+    <dialog :open="sourceOpen" class="source-dialog" aria-label="Archive source"><header><h2>Open archive</h2><button type="button" @click="sourceOpen = false">×</button></header><label><span>Source</span><select v-model="archiveChoice" aria-label="Archive source" @change="onSourceChange"><option value="configured" :disabled="configuredArchiveUrl.length === 0">Configured large archive</option><option value="fixture">Bundled deterministic fixture</option><option value="custom">Custom remote URL</option><option value="local">Local .pngr file</option></select></label><label v-if="archiveChoice === 'custom'"><span>Remote .pngr URL</span><input v-model="customUrl" aria-label="Remote archive URL" type="url" placeholder="https://archive.example/immutable.pngr" /></label><button v-if="archiveChoice === 'custom'" type="button" class="primary-button" @click="loadSource">Open remote archive</button><button v-if="archiveChoice === 'local'" type="button" class="primary-button" @click="localFileInput?.click()">Choose local file</button><input ref="localFileInput" class="visually-hidden" type="file" accept=".pngr,application/octet-stream" @change="onLocalFile" /><div v-if="recentUrls.length > 0" class="recent-list"><h3>Recently opened on this device</h3><button v-for="url in recentUrls" :key="url" type="button" @click="useRecentUrl(url)">{{ url }}</button></div><p>Custom URLs and local filenames stay in this browser. The application has no analytics or query backend.</p></dialog>
+    <dialog :open="shortcutsOpen" class="shortcut-dialog" aria-label="Keyboard shortcuts"><header><h2>Keyboard controls</h2><button type="button" @click="shortcutsOpen = false">×</button></header><dl><div><dt><kbd>⌘/Ctrl K</kbd> or <kbd>/</kbd></dt><dd>Focus command bar</dd></div><div><dt><kbd>←</kbd> <kbd>→</kbd></dt><dd>Pan graph viewport</dd></div><div><dt><kbd>+</kbd> <kbd>−</kbd></dt><dd>Zoom graph viewport</dd></div><div><dt><kbd>Home</kbd></dt><dd>Reset local graph transform</dd></div><div><dt><kbd>?</kbd></dt><dd>Toggle this help</dd></div><div><dt><kbd>Esc</kbd></dt><dd>Close transient panels</dd></div></dl></dialog>
+  </main>
 </template>
 
-<style scoped>
-.demo-shell {
-  --demo-ink: #14213d;
-  --demo-muted: #5e6f84;
-  --demo-teal: #0c7c86;
-  --demo-teal-dark: #075c66;
-  --demo-coral: #c65d34;
-  --demo-paper: #f7fafb;
-  --demo-line: #d9e2e8;
-  color: var(--demo-ink);
-  max-width: 1440px;
-  margin: 0 auto 5rem;
+<style scoped src="./PangenomeDemo.css"></style>
+
+<style>
+body.pangenome-explorer-active {
+  overflow: hidden;
 }
-.demo-hero {
-  display: flex;
-  justify-content: space-between;
-  gap: 2rem;
-  align-items: flex-start;
-  padding: 1.5rem 0 1.1rem;
+body.pangenome-explorer-active .VPNav,
+body.pangenome-explorer-active .VPSidebar,
+body.pangenome-explorer-active .VPLocalNav,
+body.pangenome-explorer-active footer {
+  display: none;
 }
-.demo-hero h1 { margin: 0.15rem 0 0.5rem; font-size: clamp(2rem, 4vw, 3.7rem); line-height: 1; letter-spacing: -0.04em; }
-.demo-hero p:not(.eyebrow) { max-width: 760px; margin: 0; color: var(--demo-muted); font-size: 1.05rem; }
-.eyebrow { margin: 0; color: var(--demo-coral); font: 700 0.72rem/1.4 ui-monospace, monospace; letter-spacing: 0.14em; text-transform: uppercase; }
-.phase { display: flex; gap: 0.55rem; align-items: center; padding: 0.55rem 0.85rem; border: 1px solid var(--demo-line); border-radius: 999px; color: var(--demo-muted); font: 700 0.72rem/1 ui-monospace, monospace; text-transform: uppercase; letter-spacing: 0.08em; white-space: nowrap; }
-.phase span { width: 0.55rem; height: 0.55rem; border-radius: 50%; background: #94a3b8; }
-.phase[data-phase="ready"] span { background: #22a06b; box-shadow: 0 0 0 4px rgba(34, 160, 107, 0.14); }
-.phase[data-phase="opening"] span, .phase[data-phase="querying"] span { background: #f2b134; animation: pulse 1s ease-in-out infinite; }
-.phase[data-phase="error"] span { background: #c33d3d; }
-@keyframes pulse { 50% { opacity: 0.35; } }
-.control-panel { display: grid; grid-template-columns: repeat(5, minmax(130px, 1fr)); gap: 0.9rem; padding: 1.1rem; border: 1px solid var(--demo-line); border-radius: 16px; background: color-mix(in srgb, var(--demo-paper) 94%, transparent); box-shadow: 0 10px 32px rgba(20, 33, 61, 0.06); }
-.control-panel label { display: flex; min-width: 0; flex-direction: column; gap: 0.35rem; }
-.control-panel label > span { color: var(--demo-muted); font: 700 0.68rem/1.2 ui-monospace, monospace; letter-spacing: 0.07em; text-transform: uppercase; }
-.control-panel input, .control-panel select { width: 100%; min-height: 2.55rem; padding: 0.55rem 0.68rem; border: 1px solid #c9d4dc; border-radius: 8px; background: var(--vp-c-bg); color: var(--vp-c-text-1); font: inherit; }
-.control-panel input:focus, .control-panel select:focus { border-color: var(--demo-teal); outline: 3px solid rgba(12, 124, 134, 0.13); }
-.wide { grid-column: span 2; }
-.actions { display: flex; flex-direction: row; align-items: center; gap: 0.7rem; }
-button { min-height: 2.35rem; padding: 0.45rem 0.8rem; border: 1px solid #bccbd4; border-radius: 8px; background: var(--vp-c-bg); color: var(--demo-ink); font-weight: 700; cursor: pointer; }
-button:hover:not(:disabled) { border-color: var(--demo-teal); color: var(--demo-teal-dark); }
-button:focus-visible { outline: 3px solid rgba(12, 124, 134, 0.22); outline-offset: 2px; }
-button:disabled { opacity: 0.5; cursor: wait; }
-button.primary { border-color: var(--demo-teal); background: var(--demo-teal); color: white; }
-.action-note { min-width: 0; color: var(--demo-muted); font-size: 0.82rem; overflow-wrap: anywhere; }
-.error-panel { margin: 1rem 0; padding: 0.9rem 1rem; border-left: 4px solid #c33d3d; border-radius: 6px; background: #fff1f0; color: #732626; }
-.error-panel a { margin-left: 0.3rem; font-weight: 700; }
-.viewer-panel { margin-top: 1.2rem; }
-.viewer-toolbar { display: flex; justify-content: space-between; align-items: center; gap: 1rem; margin-bottom: 0.55rem; }
-.viewer-toolbar > div:first-child { display: flex; flex-direction: column; }
-.viewer-toolbar span { color: var(--demo-muted); font-size: 0.78rem; }
-.view-actions { display: flex; gap: 0.35rem; }
-.view-actions button { min-width: 2.35rem; }
-.viewer-host { min-height: 520px; }
-.semantics-note { margin: 0.65rem 0 0; padding: 0.75rem 0.9rem; border-radius: 9px; background: rgba(117, 98, 168, 0.09); color: var(--demo-muted); font-size: 0.86rem; }
-.metrics-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 0.85rem; margin-top: 1rem; }
-.metrics-grid article { padding: 0.9rem 1rem; border: 1px solid var(--demo-line); border-radius: 12px; background: var(--vp-c-bg); }
-.metrics-grid h2 { margin: 0 0 0.55rem; color: var(--demo-teal-dark); font-size: 0.78rem; letter-spacing: 0.08em; text-transform: uppercase; }
-dl { margin: 0; }
-dl div { display: flex; justify-content: space-between; gap: 1rem; padding: 0.24rem 0; border-bottom: 1px dotted var(--demo-line); }
-dt { color: var(--demo-muted); font-size: 0.78rem; }
-dd { margin: 0; font: 700 0.78rem/1.4 ui-monospace, monospace; text-align: right; }
-.budget-note { margin: 0.55rem 0 0; color: var(--demo-coral); font-size: 0.75rem; }
-.trace-panel { margin-top: 1rem; border: 1px solid var(--demo-line); border-radius: 12px; padding: 0.8rem 1rem; }
-.trace-panel summary { cursor: pointer; font-weight: 700; }
-.hash { overflow-wrap: anywhere; font: 0.76rem/1.5 ui-monospace, monospace; }
-.trace-table-wrap { overflow-x: auto; }
-table { width: 100%; border-collapse: collapse; font: 0.78rem/1.4 ui-monospace, monospace; }
-th, td { padding: 0.45rem; border-bottom: 1px solid var(--demo-line); text-align: left; }
-@media (max-width: 1000px) {
-  .control-panel { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .metrics-grid { grid-template-columns: repeat(2, 1fr); }
+body.pangenome-explorer-active .VPContent,
+body.pangenome-explorer-active .VPPage {
+  padding: 0;
 }
-@media (max-width: 640px) {
-  .demo-hero, .viewer-toolbar { flex-direction: column; }
-  .control-panel, .metrics-grid { grid-template-columns: 1fr; }
-  .wide { grid-column: auto; }
-  .actions { align-items: stretch; flex-direction: column; }
-  .viewer-toolbar { align-items: stretch; }
-  .view-actions { flex-wrap: wrap; }
+body.pangenome-explorer-active .VPContent.has-sidebar {
+  padding-left: 0;
 }
-:global(.dark) .demo-shell { --demo-ink: #e8eef5; --demo-muted: #aab8c8; --demo-paper: #171b22; --demo-line: #34404b; --demo-teal-dark: #5ecbd2; }
-:global(.dark) .error-panel { background: #351f21; color: #ffc8c5; }
+body.pangenome-explorer-active .VPPage .container,
+body.pangenome-explorer-active .VPPage .content,
+body.pangenome-explorer-active .vp-doc {
+  max-width: none;
+  margin: 0;
+}
+body.pangenome-explorer-active .VPPage .content {
+  padding: 0;
+}
 </style>

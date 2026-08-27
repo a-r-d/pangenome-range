@@ -89,6 +89,11 @@ export interface QueryMeasurement {
   readonly dependencyRounds: number;
   readonly cacheHits: QueryTrace["cacheHits"];
   readonly decompression: DecompressionMeasurement;
+  readonly integrityMs: number;
+  /** Interval-union decompression wall time from the reader trace. */
+  readonly decompressionWallMs: number;
+  /** Aggregate decompression task time; may exceed wall time. */
+  readonly decompressionTaskMs: number;
   readonly decodeMs: number;
   readonly mergeMs: number;
   readonly selectedChunks: number;

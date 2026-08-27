@@ -4,7 +4,7 @@ import { readFile, stat } from "node:fs/promises";
 import { createServer } from "node:http";
 import { dirname, extname, join, normalize } from "node:path";
 import { fileURLToPath } from "node:url";
-import { chromium } from "@playwright/test";
+import { chromium, firefox, webkit } from "@playwright/test";
 
 const docsDirectory = dirname(dirname(fileURLToPath(import.meta.url)));
 const repository = dirname(docsDirectory);
@@ -16,8 +16,17 @@ const fixturePath = join(
   "format-v1.pngr",
 );
 const fixture = await readFile(fixturePath);
+const indexedFixturePath = join(
+  repository,
+  "test-data",
+  "golden",
+  "record-archive-v1.pngr",
+);
+const indexedFixture = await readFile(indexedFixturePath);
 const etag = `"sha256-${createHash("sha256").update(fixture).digest("hex")}"`;
 const requests = [];
+const configuredArchiveUrl =
+  process.env.VITE_PANGENOME_RANGE_DEMO_ARCHIVE_URL ?? "";
 
 await stat(join(siteDirectory, "demo.html")).catch(() => {
   throw new Error("built Pages site is missing; run pnpm docs:build first");
@@ -41,6 +50,10 @@ const server = createServer(async (request, response) => {
   }
   if (url.pathname.endsWith("/broken.pngr")) {
     serveArchive(request, response, fixture, true);
+    return;
+  }
+  if (url.pathname.endsWith("/record.pngr")) {
+    serveArchive(request, response, indexedFixture, false);
     return;
   }
   if (url.pathname.endsWith(".pngr")) {
@@ -74,13 +87,19 @@ const browser = await chromium.launch({ headless: true });
 const page = await browser.newPage({ viewport: { width: 1440, height: 1050 } });
 const browserErrors = [];
 page.on("pageerror", (error) => browserErrors.push(error.message));
+let configuredArchivePassed = false;
 
 try {
+  if (configuredArchiveUrl.length > 0) {
+    configuredArchivePassed = await exerciseConfiguredArchive(browser, baseUrl);
+  }
   await page.goto(
     `${baseUrl}/demo?archive=fixture&sample=GRCh38&contig=chr1&start=100&end=102&context=100`,
   );
-  await page.locator('.phase[data-phase="ready"]').waitFor();
+  await page.locator('.explorer[data-phase="ready"]').waitFor();
   await assertHealthyDemo(page);
+  await page.getByLabel("Go to a locus or genomic coordinate").fill("PNGRTEST");
+  await page.getByText(/no named-locus index/i).waitFor();
   assert(
     requests.some(
       (request) =>
@@ -90,55 +109,162 @@ try {
     "the built demo did not make a real 206 request for its bundled archive",
   );
 
-  await page.getByRole("button", { name: "Zoom in" }).click();
-  await page.locator('[data-viewer-zoom="1.250"]').waitFor();
+  await page.getByTitle("Zoom in").click();
+  const commandInput = page.getByLabel("Go to a locus or genomic coordinate");
+  await commandInput.fill("GRCh38 chr1:100-101");
+  await page.getByRole("button", { name: "Go", exact: true }).click();
+  await page.locator('.explorer[data-phase="ready"]').waitFor();
+  const firstHistoryUrl = page.url();
+  await commandInput.fill("GRCh38 chr1:101-102");
+  await page.getByRole("button", { name: "Go", exact: true }).click();
+  await page.locator('.explorer[data-phase="ready"]').waitFor();
+  const secondHistoryUrl = page.url();
+  assert.notEqual(firstHistoryUrl, secondHistoryUrl);
+  await page.goBack();
+  await page.locator('.explorer[data-phase="ready"]').waitFor();
+  assert.equal(page.url(), firstHistoryUrl);
+  await page.goForward();
+  await page.locator('.explorer[data-phase="ready"]').waitFor();
+  assert.equal(page.url(), secondHistoryUrl);
+  await commandInput.fill("GRCh38 chr1:100-102");
+  await page.getByRole("button", { name: "Go", exact: true }).click();
+  await page.locator('.explorer[data-phase="ready"]').waitFor();
   await exerciseNodeHoverAndSelection(page);
-  await page.getByRole("button", { name: "Pan right" }).click();
-  await page.getByRole("button", { name: "Reset view" }).click();
-  await page.locator('[data-viewer-zoom="1.000"]').waitFor();
+  await page.getByTitle("Pan right").click();
+  await page.keyboard.press("Control+k");
+  assert.equal(
+    await page
+      .getByLabel("Go to a locus or genomic coordinate")
+      .evaluate((element) => element === document.activeElement),
+    true,
+    "command palette shortcut did not focus the command bar",
+  );
+
+  await page.locator(".source-button").click();
+  await page
+    .getByRole("combobox", { name: "Archive source" })
+    .selectOption("custom");
+  await page.getByLabel("Remote archive URL").fill(`${baseUrl}/record.pngr`);
+  await page.getByRole("button", { name: "Open remote archive" }).click();
+  await waitForReady(page, "indexed custom archive");
+  const commandBar = page.getByLabel("Go to a locus or genomic coordinate");
+  await commandBar.fill("rang");
+  await page.getByRole("option", { name: /PNGRTEST/ }).waitFor();
+  await commandBar.press("ArrowDown");
+  await commandBar.press("Enter");
+  await page.locator('.explorer[data-phase="ready"]').waitFor();
+  await page.getByRole("heading", { name: "PNGRTEST" }).waitFor();
+  await commandBar.fill("RANGE1");
+  await page.getByRole("button", { name: "Go", exact: true }).click();
+  await page.locator('.explorer[data-phase="ready"]').waitFor();
+  await page.getByRole("heading", { name: "PNGRTEST" }).waitFor();
 
   const remoteRequestsBeforeLocal = requests.length;
   await page.locator('input[type="file"]').setInputFiles(fixturePath);
-  await page.getByRole("button", { name: "Load region" }).click();
-  await page.locator('.phase[data-phase="ready"]').waitFor();
-  await page.getByText("format-v1.pngr (local file)").waitFor();
+  await page.locator('.explorer[data-phase="ready"]').waitFor();
+  await page
+    .getByRole("heading", { name: "format-v1.pngr (local file)" })
+    .waitFor();
   assert.equal(
     requests.length,
     remoteRequestsBeforeLocal,
     "local file mode unexpectedly performed an HTTP request",
   );
 
-  await page.getByLabel("Archive source").selectOption("custom");
+  await page.locator(".source-button").click();
+  await page
+    .getByRole("combobox", { name: "Archive source" })
+    .selectOption("custom");
   await page.getByLabel("Remote archive URL").fill(`${baseUrl}/slow.pngr`);
-  await page.getByRole("button", { name: "Load region" }).click();
-  await page.locator('.phase[data-phase="opening"]').waitFor();
-  await page.getByLabel("Archive source").selectOption("fixture");
-  await page.getByRole("button", { name: /Load/ }).click();
-  await page.locator('.phase[data-phase="ready"]').waitFor();
+  await page.getByRole("button", { name: "Open remote archive" }).click();
+  await page.locator('.explorer[data-phase="opening"]').waitFor();
+  await page.locator(".source-button").click();
+  await page
+    .getByRole("combobox", { name: "Archive source" })
+    .selectOption("fixture");
+  await page.locator('.explorer[data-phase="ready"]').waitFor();
   assert.equal(
     await page.getByRole("alert").count(),
     0,
     "cancelled load leaked a stale error",
   );
 
-  await page.getByLabel("Archive source").selectOption("custom");
+  await page.locator(".source-button").click();
+  await page
+    .getByRole("combobox", { name: "Archive source" })
+    .selectOption("custom");
   await page.getByLabel("Remote archive URL").fill(`${baseUrl}/broken.pngr`);
-  await page.getByRole("button", { name: "Load region" }).click();
+  await page.getByRole("button", { name: "Open remote archive" }).click();
   await page.getByRole("alert").waitFor();
   await assertContains(
     await page.getByRole("alert").innerText(),
     /206|Content-Range|range/i,
   );
 
-  await page.getByLabel("Archive source").selectOption("fixture");
-  await page.getByRole("button", { name: /Load/ }).click();
-  await page.locator('.phase[data-phase="ready"]').waitFor();
+  await page.locator(".source-button").click();
+  await page
+    .getByRole("combobox", { name: "Archive source" })
+    .selectOption("fixture");
+  await page.locator('.explorer[data-phase="ready"]').waitFor();
+  await page.getByRole("button", { name: /Range & performance/ }).click();
+  await page.getByText(/Canonical hash/).waitFor();
+  const timingEvidence = await page
+    .locator(".timing-strip article")
+    .evaluateAll((articles) =>
+      Object.fromEntries(
+        articles.map((article) => [
+          article.querySelector("span")?.textContent?.trim(),
+          article.querySelector("strong")?.textContent?.trim(),
+        ]),
+      ),
+    );
   await page.screenshot({
     path:
       process.env.PANGENOME_RANGE_DEMO_SCREENSHOT ??
       "/tmp/pangenome-range-demo.png",
     fullPage: true,
   });
+  await page.getByTitle("Toggle color theme").click();
+  await page.screenshot({
+    path: (
+      process.env.PANGENOME_RANGE_DEMO_SCREENSHOT ??
+      "/tmp/pangenome-range-demo.png"
+    ).replace(/\.png$/, "-dark.png"),
+    fullPage: true,
+  });
+  await page.setViewportSize({ width: 834, height: 1112 });
+  await page.screenshot({
+    path: (
+      process.env.PANGENOME_RANGE_DEMO_SCREENSHOT ??
+      "/tmp/pangenome-range-demo.png"
+    ).replace(/\.png$/, "-tablet.png"),
+    fullPage: true,
+  });
+  const browserMatrix = ["chromium"];
+  for (const [name, engine] of [
+    ["firefox", firefox],
+    ["webkit", webkit],
+  ]) {
+    const matrixBrowser = await engine.launch({ headless: true });
+    try {
+      const matrixPage = await matrixBrowser.newPage({
+        viewport: { width: 1280, height: 900 },
+      });
+      const matrixErrors = [];
+      matrixPage.on("pageerror", (error) => matrixErrors.push(error.message));
+      await matrixPage.goto(
+        `${baseUrl}/demo?archive=fixture&sample=GRCh38&contig=chr1&start=100&end=102&context=100`,
+      );
+      await matrixPage.locator('.explorer[data-phase="ready"]').waitFor();
+      await matrixPage
+        .getByRole("img", { name: /Pangenome graph for GRCh38 chr1/ })
+        .waitFor();
+      assert.deepEqual(matrixErrors, [], `${name} reported page errors`);
+      browserMatrix.push(name);
+    } finally {
+      await matrixBrowser.close();
+    }
+  }
   assert.deepEqual(browserErrors, []);
   console.log(
     JSON.stringify(
@@ -150,9 +276,21 @@ try {
         localFilePassed: true,
         cancellationPassed: true,
         actionableRangeErrorPassed: true,
+        configuredArchivePassed,
+        browserHistoryPassed: true,
+        browserMatrix,
+        timingEvidence,
         screenshot:
           process.env.PANGENOME_RANGE_DEMO_SCREENSHOT ??
           "/tmp/pangenome-range-demo.png",
+        darkScreenshot: (
+          process.env.PANGENOME_RANGE_DEMO_SCREENSHOT ??
+          "/tmp/pangenome-range-demo.png"
+        ).replace(/\.png$/, "-dark.png"),
+        tabletScreenshot: (
+          process.env.PANGENOME_RANGE_DEMO_SCREENSHOT ??
+          "/tmp/pangenome-range-demo.png"
+        ).replace(/\.png$/, "-tablet.png"),
       },
       null,
       2,
@@ -165,23 +303,70 @@ try {
   );
 }
 
+async function exerciseConfiguredArchive(browser, baseUrl) {
+  const configuredPage = await browser.newPage({
+    viewport: { width: 1280, height: 900 },
+  });
+  const errors = [];
+  configuredPage.on("pageerror", (error) => errors.push(error.message));
+  try {
+    await configuredPage.goto(
+      `${baseUrl}/demo?sample=CHM13&contig=chr1&start=1000000&end=1100000&context=100`,
+    );
+    await configuredPage
+      .locator('.explorer[data-phase="ready"]')
+      .waitFor({ timeout: 30_000 });
+    await configuredPage.locator(".source-button").click();
+    assert.equal(
+      await configuredPage
+        .getByRole("combobox", { name: "Archive source" })
+        .inputValue(),
+      "configured",
+    );
+    await configuredPage
+      .getByText(/present-populated/)
+      .waitFor({ timeout: 10_000 });
+    assert.deepEqual(errors, []);
+    return true;
+  } finally {
+    await configuredPage.close();
+  }
+}
+
 async function assertHealthyDemo(page) {
   await page
     .getByRole("img", { name: /Pangenome graph for GRCh38 chr1/ })
     .waitFor();
-  await page.getByText("anonymous-distinct-weighted-tile-paths").waitFor();
-  await page.getByText("Canonical hash:").waitFor();
-  assert.equal(await page.getByLabel("Archive source").inputValue(), "fixture");
+  await page.getByText(/Anonymous weighted traversals remain local/).waitFor();
+  await page.locator(".source-button").click();
   assert.equal(
-    await page.getByLabel("Reference / sample").inputValue(),
-    "GRCh38",
+    await page.getByRole("combobox", { name: "Archive source" }).inputValue(),
+    "fixture",
   );
-  assert.equal(await page.getByLabel("Contig").inputValue(), "chr1");
-  assert.equal(await page.getByLabel("Preset region").count(), 1);
+  await page.locator(".source-dialog header button").click();
   assert.equal(
-    await page.getByLabel("Pangenome graph visualization").count(),
-    1,
+    await page.getByLabel("Go to a locus or genomic coordinate").inputValue(),
+    "GRCh38#chr1:100-102",
   );
+  assert.equal(await page.getByLabel("Genomic viewport").count(), 1);
+  assert.equal(await page.getByLabel("Selection inspector").count(), 1);
+}
+
+async function waitForReady(page, label) {
+  try {
+    await page
+      .locator('.explorer[data-phase="ready"]')
+      .waitFor({ timeout: 15_000 });
+  } catch (error) {
+    const phase = await page.locator(".explorer").getAttribute("data-phase");
+    const alert = await page
+      .getByRole("alert")
+      .allInnerTexts()
+      .catch(() => []);
+    throw new Error(
+      `${label} did not reach ready (phase=${phase}, alerts=${JSON.stringify(alert)}): ${error instanceof Error ? error.message : error}`,
+    );
+  }
 }
 
 async function exerciseNodeHoverAndSelection(page) {

@@ -302,6 +302,7 @@ fn print_help() {
     println!();
     println!("Encode options:");
     println!("  --sample NAME              select a reference sample");
+    println!("  --reference-haplotype N    explicitly anchor to this real haplotype of --sample");
     println!("  --contig NAME              select a reference contig");
     println!("  --start BP --end BP        restrict the selected contig interval");
     println!("  --window-size BP           base window size (default: 16384)");
@@ -772,6 +773,9 @@ fn encode(args: &mut impl Iterator<Item = String>) -> AppResult<()> {
     while let Some(flag) = args.next() {
         match flag.as_str() {
             "--sample" => options.sample = Some(option_value(args, &flag)?),
+            "--reference-haplotype" => {
+                options.reference_haplotype = Some(parse_option(args, &flag)?);
+            }
             "--contig" => options.contig = Some(option_value(args, &flag)?),
             "--start" => options.start = Some(parse_option(args, &flag)?),
             "--end" => options.end = Some(parse_option(args, &flag)?),

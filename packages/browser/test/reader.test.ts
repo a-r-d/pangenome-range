@@ -898,6 +898,8 @@ describe("reader contract validation", () => {
         streamed,
         ordered: result.tiles.map((tile) => tile.start),
         graphHash: result.trace?.canonicalHash,
+        decompressionWallMs: result.trace?.decompressionMs ?? 0,
+        decompressionTaskMs: result.trace?.decompressionTaskMs ?? 0,
         tileHashes: result.tiles.map(canonicalHaplotypeTileHash),
         referenceTraversal: Array.from(result.graph.referenceTraversal, String),
       };
@@ -907,6 +909,12 @@ describe("reader contract validation", () => {
     expect(forward.ordered).toEqual([...forward.ordered].sort((a, b) => a - b));
     expect(reverse.ordered).toEqual(forward.ordered);
     expect(reverse.graphHash).toBe(forward.graphHash);
+    expect(forward.decompressionTaskMs).toBeGreaterThanOrEqual(
+      forward.decompressionWallMs,
+    );
+    expect(reverse.decompressionTaskMs).toBeGreaterThanOrEqual(
+      reverse.decompressionWallMs,
+    );
     expect(reverse.tileHashes).toEqual(forward.tileHashes);
     expect(reverse.referenceTraversal).toEqual(forward.referenceTraversal);
     expect([...reverse.streamed].sort((a, b) => a - b)).toEqual(

@@ -1,7 +1,10 @@
 import type { QueryTrace, RegionQuery } from "../reader/types.js";
+import type { ViewerDisplayMode } from "./lod.js";
 import {
   emptyViewerCounts,
+  hitTestEdge,
   hitTestNode,
+  hitTestTraversal,
   layoutViewerModel,
   ViewerModelBuilder,
   viewerBudgets,
@@ -13,12 +16,23 @@ import type {
   PangenomeViewer,
   PangenomeViewerOptions,
   ViewerEventMap,
+  ViewerLayerState,
   ViewerLayout,
   ViewerModel,
+  ViewerPerformanceSnapshot,
+  ViewerSelectionDetail,
   ViewerSnapshot,
+  ViewerTheme,
 } from "./types.js";
 
 const CANVAS_HEIGHT = 460;
+const DEFAULT_LAYERS: ViewerLayerState = {
+  reference: true,
+  topology: true,
+  traversals: true,
+  tileBoundaries: true,
+  sequenceLabels: true,
+};
 
 export function createViewerController(
   container: HTMLElement,
@@ -77,6 +91,9 @@ export function createViewerController(
     progress: new Set(),
     querytrace: new Set(),
     error: new Set(),
+    viewportchange: new Set(),
+    selectionchange: new Set(),
+    lodchange: new Set(),
   };
 
   let destroyed = false;
@@ -90,13 +107,31 @@ export function createViewerController(
   let hoveredNodeId: bigint | undefined;
   let zoom = 1;
   let panX = 0;
+  let displayMode: ViewerDisplayMode = options.initialDisplayMode ?? "detailed";
+  let layers: ViewerLayerState = {
+    ...DEFAULT_LAYERS,
+    ...options.initialLayers,
+  };
+  let theme: ViewerTheme = options.initialTheme ?? "light";
   let cssWidth = 900;
   let cssHeight = CANVAS_HEIGHT;
   let frame: number | undefined;
   let pointerId: number | undefined;
+  const activePointers = new Map<number, { x: number; y: number }>();
   let pointerStartX = 0;
   let pointerStartPan = 0;
   let pointerMoved = false;
+  let pinchStartDistance = 0;
+  let pinchStartZoom = 1;
+  let pinchWorldX = 0;
+  let viewportTimer: ReturnType<typeof globalThis.setTimeout> | undefined;
+  let queryStartedAt = 0;
+  let modelUpdateMs = 0;
+  let layoutMs = 0;
+  let paintMs = 0;
+  let firstTilePaintMs: number | undefined;
+  let queryCompleteMs: number | undefined;
+  const frameDurations: number[] = [];
 
   const emit = <K extends keyof ViewerEventMap>(
     event: K,
@@ -142,14 +177,17 @@ export function createViewerController(
       updateStatus();
       return;
     }
+    const layoutStarted = performance.now();
     layout = layoutViewerModel(model, {
       width: cssWidth,
       height: cssHeight,
       zoom,
       panX,
     });
+    layoutMs += performance.now() - layoutStarted;
     const ratio = Math.max(1, globalThis.devicePixelRatio ?? 1);
     context.setTransform(ratio, 0, 0, ratio, 0, 0);
+    const paintStarted = performance.now();
     renderViewerCanvas(context, layout, {
       ...(options.background === undefined
         ? {}
@@ -157,7 +195,20 @@ export function createViewerController(
       ...(hoveredNodeId === undefined ? {} : { hoveredNodeId }),
       ...(selectedNodeId === undefined ? {} : { selectedNodeId }),
       loading,
+      displayMode,
+      layers,
+      theme,
     });
+    paintMs += performance.now() - paintStarted;
+    frameDurations.push(performance.now() - layoutStarted);
+    if (frameDurations.length > 120) frameDurations.shift();
+    if (
+      firstTilePaintMs === undefined &&
+      queryStartedAt > 0 &&
+      layout.counts.tiles > 0
+    ) {
+      firstTilePaintMs = performance.now() - queryStartedAt;
+    }
     updateStatus();
   };
 
@@ -181,12 +232,21 @@ export function createViewerController(
     try {
       await queryController.run(region, {
         onStart: (startedRegion) => {
+          queryStartedAt = performance.now();
+          modelUpdateMs = 0;
+          layoutMs = 0;
+          paintMs = 0;
+          firstTilePaintMs = undefined;
+          queryCompleteMs = undefined;
+          frameDurations.length = 0;
           currentRegion = startedRegion;
+          const preserveRenderedRegion = (model?.counts.tiles ?? 0) > 0;
           builder = new ViewerModelBuilder(region, budgets);
-          model = builder.snapshot();
+          if (!preserveRenderedRegion) model = builder.snapshot();
           trace = undefined;
           selectedNodeId = undefined;
           hoveredNodeId = undefined;
+          emit("selectionchange", undefined);
           zoom = 1;
           panX = 0;
           loading = true;
@@ -196,8 +256,10 @@ export function createViewerController(
           scheduleRender();
         },
         onTile: (tile) => {
+          const modelStarted = performance.now();
           builder?.addTile(tile);
           model = builder?.snapshot();
+          modelUpdateMs += performance.now() - modelStarted;
           if (model === undefined || currentRegion === undefined) return;
           const summary = viewerSummary(model.counts);
           emit("progress", {
@@ -214,6 +276,7 @@ export function createViewerController(
           scheduleRender();
         },
         onComplete: () => {
+          queryCompleteMs = performance.now() - queryStartedAt;
           loading = false;
           render();
         },
@@ -231,6 +294,43 @@ export function createViewerController(
     }
   };
 
+  const scheduleViewportChange = (
+    source: "pointer" | "keyboard" | "api",
+  ): void => {
+    if (viewportTimer !== undefined) globalThis.clearTimeout(viewportTimer);
+    viewportTimer = globalThis.setTimeout(() => {
+      viewportTimer = undefined;
+      if (destroyed || currentRegion === undefined) return;
+      const interval = currentRegion.end - currentRegion.start;
+      const plotWidth = Math.max(1, cssWidth - 78);
+      const start = Math.max(
+        0,
+        Math.floor(
+          currentRegion.start + (-panX / (plotWidth * zoom)) * interval,
+        ),
+      );
+      const end = Math.max(
+        start + 1,
+        Math.ceil(
+          currentRegion.start +
+            ((plotWidth - panX) / (plotWidth * zoom)) * interval,
+        ),
+      );
+      emit("viewportchange", {
+        visualRegion: {
+          sample: currentRegion.sample,
+          contig: currentRegion.contig,
+          start,
+          end,
+          ...(currentRegion.context === undefined
+            ? {}
+            : { context: currentRegion.context }),
+        },
+        source,
+      });
+    }, 180);
+  };
+
   const pointerPosition = (
     event: PointerEvent | WheelEvent,
   ): [number, number] => {
@@ -246,17 +346,38 @@ export function createViewerController(
     const world = (x - 54 - panX) / previousZoom;
     panX = x - 54 - world * zoom;
     scheduleRender();
+    scheduleViewportChange("pointer");
   };
   const onPointerDown = (event: PointerEvent): void => {
+    activePointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
     pointerId = event.pointerId;
     pointerStartX = event.clientX;
     pointerStartPan = panX;
     pointerMoved = false;
     canvas.setPointerCapture?.(event.pointerId);
     canvas.style.cursor = "grabbing";
+    if (activePointers.size === 2) beginPinch();
   };
   const onPointerMove = (event: PointerEvent): void => {
     const [x, y] = pointerPosition(event);
+    if (activePointers.has(event.pointerId)) {
+      activePointers.set(event.pointerId, {
+        x: event.clientX,
+        y: event.clientY,
+      });
+    }
+    if (activePointers.size === 2 && pinchStartDistance > 0) {
+      const [first, second] = [...activePointers.values()];
+      if (first === undefined || second === undefined) return;
+      const distance = Math.hypot(first.x - second.x, first.y - second.y);
+      const rect = canvas.getBoundingClientRect();
+      const centerX = (first.x + second.x) / 2 - rect.left;
+      zoom = clamp(pinchStartZoom * (distance / pinchStartDistance), 0.5, 24);
+      panX = centerX - 54 - pinchWorldX * zoom;
+      pointerMoved = true;
+      scheduleRender();
+      return;
+    }
     if (pointerId === event.pointerId) {
       const movement = event.clientX - pointerStartX;
       pointerMoved ||= Math.abs(movement) > 3;
@@ -276,23 +397,50 @@ export function createViewerController(
     scheduleRender();
   };
   const onPointerUp = (event: PointerEvent): void => {
-    if (pointerId !== event.pointerId) return;
+    if (!activePointers.has(event.pointerId)) return;
     const [x, y] = pointerPosition(event);
-    if (!pointerMoved && layout !== undefined) {
-      const selected = hitTestNode(layout, x, y);
-      selectedNodeId = selected?.id;
+    const wasPinching = activePointers.size > 1;
+    if (!pointerMoved && !wasPinching && layout !== undefined) {
+      const selected = selectionAt(layout, x, y);
+      selectedNodeId = selected?.kind === "node" ? selected.node.id : undefined;
       if (selected !== undefined)
-        detailElement.textContent = nodeDescription(selected);
+        detailElement.textContent = selectionDescription(selected);
+      emit("selectionchange", selected);
     }
     canvas.releasePointerCapture?.(event.pointerId);
-    pointerId = undefined;
+    activePointers.delete(event.pointerId);
+    const remaining = activePointers.entries().next().value as
+      | [number, { x: number; y: number }]
+      | undefined;
+    pointerId = remaining?.[0];
+    if (remaining !== undefined) {
+      pointerStartX = remaining[1].x;
+      pointerStartPan = panX;
+      pointerMoved = true;
+    }
+    pinchStartDistance = 0;
     canvas.style.cursor = "grab";
     scheduleRender();
+    if (pointerMoved && activePointers.size === 0)
+      scheduleViewportChange("pointer");
   };
   const onPointerLeave = (): void => {
-    if (pointerId !== undefined) return;
+    if (activePointers.size > 0) return;
     hoveredNodeId = undefined;
     scheduleRender();
+  };
+  const beginPinch = (): void => {
+    const [first, second] = [...activePointers.values()];
+    if (first === undefined || second === undefined) return;
+    pinchStartDistance = Math.max(
+      1,
+      Math.hypot(first.x - second.x, first.y - second.y),
+    );
+    pinchStartZoom = zoom;
+    const rect = canvas.getBoundingClientRect();
+    const centerX = (first.x + second.x) / 2 - rect.left;
+    pinchWorldX = (centerX - 54 - panX) / zoom;
+    pointerMoved = true;
   };
   const onDoubleClick = (): void => {
     zoom = 1;
@@ -326,6 +474,7 @@ export function createViewerController(
     if (handled) {
       event.preventDefault();
       scheduleRender();
+      scheduleViewportChange("keyboard");
     }
   };
 
@@ -346,6 +495,7 @@ export function createViewerController(
 
   const viewer: PangenomeViewer = {
     setRegion,
+    setViewport: setRegion,
     getRegion: () => currentRegion,
     getSnapshot: (): ViewerSnapshot => ({
       ...(currentRegion === undefined ? {} : { region: currentRegion }),
@@ -353,6 +503,9 @@ export function createViewerController(
       loading,
       zoom,
       panX,
+      displayMode,
+      layers,
+      theme,
       ...(selectedNodeId === undefined ? {} : { selectedNodeId }),
       ...(trace === undefined ? {} : { trace }),
     }),
@@ -363,6 +516,7 @@ export function createViewerController(
       }
       zoom = clamp(zoom * factor, 0.5, 24);
       scheduleRender();
+      scheduleViewportChange("api");
     },
     panBy: (pixels) => {
       if (!Number.isFinite(pixels)) {
@@ -370,12 +524,43 @@ export function createViewerController(
       }
       panX += pixels;
       scheduleRender();
+      scheduleViewportChange("api");
     },
     resetView: () => {
       zoom = 1;
       panX = 0;
       scheduleRender();
     },
+    setDisplayMode: (mode) => {
+      if (!["overview", "regional", "detailed", "base"].includes(mode)) {
+        throw new TypeError(`unsupported viewer display mode ${mode}`);
+      }
+      if (displayMode === mode) return;
+      displayMode = mode;
+      emit("lodchange", mode);
+      scheduleRender();
+    },
+    setLayers: (nextLayers) => {
+      layers = { ...layers, ...nextLayers };
+      scheduleRender();
+    },
+    setTheme: (nextTheme) => {
+      if (nextTheme !== "light" && nextTheme !== "dark") {
+        throw new TypeError(`unsupported viewer theme ${nextTheme}`);
+      }
+      theme = nextTheme;
+      applyElementTheme(root, status, traceElement, theme);
+      scheduleRender();
+    },
+    getPerformanceSnapshot: (): ViewerPerformanceSnapshot => ({
+      modelUpdateMs,
+      layoutMs,
+      paintMs,
+      ...(firstTilePaintMs === undefined ? {} : { firstTilePaintMs }),
+      ...(queryCompleteMs === undefined ? {} : { queryCompleteMs }),
+      frameP95Ms: percentile(frameDurations, 0.95),
+      sampledFrames: frameDurations.length,
+    }),
     on: (event, listener) => {
       listeners[event].add(listener);
       return () => listeners[event].delete(listener);
@@ -386,6 +571,7 @@ export function createViewerController(
       queryController.destroy();
       resizeObserver?.disconnect();
       if (frame !== undefined) cancelFrame(frame);
+      if (viewportTimer !== undefined) globalThis.clearTimeout(viewportTimer);
       canvas.removeEventListener("wheel", onWheel);
       canvas.removeEventListener("pointerdown", onPointerDown);
       canvas.removeEventListener("pointermove", onPointerMove);
@@ -399,10 +585,28 @@ export function createViewerController(
     },
   };
 
+  applyElementTheme(root, status, traceElement, theme);
+
   if (options.initialRegion !== undefined) {
     void viewer.setRegion(options.initialRegion).catch(() => undefined);
   }
   return viewer;
+}
+
+function applyElementTheme(
+  root: HTMLElement,
+  status: HTMLElement,
+  trace: HTMLElement,
+  theme: ViewerTheme,
+): void {
+  const dark = theme === "dark";
+  root.dataset.viewerTheme = theme;
+  root.style.background = dark ? "#10151d" : "#fbfcfe";
+  root.style.borderColor = dark ? "#354153" : "#d9e2ec";
+  status.style.borderColor = dark ? "#303b4b" : "#e3e9ef";
+  status.style.color = dark ? "#aeb9c9" : "#516176";
+  trace.style.borderColor = dark ? "#303b4b" : "#e3e9ef";
+  trace.style.color = dark ? "#aeb9c9" : "#516176";
 }
 
 function configureElements(
@@ -481,6 +685,48 @@ function nodeDescription(node: {
   );
 }
 
+function selectionAt(
+  layout: ViewerLayout,
+  x: number,
+  y: number,
+): ViewerSelectionDetail | undefined {
+  const node = hitTestNode(layout, x, y);
+  if (node !== undefined) {
+    return {
+      kind: "node",
+      node,
+      incoming: layout.edges.filter((edge) => edge.to === node.id),
+      outgoing: layout.edges.filter((edge) => edge.from === node.id),
+      localTraversalWeights: layout.traversals.flatMap((traversal) =>
+        traversal.orientedNodes.some((handle) => handle >> 1n === node.id)
+          ? [
+              {
+                tileStart: traversal.tileStart,
+                tileEnd: traversal.tileEnd,
+                weight: traversal.weight,
+              },
+            ]
+          : [],
+      ),
+    };
+  }
+  const traversal = hitTestTraversal(layout, x, y);
+  if (traversal !== undefined) return { kind: "traversal", traversal };
+  const edge = hitTestEdge(layout, x, y);
+  return edge === undefined ? undefined : { kind: "edge", edge };
+}
+
+function selectionDescription(selection: ViewerSelectionDetail): string {
+  if (selection.kind === "node") return nodeDescription(selection.node);
+  if (selection.kind === "edge") {
+    return `edge ${selection.edge.from.toString()} → ${selection.edge.to.toString()} · ${selection.edge.classification}`;
+  }
+  return (
+    `tile-local traversal · weight ${selection.traversal.weight.toString()} · ` +
+    `${selection.traversal.tileStart}–${selection.traversal.tileEnd}`
+  );
+}
+
 function formatBytes(bytes: number): string {
   if (bytes < 1_024) return `${bytes} B`;
   if (bytes < 1_048_576) return `${(bytes / 1_024).toFixed(1)} KiB`;
@@ -493,6 +739,16 @@ function toError(cause: unknown): Error {
 
 function clamp(value: number, minimum: number, maximum: number): number {
   return Math.min(maximum, Math.max(minimum, value));
+}
+
+function percentile(values: readonly number[], fraction: number): number {
+  if (values.length === 0) return 0;
+  const sorted = [...values].sort((left, right) => left - right);
+  const index = Math.min(
+    sorted.length - 1,
+    Math.max(0, Math.ceil(sorted.length * fraction) - 1),
+  );
+  return sorted[index] ?? 0;
 }
 
 function requestFrame(callback: () => void): number {

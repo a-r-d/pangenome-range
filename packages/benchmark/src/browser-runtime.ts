@@ -45,16 +45,24 @@ function timed(delegate: ChunkDecompressor): TimedDecoder {
     clear(): void {
       samplesMs.length = 0;
     },
-    async decompress(
+    decompress(
       compressed: Uint8Array,
       expectedLength: number,
       options?: { signal?: AbortSignal },
-    ): Promise<Uint8Array> {
+    ): Uint8Array | Promise<Uint8Array> {
       const started = performance.now();
       try {
-        return await delegate.decompress(compressed, expectedLength, options);
-      } finally {
+        const result = delegate.decompress(compressed, expectedLength, options);
+        if (result instanceof Uint8Array) {
+          samplesMs.push(performance.now() - started);
+          return result;
+        }
+        return Promise.resolve(result).finally(() => {
+          samplesMs.push(performance.now() - started);
+        });
+      } catch (error) {
         samplesMs.push(performance.now() - started);
+        throw error;
       }
     },
   };
@@ -204,7 +212,8 @@ export async function runBrowserScenario(
       initializationMs: created ? state.initializationMs : 0,
       openMs: created ? state.openMs : 0,
       queryMs,
-      decompressionMs,
+      decompressionWallMs: trace?.decompressionMs ?? 0,
+      decompressionTaskMs: trace?.decompressionTaskMs ?? decompressionMs,
       decodeMs: trace?.decodeMs ?? 0,
       mergeMs: trace?.mergeMs ?? 0,
       totalMs,

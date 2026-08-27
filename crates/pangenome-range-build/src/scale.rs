@@ -46,6 +46,7 @@ pub struct EncodeOptions {
     pub output: PathBuf,
     pub report: Option<PathBuf>,
     pub sample: Option<String>,
+    pub reference_haplotype: Option<usize>,
     pub contig: Option<String>,
     pub start: Option<u64>,
     pub end: Option<u64>,
@@ -81,6 +82,7 @@ impl EncodeOptions {
             output,
             report: None,
             sample: None,
+            reference_haplotype: None,
             contig: None,
             start: None,
             end: None,
@@ -151,6 +153,7 @@ pub struct EncodeSummary {
     pub accounted_critical_path_wall_ms: f64,
     pub unattributed_critical_path_wall_ms: f64,
     pub sample: Option<String>,
+    pub reference_haplotype: Option<usize>,
     pub contig: Option<String>,
     pub start: Option<u64>,
     pub end: Option<u64>,
@@ -259,6 +262,29 @@ pub fn run_encode(options: &EncodeOptions) -> ExperimentResult<EncodeSummary> {
         return Err(io::Error::new(
             io::ErrorKind::InvalidInput,
             "--annotation-sample requires --annotations",
+        )
+        .into());
+    }
+    if options.reference_haplotype.is_some() && options.sample.is_none() {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "--reference-haplotype requires --sample",
+        )
+        .into());
+    }
+    if options.reference_haplotype.is_some()
+        && !matches!(options.source_mode, EncodeSourceMode::Disk)
+    {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "--reference-haplotype currently requires --source-access disk",
+        )
+        .into());
+    }
+    if options.reference_haplotype.is_some() && options.source_cache.is_some() {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "--reference-haplotype cannot reuse a persistent source cache",
         )
         .into());
     }
@@ -372,7 +398,20 @@ pub fn run_encode(options: &EncodeOptions) -> ExperimentResult<EncodeSummary> {
             source_phase,
             "streaming GBZ into a bounded disk cache while computing its SHA-256",
             options.progress_interval_ms,
-            || DiskGbzSource::build_with_digest(&options.input, scratch_parent),
+            || {
+                if let (Some(sample), Some(haplotype)) =
+                    (&options.sample, options.reference_haplotype)
+                {
+                    DiskGbzSource::build_with_digest_for_reference_haplotype(
+                        &options.input,
+                        scratch_parent,
+                        sample,
+                        haplotype,
+                    )
+                } else {
+                    DiskGbzSource::build_with_digest(&options.input, scratch_parent)
+                }
+            },
         )?;
         (
             ActiveEncoderSource::Disk(Box::new(source)),
@@ -559,7 +598,7 @@ pub fn run_encode(options: &EncodeOptions) -> ExperimentResult<EncodeSummary> {
         0.0
     };
     let summary = EncodeSummary {
-        schema_version: 7,
+        schema_version: 8,
         archive_version: 1,
         regional_payload_version: 1,
         source_path: options.input.clone(),
@@ -592,6 +631,7 @@ pub fn run_encode(options: &EncodeOptions) -> ExperimentResult<EncodeSummary> {
         accounted_critical_path_wall_ms,
         unattributed_critical_path_wall_ms,
         sample: options.sample.clone(),
+        reference_haplotype: options.reference_haplotype,
         contig: options.contig.clone(),
         start: options.start,
         end: options.end,
@@ -1174,7 +1214,7 @@ mod tests {
     use crate::fixed::ReferencePathSpec;
     use crate::test_support::tiny_gbz_fixture;
     use crate::{build_persistent_source_cache, prune_persistent_source_cache};
-    use gbz::FullPathName;
+    use gbz::{FullPathName, GBZ};
 
     #[test]
     fn scale_queries_use_the_longest_unsplit_reference() {
@@ -1249,5 +1289,42 @@ mod tests {
         fs::remove_file(ephemeral_report).unwrap();
         fs::remove_file(persistent_report).unwrap();
         prune_persistent_source_cache(&cache).unwrap();
+    }
+
+    #[test]
+    fn explicit_population_haplotype_encodes_without_reference_tags() {
+        let input = tiny_gbz_fixture();
+        let graph: GBZ = serialize::load_from(&input).unwrap();
+        let metadata = graph.metadata().unwrap();
+        let tagged: std::collections::BTreeSet<_> =
+            graph.reference_sample_ids(true).into_iter().collect();
+        let reference = metadata
+            .path_iter()
+            .enumerate()
+            .find_map(|(path_id, path)| {
+                (!tagged.contains(&path.sample()))
+                    .then(|| FullPathName::from_metadata(metadata, path_id))
+                    .flatten()
+            })
+            .expect("fixture should contain a non-reference sample path");
+        let output = serialize::temp_file_name("explicit-reference-output");
+        let report = serialize::temp_file_name("explicit-reference-report");
+        let mut options = EncodeOptions::new(input, output.clone());
+        options.report = Some(report.clone());
+        options.sample = Some(reference.sample.clone());
+        options.reference_haplotype = Some(reference.haplotype);
+        options.contig = Some(reference.contig.clone());
+        options.max_chunks = Some(8);
+        options.threads = 1;
+
+        let summary = run_encode(&options).unwrap();
+        assert_eq!(summary.schema_version, 8);
+        assert_eq!(summary.sample.as_deref(), Some(reference.sample.as_str()));
+        assert_eq!(summary.reference_haplotype, Some(reference.haplotype));
+        assert_eq!(summary.annotations, None);
+        assert!(summary.build.physical_chunks > 0);
+
+        fs::remove_file(output).unwrap();
+        fs::remove_file(report).unwrap();
     }
 }

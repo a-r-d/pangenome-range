@@ -126,6 +126,7 @@ function emptyTrace(): QueryTrace {
     cacheHits: { bootstrap: 0, directory: 0, payload: 0 },
     integrityMs: 0,
     decompressionMs: 0,
+    decompressionTaskMs: 0,
     decodeMs: 0,
     mergeMs: 0,
     selectedChunks: 0,
@@ -221,6 +222,9 @@ async function runQuery(options: {
       decompression: decompressionSummary(
         options.decompressorSamples.samplesMs,
       ),
+      integrityMs: trace.integrityMs,
+      decompressionWallMs: trace.decompressionMs,
+      decompressionTaskMs: trace.decompressionTaskMs,
       decodeMs: trace.decodeMs,
       mergeMs: trace.mergeMs,
       selectedChunks: trace.selectedChunks,

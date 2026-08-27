@@ -240,8 +240,11 @@ interface MutableQueryTrace {
   directoryHits: number;
   payloadHits: number;
   integrityMs: number;
-  decompressionMs: number;
+  integrityIntervals: TimeInterval[];
+  decompressionTaskMs: number;
+  decompressionIntervals: TimeInterval[];
   decodeMs: number;
+  decodeIntervals: TimeInterval[];
   directoryRoundRecorded: boolean;
   payloadRoundRecorded: boolean;
 }
@@ -252,9 +255,17 @@ interface MutableFeatureTrace {
   requestedLayers: Set<FeatureRequestRange["layer"]>;
   cacheHits: number;
   integrityMs: number;
-  decompressionMs: number;
+  integrityIntervals: TimeInterval[];
+  decompressionTaskMs: number;
+  decompressionIntervals: TimeInterval[];
   decodeMs: number;
+  decodeIntervals: TimeInterval[];
   pagesAvoidedByLimit: number;
+}
+
+interface TimeInterval {
+  readonly start: number;
+  readonly end: number;
 }
 
 function featureTraceState(): MutableFeatureTrace {
@@ -264,8 +275,11 @@ function featureTraceState(): MutableFeatureTrace {
     requestedLayers: new Set(),
     cacheHits: 0,
     integrityMs: 0,
-    decompressionMs: 0,
+    integrityIntervals: [],
+    decompressionTaskMs: 0,
+    decompressionIntervals: [],
     decodeMs: 0,
+    decodeIntervals: [],
     pagesAvoidedByLimit: 0,
   };
 }
@@ -279,9 +293,13 @@ function finishFeatureTrace(state: MutableFeatureTrace): FeatureQueryTrace {
       0,
     ),
     cacheHits: state.cacheHits,
-    integrityMs: state.integrityMs,
-    decompressionMs: state.decompressionMs,
-    decodeMs: state.decodeMs,
+    integrityMs: intervalUnionMs(state.integrityIntervals),
+    decompressionMs: exclusiveIntervalUnionMs(state.decompressionIntervals, [
+      ...state.decodeIntervals,
+      ...state.integrityIntervals,
+    ]),
+    decompressionTaskMs: state.decompressionTaskMs,
+    decodeMs: intervalUnionMs(state.decodeIntervals),
     pagesAvoidedByLimit: state.pagesAvoidedByLimit,
   };
 }
@@ -297,8 +315,11 @@ function traceState(
     directoryHits: 0,
     payloadHits: 0,
     integrityMs: 0,
-    decompressionMs: 0,
+    integrityIntervals: [],
+    decompressionTaskMs: 0,
+    decompressionIntervals: [],
     decodeMs: 0,
+    decodeIntervals: [],
     directoryRoundRecorded: false,
     payloadRoundRecorded: false,
   };
@@ -365,9 +386,13 @@ function finishTrace(
       directory: state.directoryHits,
       payload: state.payloadHits,
     },
-    decompressionMs: state.decompressionMs,
-    integrityMs: state.integrityMs,
-    decodeMs: state.decodeMs,
+    decompressionMs: exclusiveIntervalUnionMs(state.decompressionIntervals, [
+      ...state.decodeIntervals,
+      ...state.integrityIntervals,
+    ]),
+    decompressionTaskMs: state.decompressionTaskMs,
+    integrityMs: intervalUnionMs(state.integrityIntervals),
+    decodeMs: intervalUnionMs(state.decodeIntervals),
     mergeMs,
     selectedChunks: tiles.length,
     selectedNodes,
@@ -377,6 +402,103 @@ function finishTrace(
     ),
     canonicalHash,
   };
+}
+
+function recordDecompressionInterval(
+  trace: MutableQueryTrace | MutableFeatureTrace,
+  start: number,
+  end: number,
+): void {
+  trace.decompressionTaskMs += end - start;
+  trace.decompressionIntervals.push({ start, end });
+}
+
+async function decompressAndTrace(
+  decompressor: ChunkDecompressor,
+  compressed: Uint8Array,
+  expectedLength: number,
+  options?: RangeReadOptions,
+  trace?: MutableQueryTrace | MutableFeatureTrace,
+): Promise<Uint8Array> {
+  const started = performance.now();
+  const pending = decompressor.decompress(compressed, expectedLength, options);
+  if (pending instanceof Uint8Array) {
+    if (trace !== undefined) {
+      recordDecompressionInterval(trace, started, performance.now());
+    }
+    return pending;
+  }
+  try {
+    return await pending;
+  } finally {
+    if (trace !== undefined) {
+      recordDecompressionInterval(trace, started, performance.now());
+    }
+  }
+}
+
+function recordIntegrityInterval(
+  trace: MutableQueryTrace | MutableFeatureTrace,
+  start: number,
+  end: number,
+): void {
+  trace.integrityMs += end - start;
+  trace.integrityIntervals.push({ start, end });
+}
+
+function recordDecodeInterval(
+  trace: MutableQueryTrace | MutableFeatureTrace,
+  start: number,
+  end: number,
+): void {
+  trace.decodeMs += end - start;
+  trace.decodeIntervals.push({ start, end });
+}
+
+function intervalUnionMs(intervals: readonly TimeInterval[]): number {
+  return mergedTimeIntervals(intervals).reduce(
+    (total, interval) => total + interval.end - interval.start,
+    0,
+  );
+}
+
+function exclusiveIntervalUnionMs(
+  intervals: readonly TimeInterval[],
+  blockers: readonly TimeInterval[],
+): number {
+  const active = mergedTimeIntervals(intervals);
+  const excluded = mergedTimeIntervals(blockers);
+  let total = 0;
+  for (const interval of active) {
+    let cursor = interval.start;
+    for (const blocker of excluded) {
+      if (blocker.end <= cursor) continue;
+      if (blocker.start >= interval.end) break;
+      total += Math.max(0, Math.min(blocker.start, interval.end) - cursor);
+      cursor = Math.max(cursor, blocker.end);
+      if (cursor >= interval.end) break;
+    }
+    total += Math.max(0, interval.end - cursor);
+  }
+  return total;
+}
+
+function mergedTimeIntervals(
+  intervals: readonly TimeInterval[],
+): TimeInterval[] {
+  const sorted = [...intervals]
+    .filter((interval) => interval.end >= interval.start)
+    .sort((left, right) => left.start - right.start);
+  const merged: TimeInterval[] = [];
+  for (const interval of sorted) {
+    const previous = merged.at(-1);
+    if (previous === undefined || interval.start > previous.end) {
+      merged.push({ ...interval });
+    } else if (interval.end > previous.end) {
+      merged[merged.length - 1] = { start: previous.start, end: interval.end };
+    }
+  }
+  return merged;
 }
 
 function corrupt(message: string): CorruptArchiveError {
@@ -1214,7 +1336,9 @@ class ArchiveReader implements PangenomeArchive {
       ) {
         throw corrupt("named-locus page differs from its descriptor");
       }
-      if (trace !== undefined) trace.decodeMs += performance.now() - started;
+      if (trace !== undefined) {
+        recordDecodeInterval(trace, started, performance.now());
+      }
       return records;
     };
     const hits: LocusHit[] = [];
@@ -1338,7 +1462,9 @@ class ArchiveReader implements PangenomeArchive {
         );
         const started = performance.now();
         const bins = decodeFeature(() => decodeSummaryPage(raw, series));
-        if (trace !== undefined) trace.decodeMs += performance.now() - started;
+        if (trace !== undefined) {
+          recordDecodeInterval(trace, started, performance.now());
+        }
         return { series, bins };
       }),
     );
@@ -1567,7 +1693,9 @@ class ArchiveReader implements PangenomeArchive {
     const descriptor = decodeFeature(() =>
       decodeNamedLociDescriptor(raw, this.#header.dataOffset, this.#sourceSize),
     );
-    if (trace !== undefined) trace.decodeMs += performance.now() - started;
+    if (trace !== undefined) {
+      recordDecodeInterval(trace, started, performance.now());
+    }
     this.#namedLociDescriptor = descriptor;
     return descriptor;
   }
@@ -1612,7 +1740,9 @@ class ArchiveReader implements PangenomeArchive {
       decodeSummaryDescriptor(raw, this.#header.dataOffset, this.#sourceSize),
     );
     validateSummaryDescriptor(descriptor, this.#manifests);
-    if (trace !== undefined) trace.decodeMs += performance.now() - started;
+    if (trace !== undefined) {
+      recordDecodeInterval(trace, started, performance.now());
+    }
     this.#summaryDescriptor = descriptor;
     return descriptor;
   }
@@ -1690,7 +1820,7 @@ class ArchiveReader implements PangenomeArchive {
         throw corrupt("extension payload integrity mismatch");
       }
       if (trace !== undefined) {
-        trace.integrityMs += performance.now() - integrityStarted;
+        recordIntegrityInterval(trace, integrityStarted, performance.now());
       }
       this.#extensionCache.set(key, encoded);
     } else if (trace !== undefined) {
@@ -1700,18 +1830,16 @@ class ArchiveReader implements PangenomeArchive {
       storage.decodedLength,
       "extension decoded length",
     );
-    const decompressionStarted = performance.now();
     const raw =
       storage.codec === 0
         ? encoded.slice()
-        : await this.#decompressor.decompress(
+        : await decompressAndTrace(
+            this.#decompressor,
             encoded,
             expectedLength,
             signalOptions(signal),
+            trace,
           );
-    if (trace !== undefined) {
-      trace.decompressionMs += performance.now() - decompressionStarted;
-    }
     if (raw.byteLength !== expectedLength) {
       throw corrupt("extension decoded length mismatch");
     }
@@ -1999,18 +2127,16 @@ class ArchiveReader implements PangenomeArchive {
       entry.uncompressedLength,
       "uncompressed payload length",
     );
-    const decompressionStarted = performance.now();
     const raw =
       entry.manifest.codec === 0
         ? compressed.slice()
-        : await this.#decompressor.decompress(
+        : await decompressAndTrace(
+            this.#decompressor,
             compressed,
             expectedLength,
             signalOptions(signal),
+            trace,
           );
-    if (trace !== undefined) {
-      trace.decompressionMs += performance.now() - decompressionStarted;
-    }
     signal?.throwIfAborted();
     if (raw.byteLength !== expectedLength) {
       throw corrupt(
@@ -2031,7 +2157,7 @@ class ArchiveReader implements PangenomeArchive {
       referenceContig: entry.manifest.contig,
     });
     if (trace !== undefined) {
-      trace.decodeMs += performance.now() - decodeStarted;
+      recordDecodeInterval(trace, decodeStarted, performance.now());
     }
     if (
       BigInt(tile.start) !== entry.start ||
@@ -2059,7 +2185,7 @@ class ArchiveReader implements PangenomeArchive {
       throw corrupt("regional payload integrity mismatch");
     }
     if (trace !== undefined) {
-      trace.integrityMs += performance.now() - started;
+      recordIntegrityInterval(trace, started, performance.now());
     }
   }
 

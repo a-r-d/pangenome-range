@@ -3,6 +3,7 @@ import type {
   ViewerBudgets,
   ViewerCounts,
   ViewerLayout,
+  ViewerLayoutEdge,
   ViewerLayoutNode,
   ViewerLayoutOptions,
   ViewerModel,
@@ -62,8 +63,15 @@ export class ViewerModelBuilder {
   readonly #nodes = new Map<bigint, ViewerModelNode>();
   readonly #edges: ViewerModelEdge[] = [];
   readonly #edgeKeys = new Set<string>();
-  readonly #referenceTraversal: bigint[] = [];
-  readonly #referenceIds = new Set<bigint>();
+  readonly #edgeIndexes = new Map<string, number>();
+  readonly #referenceOrder = new Map<
+    bigint,
+    {
+      readonly handle: bigint;
+      readonly tileStart: number;
+      readonly index: number;
+    }
+  >();
   readonly #traversals: ViewerModelTraversal[] = [];
   readonly #tileBoundaries: ViewerTileBoundary[] = [];
   #semantics: RegionTile["semantics"] | undefined;
@@ -93,12 +101,23 @@ export class ViewerModelBuilder {
     }
 
     const tileReferenceOrientations = new Map<bigint, boolean>();
-    for (const orientedNode of tile.referenceTraversal) {
+    for (let index = 0; index < tile.referenceTraversal.length; index += 1) {
+      const orientedNode = tile.referenceTraversal[index];
+      if (orientedNode === undefined) continue;
       const id = nodeId(orientedNode);
       tileReferenceOrientations.set(id, isReverse(orientedNode));
-      if (!this.#referenceIds.has(id)) {
-        this.#referenceIds.add(id);
-        this.#referenceTraversal.push(orientedNode);
+      const existingOrder = this.#referenceOrder.get(id);
+      if (
+        existingOrder === undefined ||
+        tile.coreStart < existingOrder.tileStart ||
+        (tile.coreStart === existingOrder.tileStart &&
+          index < existingOrder.index)
+      ) {
+        this.#referenceOrder.set(id, {
+          handle: orientedNode,
+          tileStart: tile.coreStart,
+          index,
+        });
       }
     }
 
@@ -119,13 +138,31 @@ export class ViewerModelBuilder {
       const to = nodeId(toHandle);
       if (!this.#nodes.has(from) || !this.#nodes.has(to)) continue;
       const key = `${fromHandle.toString()}:${toHandle.toString()}`;
-      if (this.#edgeKeys.has(key)) continue;
+      if (this.#edgeKeys.has(key)) {
+        const edgeIndex = this.#edgeIndexes.get(key);
+        const existing =
+          edgeIndex === undefined ? undefined : this.#edges[edgeIndex];
+        if (existing !== undefined) {
+          const source = nodeSource(tile);
+          if (!hasNodeSource(existing.sourceTiles, source)) {
+            this.#edges[edgeIndex as number] = {
+              ...existing,
+              sourceTiles: [...existing.sourceTiles, source].sort(
+                compareNodeSources,
+              ),
+            };
+          }
+        }
+        continue;
+      }
       this.#edgeKeys.add(key);
+      this.#edgeIndexes.set(key, this.#edges.length);
       this.#edges.push({
         from,
         to,
         fromReverse: isReverse(fromHandle),
         toReverse: isReverse(toHandle),
+        sourceTiles: [nodeSource(tile)],
       });
     }
 
@@ -152,6 +189,7 @@ export class ViewerModelBuilder {
         tileEnd: tile.coreEnd,
         orientedNodes,
         weight,
+        source: nodeSource(tile),
       });
       this.#traversals.sort(compareTraversals);
       this.#traversals.length = Math.min(
@@ -185,7 +223,14 @@ export class ViewerModelBuilder {
       budgets: this.#budgets,
       nodes: this.#nodes,
       edges: this.#edges,
-      referenceTraversal: this.#referenceTraversal,
+      referenceTraversal: [...this.#referenceOrder.values()]
+        .sort(
+          (left, right) =>
+            left.tileStart - right.tileStart ||
+            left.index - right.index ||
+            compareBigints(nodeId(left.handle), nodeId(right.handle)),
+        )
+        .map(({ handle }) => handle),
       traversals: this.#traversals,
       tileBoundaries: this.#tileBoundaries,
       counts,
@@ -205,8 +250,19 @@ export class ViewerModelBuilder {
       }
       const existing = this.#nodes.get(id);
       if (existing !== undefined) {
+        const source = nodeSource(tile);
+        const sourceTiles = existing.sourceTiles.some(
+          (item) =>
+            item.archiveOffset === source.archiveOffset &&
+            item.coreStart === source.coreStart &&
+            item.coreEnd === source.coreEnd,
+        )
+          ? existing.sourceTiles
+          : [...existing.sourceTiles, source].sort(compareNodeSources);
         if (referencePass && !existing.reference) {
-          this.#nodes.set(id, { ...existing, reference: true });
+          this.#nodes.set(id, { ...existing, reference: true, sourceTiles });
+        } else if (sourceTiles !== existing.sourceTiles) {
+          this.#nodes.set(id, { ...existing, sourceTiles });
         }
         continue;
       }
@@ -223,6 +279,7 @@ export class ViewerModelBuilder {
         reverse: referenceOrientations.get(id) ?? false,
         tileStart: tile.coreStart,
         tileEnd: tile.coreEnd,
+        sourceTiles: [nodeSource(tile)],
       });
     }
   }
@@ -275,40 +332,45 @@ export function layoutViewerModel(
     cumulativeBases += node.sequenceLength;
   }
 
-  const adjacentReferenceCoordinates = new Map<bigint, number[]>();
-  for (const edge of model.edges) {
-    const fromCoordinate = referenceCoordinates.get(edge.from);
-    const toCoordinate = referenceCoordinates.get(edge.to);
-    if (fromCoordinate !== undefined && toCoordinate === undefined) {
-      appendCoordinate(adjacentReferenceCoordinates, edge.to, fromCoordinate);
-    }
-    if (toCoordinate !== undefined && fromCoordinate === undefined) {
-      appendCoordinate(adjacentReferenceCoordinates, edge.from, toCoordinate);
-    }
+  const components = alternateComponents(model, referenceCoordinates);
+  const componentByNode = new Map<bigint, AlternateComponent>();
+  const positiveLaneEnds: number[] = [];
+  const negativeLaneEnds: number[] = [];
+  for (const component of components) {
+    const laneEnds =
+      component.direction > 0 ? positiveLaneEnds : negativeLaneEnds;
+    component.lane = allocateIntervalLane(
+      laneEnds,
+      component.anchorStart,
+      component.anchorEnd,
+    );
+    for (const id of component.nodes) componentByNode.set(id, component);
   }
-
   const nodes: ViewerLayoutNode[] = [];
   const nodePositions = new Map<bigint, ViewerLayoutNode>();
-  let alternativeIndex = 0;
-  for (const node of model.nodes.values()) {
-    const adjacent = adjacentReferenceCoordinates.get(node.id);
+  for (const node of [...model.nodes.values()].sort((leftNode, rightNode) =>
+    leftNode.id < rightNode.id ? -1 : leftNode.id > rightNode.id ? 1 : 0,
+  )) {
+    const component = componentByNode.get(node.id);
+    const componentIndex = component?.nodes.indexOf(node.id) ?? 0;
+    const componentFraction =
+      component === undefined
+        ? 0.5
+        : (componentIndex + 1) / (component.nodes.length + 1);
     const coordinate =
       referenceCoordinates.get(node.id) ??
-      (adjacent === undefined
+      (component === undefined
         ? (node.tileStart + node.tileEnd) / 2
-        : adjacent.reduce((sum, value) => sum + value, 0) / adjacent.length);
+        : component.anchorStart +
+          (component.anchorEnd - component.anchorStart) * componentFraction);
     const baseWidth =
       (Math.max(1, node.sequenceLength) / totalReferenceBases) *
       plotWidth *
       zoom;
     const nodeWidth = clamp(baseWidth, 10, 132);
     let y = referenceY;
-    if (!node.reference) {
-      const branch = alternativeIndex % 6;
-      const direction = branch % 2 === 0 ? -1 : 1;
-      y += direction * (42 + Math.floor(branch / 2) * 34);
-      alternativeIndex += 1;
-    }
+    if (component !== undefined)
+      y += component.direction * (44 + component.lane * 34);
     const x = worldX(coordinate) - nodeWidth / 2;
     const layoutNode: ViewerLayoutNode = {
       ...node,
@@ -317,6 +379,10 @@ export function layoutViewerModel(
       width: nodeWidth,
       height: 22,
       visible: x + nodeWidth >= left - 150 && x <= width + 150,
+      lane: component?.lane ?? 0,
+      branchKind: component?.kind ?? "reference",
+      anchorStart: component?.anchorStart ?? coordinate,
+      anchorEnd: component?.anchorEnd ?? coordinate,
     };
     nodes.push(layoutNode);
     nodePositions.set(node.id, layoutNode);
@@ -336,6 +402,19 @@ export function layoutViewerModel(
     const from = nodePositions.get(edge.from);
     const to = nodePositions.get(edge.to);
     if (from === undefined || to === undefined) return [];
+    const isReference = referenceEdgeKeys.has(
+      `${edge.from.toString()}:${edge.to.toString()}`,
+    );
+    const fromComponent = componentByNode.get(edge.from);
+    const toComponent = componentByNode.get(edge.to);
+    const classification: ViewerLayoutEdge["classification"] = isReference
+      ? "reference"
+      : fromComponent?.kind === "inversion" || toComponent?.kind === "inversion"
+        ? "inversion"
+        : referenceCoordinates.has(edge.from) &&
+            referenceCoordinates.has(edge.to)
+          ? "deletion"
+          : "alternate";
     return [
       {
         ...edge,
@@ -343,9 +422,8 @@ export function layoutViewerModel(
         fromY: from.y + from.height / 2,
         toX: to.x + to.width / 2,
         toY: to.y + to.height / 2,
-        reference: referenceEdgeKeys.has(
-          `${edge.from.toString()}:${edge.to.toString()}`,
-        ),
+        reference: isReference,
+        classification,
       },
     ];
   });
@@ -359,9 +437,11 @@ export function layoutViewerModel(
         : [{ x: node.x + node.width / 2, y: traversalTop + lane * 10 }];
     }),
     weight: traversal.weight,
+    orientedNodes: traversal.orientedNodes,
     tileStart: traversal.tileStart,
     tileEnd: traversal.tileEnd,
     lane,
+    source: traversal.source,
   }));
 
   return {
@@ -397,6 +477,51 @@ export function hitTestNode(
       y <= node.y + node.height
     ) {
       return node;
+    }
+  }
+  return undefined;
+}
+
+export function hitTestTraversal(
+  layout: ViewerLayout,
+  x: number,
+  y: number,
+): ViewerLayout["traversals"][number] | undefined {
+  for (let index = layout.traversals.length - 1; index >= 0; index -= 1) {
+    const traversal = layout.traversals[index];
+    if (traversal === undefined) continue;
+    for (
+      let pointIndex = 1;
+      pointIndex < traversal.points.length;
+      pointIndex += 1
+    ) {
+      const from = traversal.points[pointIndex - 1];
+      const to = traversal.points[pointIndex];
+      if (
+        from !== undefined &&
+        to !== undefined &&
+        pointSegmentDistance(x, y, from.x, from.y, to.x, to.y) <= 6
+      ) {
+        return traversal;
+      }
+    }
+  }
+  return undefined;
+}
+
+export function hitTestEdge(
+  layout: ViewerLayout,
+  x: number,
+  y: number,
+): ViewerLayout["edges"][number] | undefined {
+  for (let index = layout.edges.length - 1; index >= 0; index -= 1) {
+    const edge = layout.edges[index];
+    if (
+      edge !== undefined &&
+      pointSegmentDistance(x, y, edge.fromX, edge.fromY, edge.toX, edge.toY) <=
+        6
+    ) {
+      return edge;
     }
   }
   return undefined;
@@ -444,14 +569,172 @@ function compareTraversals(
   return left.orientedNodes.length - right.orientedNodes.length;
 }
 
-function appendCoordinate(
-  coordinates: Map<bigint, number[]>,
-  id: bigint,
-  coordinate: number,
+interface AlternateComponent {
+  readonly nodes: bigint[];
+  readonly anchorStart: number;
+  readonly anchorEnd: number;
+  readonly kind: "alternate" | "insertion" | "inversion" | "unanchored";
+  readonly direction: -1 | 1;
+  lane: number;
+}
+
+function alternateComponents(
+  model: ViewerModel,
+  referenceCoordinates: ReadonlyMap<bigint, number>,
+): AlternateComponent[] {
+  const adjacency = new Map<bigint, bigint[]>();
+  for (const edge of model.edges) {
+    appendNeighbor(adjacency, edge.from, edge.to);
+    appendNeighbor(adjacency, edge.to, edge.from);
+  }
+  const alternateIds = [...model.nodes.values()]
+    .filter((node) => !node.reference)
+    .map((node) => node.id)
+    .sort(compareBigints);
+  const visited = new Set<bigint>();
+  const components: AlternateComponent[] = [];
+  for (const seed of alternateIds) {
+    if (visited.has(seed)) continue;
+    const stack = [seed];
+    const nodes: bigint[] = [];
+    const anchors: number[] = [];
+    while (stack.length > 0) {
+      const id = stack.pop();
+      if (id === undefined || visited.has(id)) continue;
+      visited.add(id);
+      nodes.push(id);
+      for (const neighbor of adjacency.get(id) ?? []) {
+        const anchor = referenceCoordinates.get(neighbor);
+        if (anchor !== undefined) anchors.push(anchor);
+        else if (
+          !visited.has(neighbor) &&
+          model.nodes.get(neighbor)?.reference === false
+        ) {
+          stack.push(neighbor);
+        }
+      }
+    }
+    nodes.sort(compareBigints);
+    anchors.sort((leftAnchor, rightAnchor) => leftAnchor - rightAnchor);
+    const sourceNodes = nodes.flatMap((id) => {
+      const node = model.nodes.get(id);
+      return node === undefined ? [] : [node];
+    });
+    const fallbackStart = Math.min(
+      ...sourceNodes.map((node) => node.tileStart),
+    );
+    const fallbackEnd = Math.max(...sourceNodes.map((node) => node.tileEnd));
+    const anchorStart = anchors.at(0) ?? fallbackStart;
+    const anchorEnd = anchors.at(-1) ?? fallbackEnd;
+    const hasReverse = sourceNodes.some((node) => node.reverse);
+    const kind =
+      anchors.length === 0
+        ? "unanchored"
+        : hasReverse
+          ? "inversion"
+          : anchorEnd - anchorStart <= 1
+            ? "insertion"
+            : "alternate";
+    const seedValue = nodes[0] ?? 0n;
+    components.push({
+      nodes,
+      anchorStart,
+      anchorEnd: Math.max(anchorStart, anchorEnd),
+      kind,
+      direction: seedValue % 2n === 0n ? -1 : 1,
+      lane: 0,
+    });
+  }
+  return components.sort(
+    (leftComponent, rightComponent) =>
+      leftComponent.anchorStart - rightComponent.anchorStart ||
+      leftComponent.anchorEnd - rightComponent.anchorEnd ||
+      compareBigints(
+        leftComponent.nodes[0] ?? 0n,
+        rightComponent.nodes[0] ?? 0n,
+      ),
+  );
+}
+
+function allocateIntervalLane(
+  laneEnds: number[],
+  start: number,
+  end: number,
+): number {
+  const paddedStart = start - 1;
+  for (let lane = 0; lane < laneEnds.length; lane += 1) {
+    if ((laneEnds[lane] ?? Number.NEGATIVE_INFINITY) <= paddedStart) {
+      laneEnds[lane] = end;
+      return lane;
+    }
+  }
+  laneEnds.push(end);
+  return laneEnds.length - 1;
+}
+
+function appendNeighbor(
+  adjacency: Map<bigint, bigint[]>,
+  from: bigint,
+  to: bigint,
 ): void {
-  const values = coordinates.get(id);
-  if (values === undefined) coordinates.set(id, [coordinate]);
-  else values.push(coordinate);
+  const values = adjacency.get(from);
+  if (values === undefined) adjacency.set(from, [to]);
+  else values.push(to);
+}
+
+function compareBigints(left: bigint, right: bigint): number {
+  return left < right ? -1 : left > right ? 1 : 0;
+}
+
+function nodeSource(tile: RegionTile) {
+  return {
+    coreStart: tile.coreStart,
+    coreEnd: tile.coreEnd,
+    archiveOffset: tile.provenance.archiveOffset,
+    compressedBytes: tile.provenance.compressedBytes,
+    uncompressedBytes: tile.provenance.uncompressedBytes,
+  };
+}
+
+function compareNodeSources(
+  left: ViewerModelNode["sourceTiles"][number],
+  right: ViewerModelNode["sourceTiles"][number],
+): number {
+  return (
+    left.coreStart - right.coreStart ||
+    left.coreEnd - right.coreEnd ||
+    compareBigints(left.archiveOffset, right.archiveOffset)
+  );
+}
+
+function hasNodeSource(
+  sources: readonly ViewerModelNode["sourceTiles"][number][],
+  candidate: ViewerModelNode["sourceTiles"][number],
+): boolean {
+  return sources.some(
+    (source) =>
+      source.archiveOffset === candidate.archiveOffset &&
+      source.coreStart === candidate.coreStart &&
+      source.coreEnd === candidate.coreEnd,
+  );
+}
+
+function pointSegmentDistance(
+  x: number,
+  y: number,
+  x1: number,
+  y1: number,
+  x2: number,
+  y2: number,
+): number {
+  const dx = x2 - x1;
+  const dy = y2 - y1;
+  const lengthSquared = dx * dx + dy * dy;
+  const fraction =
+    lengthSquared === 0
+      ? 0
+      : clamp(((x - x1) * dx + (y - y1) * dy) / lengthSquared, 0, 1);
+  return Math.hypot(x - (x1 + dx * fraction), y - (y1 + dy * fraction));
 }
 
 function positiveInteger(value: number | undefined, fallback: number): number {

@@ -1,0 +1,3 @@
+case,transport,cache,sample,contig,start,end,max_bins,elapsed_ms,bins,level,bin_span,dependency_rounds,requests,bytes,cache_hits,integrity_ms,decompression_wall_ms,decompression_task_ms,decode_ms,first_covered_bases,first_tile_count,first_encoded_bytes,first_decoded_bytes,first_node_records,first_edge_records,first_gbwt_records,first_occurrences
+summary-cold,public,cold,CHM13,chr1,1000000,1100000,300,106.213572,2,0,1048576,2,2,49503,0,2.151568,0.834571,0.834571,2.017026,1035908,64,3640463,14734043,123262,177876,246524,53439680
+summary-warm,public,warm-library,CHM13,chr1,1000000,1100000,300,0.261781,2,0,1048576,0,0,0,1,0,0,0,0.094047,1035908,64,3640463,14734043,123262,177876,246524,53439680

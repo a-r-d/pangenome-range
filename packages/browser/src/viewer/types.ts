@@ -4,6 +4,7 @@ import type {
   RegionQuery,
   RegionTile,
 } from "../reader/types.js";
+import type { ViewerDisplayMode } from "./lod.js";
 
 /** Hard limits applied before graph data is retained for layout. */
 export interface ViewerBudgets {
@@ -37,11 +38,57 @@ export interface ViewerErrorDetail {
   readonly region?: Readonly<RegionQuery>;
 }
 
+export interface ViewerLayerState {
+  readonly reference: boolean;
+  readonly topology: boolean;
+  readonly traversals: boolean;
+  readonly tileBoundaries: boolean;
+  readonly sequenceLabels: boolean;
+}
+
+export type ViewerTheme = "light" | "dark";
+
+export interface ViewerViewportChange {
+  readonly visualRegion: Readonly<RegionQuery>;
+  readonly source: "pointer" | "keyboard" | "api";
+}
+
+export type ViewerSelectionDetail =
+  | {
+      readonly kind: "node";
+      readonly node: ViewerLayoutNode;
+      readonly incoming: readonly ViewerLayoutEdge[];
+      readonly outgoing: readonly ViewerLayoutEdge[];
+      readonly localTraversalWeights: readonly {
+        readonly tileStart: number;
+        readonly tileEnd: number;
+        readonly weight: bigint;
+      }[];
+    }
+  | { readonly kind: "edge"; readonly edge: ViewerLayoutEdge }
+  | {
+      readonly kind: "traversal";
+      readonly traversal: ViewerLayoutTraversal;
+    };
+
+export interface ViewerPerformanceSnapshot {
+  readonly modelUpdateMs: number;
+  readonly layoutMs: number;
+  readonly paintMs: number;
+  readonly firstTilePaintMs?: number;
+  readonly queryCompleteMs?: number;
+  readonly frameP95Ms: number;
+  readonly sampledFrames: number;
+}
+
 export interface ViewerEventMap {
   readonly regionchange: Readonly<RegionQuery>;
   readonly progress: ViewerProgress;
   readonly querytrace: QueryTrace;
   readonly error: ViewerErrorDetail;
+  readonly viewportchange: ViewerViewportChange;
+  readonly selectionchange: ViewerSelectionDetail | undefined;
+  readonly lodchange: ViewerDisplayMode;
 }
 
 export interface PangenomeViewerOptions {
@@ -52,6 +99,9 @@ export interface PangenomeViewerOptions {
   readonly maxHaplotypeLanes?: number;
   readonly showRequestTrace?: boolean;
   readonly background?: string;
+  readonly initialDisplayMode?: ViewerDisplayMode;
+  readonly initialLayers?: Partial<ViewerLayerState>;
+  readonly initialTheme?: ViewerTheme;
 }
 
 export interface ViewerSnapshot {
@@ -62,16 +112,24 @@ export interface ViewerSnapshot {
   readonly panX: number;
   readonly selectedNodeId?: bigint;
   readonly trace?: QueryTrace;
+  readonly displayMode: ViewerDisplayMode;
+  readonly layers: ViewerLayerState;
+  readonly theme: ViewerTheme;
 }
 
 export interface PangenomeViewer {
   setRegion(region: RegionQuery): Promise<void>;
+  setViewport(region: RegionQuery): Promise<void>;
   getRegion(): Readonly<RegionQuery> | undefined;
   getSnapshot(): ViewerSnapshot;
   resize(): void;
   zoomBy(factor: number): void;
   panBy(pixels: number): void;
   resetView(): void;
+  setDisplayMode(mode: ViewerDisplayMode): void;
+  setLayers(layers: Partial<ViewerLayerState>): void;
+  setTheme(theme: ViewerTheme): void;
+  getPerformanceSnapshot(): ViewerPerformanceSnapshot;
   on<K extends keyof ViewerEventMap>(
     event: K,
     listener: (detail: ViewerEventMap[K]) => void,
@@ -93,6 +151,15 @@ export interface ViewerModelNode {
   readonly reverse: boolean;
   readonly tileStart: number;
   readonly tileEnd: number;
+  readonly sourceTiles: readonly ViewerNodeSource[];
+}
+
+export interface ViewerNodeSource {
+  readonly coreStart: number;
+  readonly coreEnd: number;
+  readonly archiveOffset: bigint;
+  readonly compressedBytes: number;
+  readonly uncompressedBytes: number;
 }
 
 export interface ViewerModelEdge {
@@ -100,6 +167,7 @@ export interface ViewerModelEdge {
   readonly to: bigint;
   readonly fromReverse: boolean;
   readonly toReverse: boolean;
+  readonly sourceTiles: readonly ViewerNodeSource[];
 }
 
 export interface ViewerModelTraversal {
@@ -107,6 +175,7 @@ export interface ViewerModelTraversal {
   readonly tileEnd: number;
   readonly orientedNodes: readonly bigint[];
   readonly weight: bigint;
+  readonly source: ViewerNodeSource;
 }
 
 export interface ViewerModel {
@@ -127,6 +196,15 @@ export interface ViewerLayoutNode extends ViewerModelNode {
   readonly width: number;
   readonly height: number;
   readonly visible: boolean;
+  readonly lane: number;
+  readonly branchKind:
+    | "reference"
+    | "alternate"
+    | "insertion"
+    | "inversion"
+    | "unanchored";
+  readonly anchorStart: number;
+  readonly anchorEnd: number;
 }
 
 export interface ViewerLayoutEdge extends ViewerModelEdge {
@@ -135,14 +213,17 @@ export interface ViewerLayoutEdge extends ViewerModelEdge {
   readonly toX: number;
   readonly toY: number;
   readonly reference: boolean;
+  readonly classification: "reference" | "alternate" | "deletion" | "inversion";
 }
 
 export interface ViewerLayoutTraversal {
   readonly points: readonly { readonly x: number; readonly y: number }[];
+  readonly orientedNodes: readonly bigint[];
   readonly weight: bigint;
   readonly tileStart: number;
   readonly tileEnd: number;
   readonly lane: number;
+  readonly source: ViewerNodeSource;
 }
 
 export interface ViewerLayout {

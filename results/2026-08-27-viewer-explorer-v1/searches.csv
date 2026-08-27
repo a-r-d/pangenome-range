@@ -1,0 +1,5 @@
+case,transport,cache,name,mode,limit,elapsed_ms,hits,truncated,dependency_rounds,requests,bytes,cache_hits,integrity_ms,decompression_wall_ms,decompression_task_ms,decode_ms,first_display_name,first_stable_id,first_sample,first_contig,first_start,first_end
+exact-cold,public,cold,HLA-B,exact,20,125.492656,1,false,2,2,69112,0,8.367547,4.283714,4.283714,5.352427,HLA-B,ENSG00000234745.16,GRCh38,chr6,31353194,31367067
+exact-warm,public,warm-library,HLA-B,exact,20,1.209623,1,false,0,0,0,1,0,0,0,1.075174,HLA-B,ENSG00000234745.16,GRCh38,chr6,31353194,31367067
+prefix-limited,public,warm-library,HLA-,prefix,5,1.984224,5,true,0,0,0,1,0,0,0,1.848769,HLA-A,ENSG00000206503.17,GRCh38,chr6,29941259,29949606
+absent,public,partial-warm,definitely-absent-locus,exact,50,47.988073,0,false,1,1,7430,0,0.765773,1.384240,1.384240,1.045770,,,,,,

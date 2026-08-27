@@ -25,6 +25,10 @@
   cache construction computes source SHA-256 in the same sequential pass.
 - Advanced encoder reports to schema 7 for persistent-cache reuse, cache-open,
   manifest-validation, and path-index-deserialization evidence.
+- Added explicit `--sample NAME --reference-haplotype N` anchoring for real
+  named population haplotypes in GBWTs without reference tags. Schema-8 encoder
+  reports record the selected haplotype; the mode uses the bounded ephemeral
+  disk source and cannot reuse a persistent cache.
 - Made graph results independent of payload completion order and documented
   `queryTiles()` progressive event order as intentionally unspecified. Summary
   pyramids now aggregate adjacent groups of four in linear emitted-bin work and

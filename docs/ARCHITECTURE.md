@@ -121,6 +121,14 @@ context expansion from packed records. Neither is a global haplotype occurrence
 index. `LoadedGbzSource` remains available via `--source-access loaded` as the
 byte-correctness baseline.
 
+Some population GBWTs contain only named sample haplotypes and omit the
+`reference_samples` tag. For an explicitly coordinate-relative research
+archive, `--sample NAME --reference-haplotype N` may select that exact real
+named haplotype as the archive anchor. This does not synthesize a sample or
+claim standard-reference coordinates. The override is limited to the bounded
+disk source and ephemeral cache path; persistent caches remain bound to the
+reference identities recorded when they were constructed.
+
 ## Primary npm product boundary
 
 `packages/browser` is the primary npm package. It publishes isolated reader,
@@ -237,6 +245,21 @@ curved topology edges, tile boundaries, local weights, and explicit summarized
 counts. Mouse, pointer, and keyboard controls share one transform; `destroy()`
 aborts work, removes listeners and observers, and releases all DOM owned by the
 viewer.
+
+The VitePress demo is an application shell over that public boundary. It owns
+archive selection, native locus search, multiscale summaries, the settled
+genomic viewport, browser history, cancellation, and the inspector. Wide views
+call only `summary()`; a deterministic byte/record budget decides when to
+stream `queryTiles()`. Immediate canvas transforms remain local while a
+debounced settled viewport changes the genomic request, so pointer movement
+does not create a request storm. Old visual content stays visible until the
+first replacement tile arrives.
+
+The public viewer exposes the application-used controls and events:
+`setViewport`, `setDisplayMode`, `setLayers`, `setTheme`,
+`getPerformanceSnapshot`, and `on` for viewport, selection, and LOD changes.
+It remains framework-neutral and cannot import Vue, VitePress, benchmark code,
+archive transport, or Node built-ins.
 
 ## Cost simulation
 

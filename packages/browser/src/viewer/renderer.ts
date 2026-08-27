@@ -1,13 +1,22 @@
-import type { ViewerLayout, ViewerLayoutNode } from "./types.js";
+import type { ViewerDisplayMode } from "./lod.js";
+import type {
+  ViewerLayerState,
+  ViewerLayout,
+  ViewerLayoutNode,
+  ViewerTheme,
+} from "./types.js";
 
 export interface CanvasRenderOptions {
   readonly background?: string;
   readonly hoveredNodeId?: bigint;
   readonly selectedNodeId?: bigint;
   readonly loading?: boolean;
+  readonly displayMode?: ViewerDisplayMode;
+  readonly layers?: ViewerLayerState;
+  readonly theme?: ViewerTheme;
 }
 
-const COLORS = {
+const LIGHT_COLORS = {
   ink: "#14213d",
   muted: "#66758c",
   grid: "#d9e2ec",
@@ -20,13 +29,30 @@ const COLORS = {
   tile: "#94a3b8",
 };
 
+const DARK_COLORS: ViewerColors = {
+  ink: "#e8eef7",
+  muted: "#9eacbf",
+  grid: "#354153",
+  reference: "#58c9d7",
+  referenceFill: "#173b45",
+  alternate: "#f1956f",
+  alternateFill: "#43291f",
+  traversal: "#b7a7ed",
+  selection: "#ffd166",
+  tile: "#718096",
+};
+
+type ViewerColors = typeof LIGHT_COLORS;
+
 /** Draw a complete layout without retaining DOM or archive state. */
 export function renderViewerCanvas(
   context: CanvasRenderingContext2D,
   layout: ViewerLayout,
   options: CanvasRenderOptions = {},
 ): void {
-  const background = options.background ?? "#fbfcfe";
+  const colors = options.theme === "dark" ? DARK_COLORS : LIGHT_COLORS;
+  const background =
+    options.background ?? (options.theme === "dark" ? "#10151d" : "#fbfcfe");
   context.save();
   context.clearRect(0, 0, layout.width, layout.height);
   context.fillStyle = background;
@@ -35,23 +61,31 @@ export function renderViewerCanvas(
   context.lineJoin = "round";
   context.font = "12px ui-monospace, SFMono-Regular, Menlo, monospace";
 
-  drawRuler(context, layout);
-  drawTileBoundaries(context, layout);
-  drawEdges(context, layout);
-  drawTraversals(context, layout);
-  drawNodes(context, layout, options);
-  drawLegend(context, layout, options.loading ?? false);
+  drawRuler(context, layout, colors);
+  const layers = options.layers ?? {
+    reference: true,
+    topology: true,
+    traversals: true,
+    tileBoundaries: true,
+    sequenceLabels: true,
+  };
+  if (layers.tileBoundaries) drawTileBoundaries(context, layout, colors);
+  if (layers.topology) drawEdges(context, layout, colors);
+  if (layers.traversals) drawTraversals(context, layout, colors);
+  drawNodes(context, layout, options, layers, colors);
+  drawLegend(context, layout, options.loading ?? false, colors);
   context.restore();
 }
 
 function drawRuler(
   context: CanvasRenderingContext2D,
   layout: ViewerLayout,
+  colors: ViewerColors,
 ): void {
   const left = 54;
   const right = layout.width - 24;
   const y = 42;
-  context.strokeStyle = COLORS.ink;
+  context.strokeStyle = colors.ink;
   context.lineWidth = 1;
   context.beginPath();
   context.moveTo(left, y);
@@ -67,11 +101,11 @@ function drawRuler(
     context.moveTo(worldX, y - 4);
     context.lineTo(worldX, y + 5);
     context.stroke();
-    context.fillStyle = COLORS.muted;
+    context.fillStyle = colors.muted;
     context.textAlign = "center";
     context.fillText(formatCoordinate(coordinate), worldX, y - 9);
   }
-  context.fillStyle = COLORS.ink;
+  context.fillStyle = colors.ink;
   context.textAlign = "left";
   context.fillText(`${layout.query.sample} / ${layout.query.contig}`, left, 18);
 }
@@ -79,9 +113,10 @@ function drawRuler(
 function drawTileBoundaries(
   context: CanvasRenderingContext2D,
   layout: ViewerLayout,
+  colors: ViewerColors,
 ): void {
   context.save();
-  context.strokeStyle = COLORS.tile;
+  context.strokeStyle = colors.tile;
   context.globalAlpha = 0.35;
   context.setLineDash([3, 5]);
   for (const boundary of layout.tileBoundaries) {
@@ -97,6 +132,7 @@ function drawTileBoundaries(
 function drawEdges(
   context: CanvasRenderingContext2D,
   layout: ViewerLayout,
+  colors: ViewerColors,
 ): void {
   for (const edge of layout.edges) {
     if (
@@ -105,7 +141,12 @@ function drawEdges(
     ) {
       continue;
     }
-    context.strokeStyle = edge.reference ? COLORS.reference : COLORS.alternate;
+    context.strokeStyle =
+      edge.classification === "inversion"
+        ? colors.traversal
+        : edge.reference
+          ? colors.reference
+          : colors.alternate;
     context.globalAlpha = edge.reference ? 0.78 : 0.5;
     context.lineWidth = edge.reference ? 2.4 : 1.4;
     const bend = Math.max(16, Math.abs(edge.toX - edge.fromX) * 0.16);
@@ -126,6 +167,7 @@ function drawEdges(
 function drawTraversals(
   context: CanvasRenderingContext2D,
   layout: ViewerLayout,
+  colors: ViewerColors,
 ): void {
   if (layout.traversals.length === 0) return;
   let maximumWeight = 1n;
@@ -134,7 +176,7 @@ function drawTraversals(
   }
   const panelLeft = 54;
   const panelWidth = Math.min(180, layout.width * 0.22);
-  context.fillStyle = COLORS.muted;
+  context.fillStyle = colors.muted;
   context.textAlign = "left";
   context.fillText(
     "tile-local traversal weight",
@@ -143,7 +185,7 @@ function drawTraversals(
   );
   for (const traversal of layout.traversals) {
     if (traversal.points.length >= 2) {
-      context.strokeStyle = COLORS.traversal;
+      context.strokeStyle = colors.traversal;
       context.globalAlpha =
         0.25 + 0.65 * weightRatio(traversal.weight, maximumWeight);
       context.lineWidth = 1 + weightRatio(traversal.weight, maximumWeight) * 2;
@@ -157,7 +199,7 @@ function drawTraversals(
     const barY = layout.height - 44 - traversal.lane * 6;
     if (barY < layout.height * 0.72) continue;
     context.globalAlpha = 0.65;
-    context.fillStyle = COLORS.traversal;
+    context.fillStyle = colors.traversal;
     context.fillRect(
       panelLeft,
       barY,
@@ -172,27 +214,34 @@ function drawNodes(
   context: CanvasRenderingContext2D,
   layout: ViewerLayout,
   options: CanvasRenderOptions,
+  layers: ViewerLayerState,
+  colors: ViewerColors,
 ): void {
   for (const node of layout.nodes) {
-    if (!node.visible) continue;
+    if (!node.visible || (node.reference && !layers.reference)) continue;
     const selected = node.id === options.selectedNodeId;
     const hovered = node.id === options.hoveredNodeId;
     context.fillStyle = node.reference
-      ? COLORS.referenceFill
-      : COLORS.alternateFill;
+      ? colors.referenceFill
+      : colors.alternateFill;
     context.strokeStyle = selected
-      ? COLORS.selection
+      ? colors.selection
       : node.reference
-        ? COLORS.reference
-        : COLORS.alternate;
+        ? colors.reference
+        : colors.alternate;
     context.lineWidth = selected ? 3 : hovered ? 2.4 : 1.3;
     context.beginPath();
     context.rect(node.x, node.y, node.width, node.height);
     context.fill();
     context.stroke();
-    drawOrientation(context, node);
-    if (layout.zoom >= 1.7 && node.width >= 28) {
-      context.fillStyle = COLORS.ink;
+    drawOrientation(context, node, colors);
+    const labelThreshold = options.displayMode === "base" ? 0.8 : 1.7;
+    if (
+      layers.sequenceLabels &&
+      layout.zoom >= labelThreshold &&
+      node.width >= 28
+    ) {
+      context.fillStyle = colors.ink;
       context.textAlign = "center";
       const label = sequenceLabel(node);
       context.fillText(
@@ -208,11 +257,12 @@ function drawNodes(
 function drawOrientation(
   context: CanvasRenderingContext2D,
   node: ViewerLayoutNode,
+  colors: ViewerColors,
 ): void {
   const x = node.reverse ? node.x + 4 : node.x + node.width - 4;
   const direction = node.reverse ? -1 : 1;
   const y = node.y + node.height / 2;
-  context.fillStyle = node.reference ? COLORS.reference : COLORS.alternate;
+  context.fillStyle = node.reference ? colors.reference : colors.alternate;
   context.beginPath();
   context.moveTo(x + direction * 3, y);
   context.lineTo(x - direction * 3, y - 3);
@@ -225,8 +275,9 @@ function drawLegend(
   context: CanvasRenderingContext2D,
   layout: ViewerLayout,
   loading: boolean,
+  colors: ViewerColors,
 ): void {
-  context.fillStyle = COLORS.muted;
+  context.fillStyle = colors.muted;
   context.textAlign = "right";
   context.fillText(
     `${layout.counts.renderedNodes}/${layout.counts.decodedNodes} nodes · ` +
@@ -236,13 +287,13 @@ function drawLegend(
     18,
   );
   context.textAlign = "left";
-  context.fillStyle = COLORS.reference;
+  context.fillStyle = colors.reference;
   context.fillRect(54, 58, 14, 4);
-  context.fillStyle = COLORS.muted;
+  context.fillStyle = colors.muted;
   context.fillText("reference", 74, 64);
-  context.fillStyle = COLORS.alternate;
+  context.fillStyle = colors.alternate;
   context.fillRect(150, 58, 14, 4);
-  context.fillStyle = COLORS.muted;
+  context.fillStyle = colors.muted;
   context.fillText("alternate topology", 170, 64);
 }
 

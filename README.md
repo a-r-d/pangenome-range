@@ -14,7 +14,7 @@
 
 It is inspired by tiled GeoTIFF systems: convert a huge GBZ pangenome into one tiled, static `.pngr` object, then query small regions in a browser with HTTP Range requests instead of downloading the whole graph.
 
-[Format specification](docs/FILE_FORMAT_V1.md) · [Live demo](https://a-r-d.github.io/pangenome-range/demo) · [Hosting requirements](docs/HOSTING.md)
+[Format specification](docs/FILE_FORMAT_V1.md) · [Live demo](https://a-r-d.github.io/pangenome-range/demo) · [Viewer requirements](docs/VIEWER_PRODUCT_REQUIREMENTS.md) · [Hosting requirements](docs/HOSTING.md)
 
 ## Encoder
 
@@ -82,6 +82,7 @@ Measured August 27, 2026 over the public network; latency will vary by location 
 | `input.gbz` | required | Source GBZ file. |
 | `output.pngr` | required | New archive path; existing files are not overwritten. |
 | `--sample NAME` | all | Encode one reference sample. |
+| `--reference-haplotype N` | none | Explicitly use haplotype `N` of `--sample` as the real coordinate anchor when the GBWT does not tag a reference; disk source only, without persistent-cache reuse. |
 | `--contig NAME` | all | Encode one reference contig. |
 | `--start BP` | contig start | Start coordinate; requires `--contig`. |
 | `--end BP` | contig end | End coordinate; requires `--contig`. |
@@ -116,6 +117,7 @@ Measured August 27, 2026 over the public network; latency will vary by location 
 - [File-format v1 specification](docs/FILE_FORMAT_V1.md)
 - [Architecture](docs/ARCHITECTURE.md) · [fixed-window archive](docs/FIXED_WINDOW_ARCHIVE.md) · [haplotype semantics](docs/HAPLOTYPE_SEMANTICS.md)
 - [Benchmarks](docs/BENCHMARKS.md) · [optimization log](docs/OPTIMIZATION_LOG.md) · [release checklist](docs/FORMAT_RELEASE_CHECKLIST.md)
+- [Viewer performance](docs/VIEWER_PERFORMANCE.md) · [actual viewer format gaps](docs/VIEWER_FORMAT_GAPS.md)
 - [Architecture decisions](docs/adr/) · [distribution](docs/DISTRIBUTION.md) · [hosting](docs/HOSTING.md)
 
 ## License
