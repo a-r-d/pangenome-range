@@ -1,0 +1,26 @@
+docs/DISTRIBUTION.md
+  s_c6adeff06c2400::t_6c10ddfaaa2787 133,135,137-138,141-143
+  s_c6adeff06c2400::t_e9a96b94aa2bdb 144
+results/2026-08-26-release-hardening-v1/REPORT.md
+  s_c6adeff06c2400::t_6c10ddfaaa2787 6-9,193-205,209-211,223,290-298
+  s_c6adeff06c2400::t_10f27cde544db9 299
+results/2026-08-26-release-hardening-v1/summary.json
+  s_c6adeff06c2400::t_6c10ddfaaa2787 73-76,80
+  s_c6adeff06c2400::t_1a118c6768a8f5 72
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.24",
+  "base_commit_sha": "b054f713b59e6c698e55288c096a5db3514db795",
+  "prompts": {},
+  "sessions": {
+    "s_c6adeff06c2400": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a03eda-5280-7641-a2d1-995a448eacdd",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "aaron decker <aaron@ard.ninja>"
+    }
+  }
+}
