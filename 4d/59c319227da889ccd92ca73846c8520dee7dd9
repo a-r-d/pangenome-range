@@ -1,0 +1,36 @@
+docs/test/docs.test.mjs
+  s_c6adeff06c2400::t_9c448c52c725d8 24
+  s_c6adeff06c2400::t_685f3707e63219 20-23
+  s_c6adeff06c2400::t_ed95bb9c73b7b6 10-13,34-41
+  s_c6adeff06c2400::t_5663cbf46ded48 42
+docs/components/PangenomeDemo.vue
+  s_c6adeff06c2400::t_9c448c52c725d8 35-37,49-53,310-312
+docs/demo.md
+  s_c6adeff06c2400::t_9c448c52c725d8 12-17
+.github/workflows/pages.yml
+  s_c6adeff06c2400::t_faf761f2ba609a 37
+  s_c6adeff06c2400::t_9c448c52c725d8 21
+package.json
+  s_c6adeff06c2400::t_9c448c52c725d8 14
+docs/HOSTING.md
+  s_c6adeff06c2400::t_ed95bb9c73b7b6 87-92
+  s_c6adeff06c2400::t_9c448c52c725d8 72-86,93-97,100-103,109-111
+.github/workflows/ci.yml
+  s_c6adeff06c2400::t_faf761f2ba609a 26
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.24",
+  "base_commit_sha": "4d59c319227da889ccd92ca73846c8520dee7dd9",
+  "prompts": {},
+  "sessions": {
+    "s_c6adeff06c2400": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a03eda-5280-7641-a2d1-995a448eacdd",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "aaron decker <aaron@ard.ninja>"
+    }
+  }
+}
