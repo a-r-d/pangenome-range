@@ -1,10 +1,11 @@
 use crate::binary::{invalid_data, u64_to_usize, usize_to_u64};
 use crate::{
-    ArchiveEntry, DIRECTORY_PAGE_BYTES, FileRangeSource, MAX_DECODED_OCCURRENCES_PER_TILE,
-    NAMED_LOCI_TYPE_ID, RangeSource, RecordRegionalPayload, SUMMARY_PYRAMID_TYPE_ID, bootstrap,
-    decode_directory_page, decode_locus_page, decode_named_loci_descriptor,
-    decode_summary_descriptor, decode_summary_page, decompress, directory_page_offset,
-    validate_extension_page, validate_extension_payload,
+    ARCHIVE_METADATA_TYPE_ID, ArchiveEntry, DIRECTORY_PAGE_BYTES, FileRangeSource,
+    MAX_DECODED_OCCURRENCES_PER_TILE, NAMED_LOCI_TYPE_ID, RangeSource, RecordRegionalPayload,
+    SUMMARY_PYRAMID_TYPE_ID, bootstrap, decode_archive_metadata, decode_directory_page,
+    decode_locus_page, decode_named_loci_descriptor, decode_summary_descriptor,
+    decode_summary_page, decompress, directory_page_offset, validate_extension_page,
+    validate_extension_payload,
 };
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
@@ -243,7 +244,9 @@ pub fn validate_archive_with_options(
         extension_decoded_bytes = extension_decoded_bytes
             .checked_add(usize_to_u64(decoded.len())?)
             .ok_or_else(|| invalid_data("extension decoded byte count overflow"))?;
-        if extension.type_id == NAMED_LOCI_TYPE_ID {
+        if extension.type_id == ARCHIVE_METADATA_TYPE_ID {
+            decode_archive_metadata(&decoded)?;
+        } else if extension.type_id == NAMED_LOCI_TYPE_ID {
             let descriptor =
                 decode_named_loci_descriptor(&decoded, header.data_offset, source_len)?;
             let mut records = 0_u64;

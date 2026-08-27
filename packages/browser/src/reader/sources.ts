@@ -190,6 +190,12 @@ export class HttpRangeSource implements RangeSource {
     return this.#requests.slice();
   }
 
+  strongIdentity(): string | undefined {
+    return this.#etag !== undefined && !this.#etag.startsWith("W/")
+      ? this.#etag
+      : undefined;
+  }
+
   async size(signal?: AbortSignal): Promise<bigint> {
     signal?.throwIfAborted();
     if (this.#size === undefined) {

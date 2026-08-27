@@ -12,10 +12,10 @@ A v1 object is one immutable static `.pngr` file:
 ```text
 64-byte PNGRNG01 header
 variable root manifest
-versioned extension directory with default locus and summary descriptors
+versioned extension directory with summary and provenance descriptors
 contiguous fixed 4 KiB arithmetic directory pages
 independently compressed PNGRGN01 regional payloads
-independently compressed named-locus and summary pages
+optional independently compressed named-locus pages and summary pages
 ```
 
 Each reference manifest records its real sample and contig, coordinate span,
@@ -33,14 +33,15 @@ them as `bigint`.
 
 ## Default viewer indexes
 
-The normal encoder emits two optional-in-the-decoder-sense extensions. The
+The normal encoder always emits summary and deterministic provenance extensions. The
 named-locus descriptor uses sorted key fences so exact or prefix search reads a
-small descriptor and only matching leaves. `--annotations <GFF3>` populates it;
-without external annotations it is a valid empty index. The annotation SHA-256
+small descriptor and only matching leaves. `--annotations <GFF3>` enables it;
+without external annotations the reference encoder omits it. The annotation SHA-256
 and filename are embedded, and coordinates are explicitly bound to a real
 reference sample.
 
-The reference encoder selects GFF3 `gene` features for named-locus search. It
+The reference encoder selects GFF3 `gene` features by default; repeatable
+`--annotation-feature-type` options replace that policy. It
 indexes their stable IDs, names, and declared aliases once at the gene interval;
 child transcript, exon, CDS, codon, and UTR rows are not repeated as loci.
 
@@ -124,9 +125,11 @@ intentionally unsupported and must be regenerated.
 
 ## Current limitations
 
-- GFF3 named-locus ingestion currently sorts the selected searchable records in
-  memory; a disk-backed external sort is required before very large annotation
-  corpora should be treated as bounded-memory inputs.
+- GFF3 named-locus ingestion currently sorts selected searchable records in
+  memory. The final whole GENCODE v50 run accepted 78,733 genes, expanded
+  157,466 records, and spent 116 ms sorting/deduplicating while the entire
+  process peaked at 621,808 KiB. This real corpus does not justify external
+  sorting; substantially larger corpora require another bounded pilot.
 - The 72-entry dense-bucket limit has exact 72/73 tests; broader
   pathological-locus and retained fuzz campaigns remain release gates.
 - The current regional occurrence safety limit is 16,777,216 per tile; adaptive

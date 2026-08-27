@@ -50,7 +50,10 @@ The main package pins all native packages as exact-version
 Each generated platform package contains only `package.json`, `README.md`,
 `LICENSE`, and `bin/pangenome-range` (or `.exe`). There is no `postinstall`,
 runtime download, GitHub API fetch, or local Rust compilation. Linux libc is
-selected from Node's runtime report. Before spawning, the shim verifies the
+selected from Node's runtime report when it identifies glibc. An explicit
+`PANGENOME_RANGE_LIBC=gnu|musl` override takes precedence. If the report is
+missing or ambiguous, the shim uses the only installed matching exact-version
+optional package; it never guesses musl from missing glibc metadata. Before spawning, the shim verifies the
 platform package version and declared executable path. It inherits all three
 standard streams and forwards arguments, termination signals, and exit status.
 
@@ -121,3 +124,22 @@ release workflow. Registry ownership for `pangenome-range` and the
 `@pangenome-range` scope, trusted-publisher configuration, and release-environment
 approval are external setup still required. No npm publish command is present
 until that setup is complete.
+
+## One-time repository setup before publication
+
+The repository owner must complete these service-side steps; they cannot be
+proved by a local package rehearsal:
+
+1. In GitHub **Settings -> Pages -> Build and deployment**, select **GitHub
+   Actions** as the source.
+2. Protect `main`, or add an equivalent ruleset, requiring the normal CI and
+   CodeQL checks.
+3. Establish npm ownership for `pangenome-range` and the `@pangenome-range`
+   scope, then bind trusted publishing to the protected release workflow.
+4. Configure the protected GitHub `release` environment and its approval rules.
+5. Run the release workflow and require all six real target artifacts before
+   any publish step.
+
+Local staging verifies manifests, file allowlists, exact versions, lifecycle
+script absence, tarball shape, and the host binary. Synthetic non-host package
+shapes are not evidence that the corresponding native target compiled or ran.

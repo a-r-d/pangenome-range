@@ -269,6 +269,7 @@ impl RecordRegionalPayload {
         }
 
         let mut edges = BTreeSet::new();
+        let mut previous_edge = None;
         for _ in
             0..count_bounded_by_bytes(edge_count, reader.remaining(), 16, "record payload edges")?
         {
@@ -282,9 +283,13 @@ impl RecordRegionalPayload {
             if !canonical_edge(edge.from, edge.to) {
                 return Err(invalid_data("record payload edge is not canonical"));
             }
-            if !edges.insert(edge) {
-                return Err(invalid_data("record payload contains a duplicate edge"));
+            if previous_edge.is_some_and(|previous| edge <= previous) {
+                return Err(invalid_data(
+                    "record payload edges are not strictly ordered",
+                ));
             }
+            previous_edge = Some(edge);
+            edges.insert(edge);
         }
 
         let capacity = count_bounded_by_bytes(

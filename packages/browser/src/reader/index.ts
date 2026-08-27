@@ -32,6 +32,8 @@ export {
 export type {
   ArchiveCacheStats,
   ArchiveCapabilities,
+  ArchiveInfo,
+  ArchiveProvenance,
   ChunkDecompressor,
   EdgeTable,
   FeatureQueryTrace,

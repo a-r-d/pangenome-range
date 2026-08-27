@@ -51,7 +51,29 @@ test("selects every supported platform package", () => {
     }),
     "gnu",
   );
-  assert.equal(detectLinuxLibc({ getReport: () => ({ header: {} }) }), "musl");
+  assert.equal(
+    detectLinuxLibc({ getReport: () => ({ header: {} }) }),
+    undefined,
+  );
+  assert.throws(
+    () =>
+      selectPlatformPackage({
+        platform: "linux",
+        arch: "x64",
+        report: { getReport: () => ({ header: {} }) },
+        env: {},
+      }),
+    /Could not determine Linux libc/,
+  );
+  assert.equal(
+    selectPlatformPackage({
+      platform: "linux",
+      arch: "x64",
+      report: { getReport: () => ({ header: {} }) },
+      env: { PANGENOME_RANGE_LIBC: "gnu" },
+    }).packageName,
+    "@pangenome-range/cli-linux-x64-gnu",
+  );
 });
 
 test("rejects unsupported targets with an actionable error", () => {
@@ -69,6 +91,8 @@ async function createResolutionFixture(nativeVersion) {
   temporaryDirectories.push(directory);
   const mainManifest = path.join(directory, "main-package.json");
   const nativeManifest = path.join(directory, "native-package.json");
+  const nativeBinary = path.join(directory, "bin", "pangenome-range");
+  await mkdir(path.dirname(nativeBinary), { recursive: true });
   await Promise.all([
     writeFile(mainManifest, '{"name":"pangenome-range","version":"0.1.0"}\n'),
     writeFile(
@@ -79,7 +103,9 @@ async function createResolutionFixture(nativeVersion) {
         pangenomeRange: { binary: "bin/pangenome-range" },
       })}\n`,
     ),
+    writeFile(nativeBinary, "#!/bin/sh\nexit 0\n"),
   ]);
+  await chmod(nativeBinary, 0o755);
   return { mainManifest, nativeManifest };
 }
 
@@ -99,6 +125,27 @@ test("reports a missing optional native dependency", async () => {
     }),
     /Reinstall pangenome-range without --omit=optional/,
   );
+});
+
+test("resolves the only installed libc package when process.report is ambiguous", async () => {
+  const { mainManifest, nativeManifest } =
+    await createResolutionFixture("0.1.0");
+  const resolved = await resolveNativeCli({
+    mainPackageJson: mainManifest,
+    platform: "linux",
+    arch: "x64",
+    report: { getReport: () => ({ header: {} }) },
+    env: {},
+    resolve: (specifier) => {
+      if (specifier === "@pangenome-range/cli-linux-x64-gnu/package.json") {
+        return nativeManifest;
+      }
+      const error = new Error("missing");
+      error.code = "MODULE_NOT_FOUND";
+      throw error;
+    },
+  });
+  assert.equal(resolved.packageName, "@pangenome-range/cli-linux-x64-gnu");
 });
 
 test("rejects a platform package version mismatch before launch", async () => {

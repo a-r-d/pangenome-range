@@ -2,10 +2,13 @@ import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { describe, expect, it, vi } from "vitest";
 import {
+  decodeArchiveMetadata,
   type NamedLociDescriptor,
   selectLocusPages,
+  selectSummarySeries,
 } from "../src/reader/features.js";
 import {
+  type ChunkDecompressor,
   CorruptRegionalPayloadError,
   canonicalGraphHash,
   canonicalHaplotypeTileHash,
@@ -107,7 +110,11 @@ const conformanceManifest = JSON.parse(
   expectedFailures: Array<{
     id: string;
     file: string;
-    inputKind: "archive" | "regional-payload";
+    inputKind:
+      | "archive"
+      | "regional-payload"
+      | "zstd-frame"
+      | "archive-metadata";
     expected: "reject";
     rejectionStage: string;
     bytes: number;
@@ -143,6 +150,59 @@ const recordArchiveFixture = new Uint8Array(
   ),
 );
 
+const micbKirArchiveFixture = new Uint8Array(
+  readFileSync(
+    new URL(
+      "../../../test-data/conformance/micb-kir3dl1-reader-v1.pngr",
+      import.meta.url,
+    ),
+  ),
+);
+
+class CompletionOrderDecompressor implements ChunkDecompressor {
+  readonly #inner = new FzstdDecompressor();
+  readonly #reverse: boolean;
+
+  constructor(reverse: boolean) {
+    this.#reverse = reverse;
+  }
+
+  async decompress(
+    compressed: Uint8Array,
+    expectedLength: number,
+    options?: { signal?: AbortSignal },
+  ): Promise<Uint8Array> {
+    const discriminator =
+      ((compressed[compressed.byteLength - 1] ?? 0) + compressed.byteLength) %
+      7;
+    const delayMs = (this.#reverse ? 6 - discriminator : discriminator) * 2;
+    await new Promise((resolve) => setTimeout(resolve, delayMs));
+    options?.signal?.throwIfAborted();
+    return this.#inner.decompress(compressed, expectedLength, options);
+  }
+}
+
+function duplicateGoldenLogicalEntry(): Uint8Array {
+  const bytes = recordArchiveFixture.slice();
+  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  view.setBigUint64(32, 2n, true);
+  let position = 64;
+  position += 8;
+  for (let index = 0; index < 2; index += 1) {
+    const length = Number(view.getBigUint64(position, true));
+    position += 8 + length;
+  }
+  const firstPageOffset = Number(view.getBigUint64(position + 5 * 8, true));
+  view.setBigUint64(position + 7 * 8, 2n, true);
+  view.setUint32(firstPageOffset, 2, true);
+  bytes.copyWithin(
+    firstPageOffset + 16 + 56,
+    firstPageOffset + 16,
+    firstPageOffset + 16 + 56,
+  );
+  return bytes;
+}
+
 const recordArchiveMetadata = JSON.parse(
   readFileSync(
     new URL(
@@ -154,6 +214,16 @@ const recordArchiveMetadata = JSON.parse(
 ) as {
   features: {
     typeIds: string[];
+    provenance: {
+      encoderPackageVersion: string;
+      formatImplementation: string;
+      referenceSample: string;
+      referenceAssembly: string;
+      datasetTitle: string;
+      sourceUri: string;
+      annotationRelease: string;
+      annotationAssembly: string;
+    };
     namedLoci: {
       recordCount: number;
       pageCount: number;
@@ -237,6 +307,52 @@ describe("reader contract validation", () => {
       descriptor.pages[1],
     ]);
     expect(selectLocusPages(descriptor, "zzzz", "exact")).toEqual([]);
+  });
+
+  it("selects valid summary levels independently for unequal fragments", () => {
+    const storage = {
+      offset: 10_000n,
+      encodedLength: 10n,
+      decodedLength: 20n,
+      codec: 3 as const,
+      integrity: new Uint8Array(16),
+    };
+    const descriptor = {
+      baseBinSpan: 1_000n,
+      series: [
+        ...[100n, 25n, 7n, 2n, 1n].map((binCount, level) => ({
+          manifestIndex: 0,
+          level,
+          binSpan: 1_000n * 4n ** BigInt(level),
+          firstBinStart: 0n,
+          binCount,
+          storage,
+        })),
+        ...[2n, 1n].map((binCount, level) => ({
+          manifestIndex: 1,
+          level,
+          binSpan: 1_000n * 4n ** BigInt(level),
+          firstBinStart: 0n,
+          binCount,
+          storage,
+        })),
+      ],
+    };
+    const selected = selectSummarySeries(descriptor, [0, 1], 0n, 100_000n, 5);
+    expect(
+      selected.map(({ manifestIndex, level }) => [manifestIndex, level]),
+    ).toEqual([
+      [0, 3],
+      [1, 0],
+    ]);
+    expect(
+      selectSummarySeries(descriptor, [0, 1], 0n, 100_000n, 1).map(
+        ({ level }) => level,
+      ),
+    ).toEqual([4, 1]);
+    expect(() => selectSummarySeries(descriptor, [2], 0n, 1n, 10)).toThrow(
+      "does not cover",
+    );
   });
 
   it("consumes the normative machine-readable format constants and checksums", () => {
@@ -428,6 +544,14 @@ describe("reader contract validation", () => {
       try {
         if (failure.inputKind === "regional-payload") {
           decodeRegionalPayload(bytes);
+        } else if (failure.inputKind === "zstd-frame") {
+          new FzstdDecompressor().decompress(
+            bytes,
+            readFileSync(new URL("format-v1.payload.raw", conformanceDirectory))
+              .byteLength,
+          );
+        } else if (failure.inputKind === "archive-metadata") {
+          decodeArchiveMetadata(bytes);
         } else {
           const archive = await openPangenome(new MemoryRangeSource(bytes));
           try {
@@ -621,6 +745,25 @@ describe("reader contract validation", () => {
       namedLoci: true,
       multiscaleSummaries: true,
     });
+    const info = await archive.info();
+    expect(info).toMatchObject({
+      formatVersion: 1,
+      haplotypeSemantics: "anonymous-distinct-weighted-tile-paths",
+      archiveBytes: BigInt(recordArchiveFixture.byteLength),
+      extensions: recordArchiveMetadata.features.typeIds,
+      namedLoci: {
+        state: "present-populated",
+        recordCount: BigInt(
+          recordArchiveMetadata.features.namedLoci.recordCount,
+        ),
+      },
+      provenance: {
+        sourceGbzBytes: 73_920n,
+        sourceGbzSha256:
+          "1d574ede7533150eb87f6837a7763d4eac120aa03f34877392ecdd53b0410788",
+        ...recordArchiveMetadata.features.provenance,
+      },
+    });
     const loci = await archive.searchLoci({
       name: recordArchiveMetadata.features.namedLoci.query,
       mode: recordArchiveMetadata.features.namedLoci.mode,
@@ -700,7 +843,7 @@ describe("reader contract validation", () => {
       directoryEntries: 1,
       payloadEntries: 1,
       extensionEntries:
-        2 +
+        3 +
         recordArchiveMetadata.features.namedLoci.pageCount +
         recordArchiveMetadata.features.summary.seriesCount,
     });
@@ -712,6 +855,8 @@ describe("reader contract validation", () => {
       payloadEntries: 0,
       extensionBytes: 0,
       extensionEntries: 0,
+      decodedFeatureBytes: 0,
+      decodedFeatureEntries: 0,
     });
     await archive.close();
 
@@ -728,6 +873,72 @@ describe("reader contract validation", () => {
       ).trace?.canonicalHash,
     ).toBe("3674cc04aea1d17ab4440075089d437cb642702661a454ea764f46866a41e251");
     await blobArchive.close();
+  });
+
+  it("keeps semantic results deterministic across payload completion order", async () => {
+    const query = {
+      sample: "GRCh38",
+      contig: "chr19",
+      start: 54_816_468,
+      end: 54_830_778,
+      context: 100,
+    } as const;
+    const run = async (reverse: boolean) => {
+      const archive = await openPangenome({
+        source: new MemoryRangeSource(micbKirArchiveFixture),
+        decompressor: new CompletionOrderDecompressor(reverse),
+      });
+      const streamed: number[] = [];
+      for await (const tile of archive.queryTiles(query))
+        streamed.push(tile.start);
+      archive.clearCaches();
+      const result = await archive.query({ ...query, trace: true });
+      await archive.close();
+      return {
+        streamed,
+        ordered: result.tiles.map((tile) => tile.start),
+        graphHash: result.trace?.canonicalHash,
+        tileHashes: result.tiles.map(canonicalHaplotypeTileHash),
+        referenceTraversal: Array.from(result.graph.referenceTraversal, String),
+      };
+    };
+    const forward = await run(false);
+    const reverse = await run(true);
+    expect(forward.ordered).toEqual([...forward.ordered].sort((a, b) => a - b));
+    expect(reverse.ordered).toEqual(forward.ordered);
+    expect(reverse.graphHash).toBe(forward.graphHash);
+    expect(reverse.tileHashes).toEqual(forward.tileHashes);
+    expect(reverse.referenceTraversal).toEqual(forward.referenceTraversal);
+    expect([...reverse.streamed].sort((a, b) => a - b)).toEqual(
+      [...forward.streamed].sort((a, b) => a - b),
+    );
+  });
+
+  it("deduplicates multiple logical entries for one physical payload", async () => {
+    const query = {
+      sample: "CHM13",
+      contig: "chr6",
+      start: 31_350_872,
+      end: 31_351_896,
+      trace: true,
+    } as const;
+    const original = await openPangenome(
+      new MemoryRangeSource(recordArchiveFixture),
+    );
+    const duplicated = await openPangenome(
+      new MemoryRangeSource(duplicateGoldenLogicalEntry()),
+    );
+    const [left, right] = await Promise.all([
+      original.query(query),
+      duplicated.query(query),
+    ]);
+    expect(right.tiles).toHaveLength(1);
+    expect(right.trace?.canonicalHash).toBe(left.trace?.canonicalHash);
+    expect(Array.from(right.graph.referenceTraversal, String)).toEqual(
+      Array.from(left.graph.referenceTraversal, String),
+    );
+    await original.close();
+    await duplicated.close();
   });
 
   it("rejects incomplete extension pointers and truncated stored ranges", async () => {
@@ -751,7 +962,14 @@ describe("reader contract validation", () => {
     const bytes = new Uint8Array(
       readFileSync(new URL(`${fixture.id}.pngr`, conformanceDirectory)),
     );
-    const optional = await openPangenome(new MemoryRangeSource(bytes));
+    const unknown = bytes.slice();
+    const unknownView = new DataView(unknown.buffer);
+    const extensionOffset = Number(unknownView.getBigUint64(48, true));
+    unknown.set(
+      new TextEncoder().encode("unknown-meta-v1-"),
+      extensionOffset + 32,
+    );
+    const optional = await openPangenome(new MemoryRangeSource(unknown));
     expect(optional.references()).toEqual(
       fixture.expected.references.map((reference) =>
         expect.objectContaining(reference),
@@ -759,9 +977,8 @@ describe("reader contract validation", () => {
     );
     await optional.close();
 
-    const required = bytes.slice();
+    const required = unknown.slice();
     const view = new DataView(required.buffer);
-    const extensionOffset = Number(view.getBigUint64(48, true));
     view.setUint32(extensionOffset + 32 + 16, 1, true);
     await expect(
       openPangenome(new MemoryRangeSource(required)),

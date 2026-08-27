@@ -1,0 +1,36 @@
+{
+  "schemaVersion": 1,
+  "runId": "2026-08-26-release-hardening-v1",
+  "date": "2026-08-26",
+  "host": "apollo",
+  "os": "Linux 6.17.0-41-generic x86_64",
+  "cpu": {
+    "model": "Intel Core i7-10700 CPU @ 2.90GHz",
+    "physicalCores": 8,
+    "logicalCpus": 16
+  },
+  "memoryBytes": 64924504064,
+  "sourceAndOutputStorage": {
+    "device": "/dev/nvme0n1",
+    "model": "Force MP510",
+    "filesystem": "xfs"
+  },
+  "repositoryStorage": {
+    "device": "/dev/nvme1n1",
+    "model": "Samsung SSD 970 EVO Plus 2TB",
+    "filesystem": "xfs"
+  },
+  "git": {
+    "baseCommit": "56f8bde8b5cdbabb676974e9088f2890b940395f",
+    "branch": "main",
+    "workingTreeDirty": true
+  },
+  "tools": {
+    "node": "24.16.0",
+    "pnpm": "11.24.0",
+    "rustc": "1.97.1",
+    "cargo": "1.97.1",
+    "python": "3.13.7",
+    "zstdCli": "1.5.7"
+  }
+}

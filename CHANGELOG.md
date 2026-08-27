@@ -4,16 +4,34 @@
 
 ### Changed
 
-- Added default `named-loci-v1---` and `summary-pyr-v1--` archive extensions.
-  The encoder always emits both descriptors, populates summaries from exact
-  core-tile counters, and accepts `--annotations <GFF3>` plus an explicit
-  reference-sample binding for names and aliases. The TypeScript reader exposes
-  lazy `searchLoci()` and `summary()` range APIs with a separate bounded cache.
+- Added `named-loci-v1---`, `summary-pyr-v1--`, and `archive-meta-v1-`
+  extensions. The encoder always emits summaries and deterministic provenance,
+  and emits named loci only with explicit GFF3, sample, release, and assembly
+  binding. The TypeScript reader exposes lazy `searchLoci()`, `summary()`, and
+  `info()` APIs with separate encoded and decoded feature caches.
 - Registered both binary schemas in the normative v1 specification. They use
   independently compressed, BLAKE3-128-protected pages and remain skippable so
   regional graph decoding never depends on viewer metadata.
-- Advanced encoder reports to schema 5 with feature page/count/byte metrics and
+- Advanced encoder reports with feature page/count/byte metrics and
   annotation input settings.
+
+- Added repeatable exact `--annotation-feature-type` selection (default
+  `gene`), GFF3 sequence-region validation, partial-archive containment, and
+  early equal-key/page limit failures. Prefix search now uses bounded
+  concurrency and stops after it knows the limit is truncated.
+- Added a versioned persistent source cache with atomic construction,
+  interprocess locking, source SHA-256 authentication, serialized sparse
+  reference-index reuse, inspection, and explicit pruning. Fused ephemeral
+  cache construction computes source SHA-256 in the same sequential pass.
+- Advanced encoder reports to schema 7 for persistent-cache reuse, cache-open,
+  manifest-validation, and path-index-deserialization evidence.
+- Made graph results independent of payload completion order and documented
+  `queryTiles()` progressive event order as intentionally unspecified. Summary
+  pyramids now aggregate adjacent groups of four in linear emitted-bin work and
+  select valid levels independently for fragmented manifests.
+- Linux native launching no longer treats missing glibc metadata as proof of
+  musl; an explicit override or the only installed exact-version package is
+  required when runtime reporting is ambiguous.
 
 - Made the project-owned disk-backed GBZ source the default production encoder
   path. Reference indexing, local context extraction, and exact packed-record
@@ -28,9 +46,12 @@
 - Replaced per-batch construction and compression thread creation with one
   bounded persistent worker pool shared by a deterministic rolling construction
   window and ordered compression jobs.
-- Advanced encoder reports to schema 6. Source SHA-256 and disk-cache
-  construction now overlap, while their worker-wall times and combined
-  critical-path wall remain separately labeled.
+- Advanced encoder reports to schema 7. Source SHA-256 and ephemeral disk-cache
+  construction use one sequential source pass; persistent-cache authentication,
+  named-locus stages, and extension byte totals are reported separately.
+- Added an atomic persistent source cache with source/version/checksum binding,
+  per-block integrity, a serialized sparse reference index, locking, inspection,
+  and explicit pruning. Warm encodes skip raw-cache and reference-index rebuilds.
 - Restricted the default GFF3 named-locus importer to `gene` features so gene
   labels and stable IDs are not multiplied across transcript, exon, CDS, codon,
   and UTR child records.
@@ -53,11 +74,17 @@
   genes as 157,466 name/stable-ID records in 612 range-addressable pages. It
   added 3,719,573 bytes (+0.0421%) and 23.12 seconds of writer finalization;
   whole wall was 420.85 seconds and peak RSS was 695,816 KiB.
+- The release-hardening warm-cache rerun produced an 8,832,750,626-byte
+  populated archive at 621,808 KiB peak RSS in 384.08 seconds. Cold and warm
+  source modes produced byte-identical output; warm reuse reduced the directly
+  comparable prebuild phase from 118.944 to 21.685 seconds. The 677-byte change
+  from the prior populated archive is deterministic archive provenance.
 
 ### Compatibility
 
-- Newly encoded `.pngr` bytes change because the two standard extension
-  descriptors are now present by default. The archive magic and v1 regional
+- Newly encoded `.pngr` bytes change because summary and provenance extension
+  descriptors are present by default, while an unpopulated named-locus
+  extension is omitted. The archive magic and v1 regional
   payload remain unchanged; pre-release research archives without these
   optional entries still decode, and should be regenerated for the new viewer
   capabilities.

@@ -1,15 +1,17 @@
 use pangenome_range_format::{
-    ChunkCodec, ExtensionEntry, ExtensionPage, LocusPageDescriptor, LocusRecord,
+    ARCHIVE_METADATA_TYPE_ID, ArchiveMetadata, ChunkCodec, ExtensionEntry, ExtensionPage,
+    LocusPageDescriptor, LocusRecord, MAX_FEATURE_PAGE_BYTES, MAX_LOCUS_RECORDS_PER_PAGE,
     NAMED_LOCI_TYPE_ID, NamedLociDescriptor, ReferenceManifest, SUMMARY_PYRAMID_TYPE_ID,
-    SummaryBin, SummaryPyramidDescriptor, SummarySeriesDescriptor, compress, encode_locus_page,
-    encode_named_loci_descriptor, encode_summary_descriptor, encode_summary_page,
-    normalize_locus_key,
+    SummaryBin, SummaryPyramidDescriptor, SummarySeriesDescriptor, compress,
+    encode_archive_metadata, encode_locus_page, encode_named_loci_descriptor,
+    encode_summary_descriptor, encode_summary_page, normalize_locus_key,
 };
 use sha2::{Digest, Sha256};
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs::File;
 use std::io::{self, BufRead, BufReader, Read, Seek, SeekFrom, Write};
 use std::path::{Path, PathBuf};
+use std::time::Instant;
 
 const SUMMARY_WINDOW_MULTIPLIER: u64 = 64;
 const SUMMARY_LEVEL_MULTIPLIER: u64 = 4;
@@ -20,12 +22,25 @@ const NAMED_LOCUS_GFF3_FEATURE: &str = "gene";
 pub(crate) struct FeatureBuildOptions {
     pub annotation_path: Option<PathBuf>,
     pub annotation_sample: Option<String>,
+    pub annotation_feature_types: Vec<String>,
+    pub archive_metadata: Option<ArchiveMetadata>,
 }
 
 #[derive(Clone, Debug, Default)]
 pub(crate) struct FeatureBuildMetrics {
+    pub annotation_input_bytes: u64,
+    pub annotation_feature_rows: u64,
+    pub annotation_expanded_records: u64,
     pub named_locus_records: u64,
     pub named_locus_pages: u64,
+    pub named_locus_page_encoded_bytes: u64,
+    pub named_locus_page_decoded_bytes: u64,
+    pub named_locus_descriptor_encoded_bytes: u64,
+    pub annotation_checksum_wall_ms: f64,
+    pub annotation_parse_expand_wall_ms: f64,
+    pub annotation_sort_dedup_wall_ms: f64,
+    pub named_locus_page_build_wall_ms: f64,
+    pub named_locus_descriptor_wall_ms: f64,
     pub summary_series: u64,
     pub summary_bins: u64,
     pub extension_encoded_bytes: u64,
@@ -90,7 +105,8 @@ pub(crate) fn write_default_feature_extensions(
     data_offset: u64,
 ) -> io::Result<(Vec<ExtensionEntry>, FeatureBuildMetrics)> {
     let mut metrics = FeatureBuildMetrics::default();
-    let named_loci = write_named_loci(archive, manifests, options, data_offset, &mut metrics)?;
+    let (named_loci, annotation) =
+        write_named_loci(archive, manifests, options, data_offset, &mut metrics)?;
     let summaries = write_summaries(
         archive,
         manifests,
@@ -99,44 +115,88 @@ pub(crate) fn write_default_feature_extensions(
         data_offset,
         &mut metrics,
     )?;
-    let mut entries = vec![named_loci, summaries];
+    let mut entries = vec![summaries];
+    if let Some(named_loci) = named_loci {
+        entries.push(named_loci);
+    }
+    if let Some(mut metadata) = options.archive_metadata.clone() {
+        if let Some((filename, checksum)) = annotation {
+            metadata.annotation_filename = Some(filename);
+            metadata.annotation_sha256 = Some(checksum);
+        }
+        let descriptor = encode_archive_metadata(&metadata)?;
+        metrics.extension_decoded_bytes = metrics
+            .extension_decoded_bytes
+            .checked_add(usize_to_u64(descriptor.len())?)
+            .ok_or_else(|| invalid_data("extension decoded byte count overflow"))?;
+        entries.push(append_descriptor(
+            archive,
+            ARCHIVE_METADATA_TYPE_ID,
+            &descriptor,
+            &mut metrics,
+            data_offset,
+        )?);
+    }
     entries.sort_by_key(|entry| entry.type_id);
     Ok((entries, metrics))
 }
 
+type NamedLociWriteResult = (Option<ExtensionEntry>, Option<(String, [u8; 32])>);
+
+struct Gff3Records {
+    records: Vec<LocusRecord>,
+    accepted_feature_rows: u64,
+    expanded_records: u64,
+    parse_expand_wall_ms: f64,
+    sort_dedup_wall_ms: f64,
+}
+
+#[allow(
+    clippy::too_many_lines,
+    reason = "the measured named-locus pipeline is intentionally kept contiguous and auditable"
+)]
 fn write_named_loci(
     archive: &mut File,
     manifests: &[ReferenceManifest],
     options: &FeatureBuildOptions,
     data_offset: u64,
     metrics: &mut FeatureBuildMetrics,
-) -> io::Result<ExtensionEntry> {
-    let (records, annotation_sha256, annotation_name) = if let Some(path) = &options.annotation_path
-    {
-        let sample = resolve_annotation_sample(manifests, options.annotation_sample.as_deref())?;
-        let checksum = file_sha256(path)?;
-        let records = read_gff3(path, &sample, manifests)?;
-        if records.is_empty() {
-            return Err(invalid_data(format!(
-                "annotation file {} has no named features matching sample {sample} and the encoded contigs",
-                path.display()
-            )));
-        }
-        let name = path
-            .file_name()
-            .and_then(|value| value.to_str())
-            .unwrap_or("annotations.gff3")
-            .to_owned();
-        (records, checksum, name)
-    } else {
+) -> io::Result<NamedLociWriteResult> {
+    let Some(path) = &options.annotation_path else {
         if options.annotation_sample.is_some() {
             return Err(invalid_data(
                 "annotation sample requires an annotation file",
             ));
         }
-        (Vec::new(), [0; 32], String::new())
+        return Ok((None, None));
+    };
+    let (records, annotation_sha256, annotation_name) = {
+        let sample = resolve_annotation_sample(manifests, options.annotation_sample.as_deref())?;
+        metrics.annotation_input_bytes = std::fs::metadata(path)?.len();
+        let checksum_started = Instant::now();
+        let checksum = file_sha256(path)?;
+        metrics.annotation_checksum_wall_ms = checksum_started.elapsed().as_secs_f64() * 1_000.0;
+        let feature_types = annotation_feature_types(&options.annotation_feature_types)?;
+        let parsed = read_gff3(path, &sample, manifests, &feature_types)?;
+        if parsed.records.is_empty() {
+            return Err(invalid_data(format!(
+                "annotation file {} has no named features matching sample {sample} and the encoded contigs",
+                path.display()
+            )));
+        }
+        metrics.annotation_feature_rows = parsed.accepted_feature_rows;
+        metrics.annotation_expanded_records = parsed.expanded_records;
+        metrics.annotation_parse_expand_wall_ms = parsed.parse_expand_wall_ms;
+        metrics.annotation_sort_dedup_wall_ms = parsed.sort_dedup_wall_ms;
+        let name = path
+            .file_name()
+            .and_then(|value| value.to_str())
+            .unwrap_or("annotations.gff3")
+            .to_owned();
+        (parsed.records, checksum, name)
     };
 
+    let page_build_started = Instant::now();
     let mut pages = Vec::new();
     let mut page_start = 0;
     while page_start < records.len() {
@@ -147,8 +207,24 @@ fn write_named_loci(
             page_end += 1;
         }
         let page_records = &records[page_start..page_end];
+        if page_records.len() > MAX_LOCUS_RECORDS_PER_PAGE {
+            return Err(invalid_data(format!(
+                "normalized locus key {:?} expands to {} records, exceeding the per-key/page limit of {}",
+                page_records[0].normalized_key,
+                page_records.len(),
+                MAX_LOCUS_RECORDS_PER_PAGE
+            )));
+        }
         let raw = encode_locus_page(page_records)?;
         let storage = append_page(archive, ChunkCodec::Zstd3, &raw, data_offset)?;
+        metrics.named_locus_page_encoded_bytes = metrics
+            .named_locus_page_encoded_bytes
+            .checked_add(storage.encoded_len)
+            .ok_or_else(|| invalid_data("named-locus encoded page bytes overflow"))?;
+        metrics.named_locus_page_decoded_bytes = metrics
+            .named_locus_page_decoded_bytes
+            .checked_add(usize_to_u64(raw.len())?)
+            .ok_or_else(|| invalid_data("named-locus decoded page bytes overflow"))?;
         metrics.extension_encoded_bytes = metrics
             .extension_encoded_bytes
             .checked_add(storage.encoded_len)
@@ -174,10 +250,12 @@ fn write_named_loci(
             .ok_or_else(|| invalid_data("extension decoded byte count overflow"))?;
         page_start = page_end;
     }
+    metrics.named_locus_page_build_wall_ms = page_build_started.elapsed().as_secs_f64() * 1_000.0;
     metrics.named_locus_records = usize_to_u64(records.len())?;
+    let descriptor_started = Instant::now();
     let descriptor = encode_named_loci_descriptor(&NamedLociDescriptor {
         annotation_sha256,
-        annotation_name,
+        annotation_name: annotation_name.clone(),
         record_count: metrics.named_locus_records,
         pages,
     })?;
@@ -185,13 +263,16 @@ fn write_named_loci(
         .extension_decoded_bytes
         .checked_add(usize_to_u64(descriptor.len())?)
         .ok_or_else(|| invalid_data("extension decoded byte count overflow"))?;
-    append_descriptor(
+    let entry = append_descriptor(
         archive,
         NAMED_LOCI_TYPE_ID,
         &descriptor,
         metrics,
         data_offset,
-    )
+    )?;
+    metrics.named_locus_descriptor_encoded_bytes = entry.encoded_len;
+    metrics.named_locus_descriptor_wall_ms = descriptor_started.elapsed().as_secs_f64() * 1_000.0;
+    Ok((Some(entry), Some((annotation_name, annotation_sha256))))
 }
 
 fn write_summaries(
@@ -206,9 +287,9 @@ fn write_summaries(
     for (manifest_index, manifest) in manifests.iter().enumerate() {
         let mut bin_span = base_bin_span;
         let mut level = 0_u32;
+        let mut first_bin_start = (manifest.start / bin_span) * bin_span;
+        let mut bins = summary_base_level_bins(manifest_index, manifest, bin_span, base_bins)?;
         loop {
-            let first_bin_start = (manifest.start / bin_span) * bin_span;
-            let bins = summary_level_bins(manifest_index, manifest, bin_span, base_bins)?;
             let raw = encode_summary_page(
                 usize_to_u32(manifest_index)?,
                 level,
@@ -241,9 +322,14 @@ fn write_summaries(
             if bins.len() == 1 {
                 break;
             }
-            bin_span = bin_span
+            let next_span = bin_span
                 .checked_mul(SUMMARY_LEVEL_MULTIPLIER)
                 .ok_or_else(|| invalid_data("summary level span overflow"))?;
+            let (next_first, next_bins) =
+                aggregate_summary_level(manifest, first_bin_start, bin_span, next_span, &bins)?;
+            bins = next_bins;
+            bin_span = next_span;
+            first_bin_start = next_first;
             level = level
                 .checked_add(1)
                 .ok_or_else(|| invalid_data("summary level overflow"))?;
@@ -266,7 +352,44 @@ fn write_summaries(
     )
 }
 
-fn summary_level_bins(
+fn aggregate_summary_level(
+    manifest: &ReferenceManifest,
+    child_first: u64,
+    child_span: u64,
+    parent_span: u64,
+    children: &[SummaryBin],
+) -> io::Result<(u64, Vec<SummaryBin>)> {
+    let parent_first = (manifest.start / parent_span) * parent_span;
+    let last = ((manifest.end - 1) / parent_span) * parent_span;
+    let count = ((last - parent_first) / parent_span) + 1;
+    let mut parents = vec![
+        SummaryBin::default();
+        usize::try_from(count)
+            .map_err(|_| invalid_data("summary bin count does not fit usize"))?
+    ];
+    for (index, value) in children.iter().enumerate() {
+        let child_start = child_first
+            .checked_add(
+                usize_to_u64(index)?
+                    .checked_mul(child_span)
+                    .ok_or_else(|| invalid_data("summary child offset overflow"))?,
+            )
+            .ok_or_else(|| invalid_data("summary child start overflow"))?;
+        let parent_index = (child_start - parent_first) / parent_span;
+        add_bin(
+            parents
+                .get_mut(
+                    usize::try_from(parent_index)
+                        .map_err(|_| invalid_data("summary parent index does not fit usize"))?,
+                )
+                .ok_or_else(|| invalid_data("summary parent index is out of range"))?,
+            value,
+        )?;
+    }
+    Ok((parent_first, parents))
+}
+
+fn summary_base_level_bins(
     manifest_index: usize,
     manifest: &ReferenceManifest,
     bin_span: u64,
@@ -359,6 +482,13 @@ fn append_page(
     data_offset: u64,
 ) -> io::Result<ExtensionPage> {
     let encoded = compress(codec, raw)?;
+    if usize_to_u64(raw.len())? > MAX_FEATURE_PAGE_BYTES
+        || usize_to_u64(encoded.len())? > MAX_FEATURE_PAGE_BYTES
+    {
+        return Err(invalid_data(format!(
+            "extension page exceeds the {MAX_FEATURE_PAGE_BYTES}-byte encoded/decoded limit"
+        )));
+    }
     let offset = archive.seek(SeekFrom::End(0))?;
     if offset < data_offset {
         return Err(invalid_data("extension page starts before archive data"));
@@ -400,11 +530,17 @@ fn resolve_annotation_sample(
     Ok((*samples.first().expect("one sample")).to_owned())
 }
 
+#[allow(
+    clippy::too_many_lines,
+    reason = "GFF3 directive, coverage, and ordering validation form one fail-closed parser"
+)]
 fn read_gff3(
     path: &Path,
     sample: &str,
     manifests: &[ReferenceManifest],
-) -> io::Result<Vec<LocusRecord>> {
+    feature_types: &BTreeSet<String>,
+) -> io::Result<Gff3Records> {
+    let parse_started = Instant::now();
     let file = File::open(path)?;
     let intervals = manifests
         .iter()
@@ -419,18 +555,76 @@ fn read_gff3(
             },
         );
     let mut records = Vec::new();
+    let mut accepted_feature_rows = 0_u64;
+    let mut sequence_regions = BTreeMap::<String, (u64, u64)>::new();
     for (line_index, line) in BufReader::new(file).lines().enumerate() {
         let line = line?;
+        if let Some(directive) = line.strip_prefix("##sequence-region") {
+            let fields = directive.split_ascii_whitespace().collect::<Vec<_>>();
+            if fields.len() != 3 {
+                return Err(invalid_data(format!(
+                    "invalid GFF3 ##sequence-region directive at line {}",
+                    line_index + 1
+                )));
+            }
+            let start = fields[1].parse::<u64>().map_err(|_| {
+                invalid_data(format!(
+                    "invalid GFF3 sequence-region start at line {}",
+                    line_index + 1
+                ))
+            })?;
+            let end = fields[2].parse::<u64>().map_err(|_| {
+                invalid_data(format!(
+                    "invalid GFF3 sequence-region end at line {}",
+                    line_index + 1
+                ))
+            })?;
+            if start == 0 || end < start {
+                return Err(invalid_data(format!(
+                    "invalid GFF3 sequence-region interval at line {}",
+                    line_index + 1
+                )));
+            }
+            if let Some(previous) = sequence_regions.insert(fields[0].to_owned(), (start, end))
+                && previous != (start, end)
+            {
+                return Err(invalid_data(format!(
+                    "conflicting GFF3 sequence-region for {} at line {}",
+                    fields[0],
+                    line_index + 1
+                )));
+            }
+            continue;
+        }
         if line.is_empty() || line.starts_with('#') {
             continue;
         }
-        records.extend(gff3_records_for_line(
-            &line,
-            line_index + 1,
-            sample,
-            &intervals,
-        )?);
+        let expanded =
+            gff3_records_for_line(&line, line_index + 1, sample, &intervals, feature_types)?;
+        if !expanded.is_empty() {
+            accepted_feature_rows = accepted_feature_rows
+                .checked_add(1)
+                .ok_or_else(|| invalid_data("accepted GFF3 feature row count overflow"))?;
+        }
+        records.extend(expanded);
     }
+    for record in &records {
+        if let Some((region_start, region_end)) = sequence_regions.get(&record.contig)
+            && (record.start + 1 < *region_start || record.end > *region_end)
+        {
+            return Err(invalid_data(format!(
+                "GFF3 feature {}:{}-{} lies outside ##sequence-region {}-{}",
+                record.contig,
+                record.start + 1,
+                record.end,
+                region_start,
+                region_end
+            )));
+        }
+    }
+    let parse_expand_wall_ms = parse_started.elapsed().as_secs_f64() * 1_000.0;
+    let expanded_records = usize_to_u64(records.len())?;
+    let sort_started = Instant::now();
     records.sort_by(|left, right| {
         (
             &left.normalized_key,
@@ -450,7 +644,13 @@ fn read_gff3(
             ))
     });
     records.dedup();
-    Ok(records)
+    Ok(Gff3Records {
+        records,
+        accepted_feature_rows,
+        expanded_records,
+        parse_expand_wall_ms,
+        sort_dedup_wall_ms: sort_started.elapsed().as_secs_f64() * 1_000.0,
+    })
 }
 
 fn gff3_records_for_line(
@@ -458,6 +658,7 @@ fn gff3_records_for_line(
     line_number: usize,
     sample: &str,
     intervals: &BTreeMap<&str, Vec<(u64, u64)>>,
+    feature_types: &BTreeSet<String>,
 ) -> io::Result<Vec<LocusRecord>> {
     let columns = line.split('\t').collect::<Vec<_>>();
     if columns.len() != 9 {
@@ -465,7 +666,7 @@ fn gff3_records_for_line(
             "invalid GFF3 column count at line {line_number}"
         )));
     }
-    if columns[2] != NAMED_LOCUS_GFF3_FEATURE {
+    if !feature_types.contains(columns[2]) {
         return Ok(Vec::new());
     }
     let Some(reference_intervals) = intervals.get(columns[0]) else {
@@ -485,7 +686,7 @@ fn gff3_records_for_line(
     let start = one_based_start - 1;
     if !reference_intervals
         .iter()
-        .any(|(left, right)| start < *right && end > *left)
+        .any(|(left, right)| start >= *left && end <= *right)
     {
         return Ok(Vec::new());
     }
@@ -544,6 +745,25 @@ fn gff3_records_for_line(
             })
         })
         .collect())
+}
+
+fn annotation_feature_types(requested: &[String]) -> io::Result<BTreeSet<String>> {
+    let feature_types = if requested.is_empty() {
+        BTreeSet::from([NAMED_LOCUS_GFF3_FEATURE.to_owned()])
+    } else {
+        requested.iter().cloned().collect()
+    };
+    if feature_types.iter().any(|value| {
+        value.is_empty()
+            || value
+                .bytes()
+                .any(|byte| byte.is_ascii_whitespace() || byte == b',' || byte == b';')
+    }) {
+        return Err(invalid_data(
+            "annotation feature types must be nonempty exact GFF3 type tokens",
+        ));
+    }
+    Ok(feature_types)
 }
 
 fn parse_gff3_attributes(
@@ -670,11 +890,13 @@ mod tests {
         let intervals = BTreeMap::from([("chr1", vec![(0, 1_000)])]);
         let attributes =
             "ID=ENSG00000000001.1;gene_id=ENSG00000000001.1;gene_name=BRCA1;Alias=RNF53,BRCC1";
+        let feature_types = annotation_feature_types(&[]).unwrap();
         let gene = gff3_records_for_line(
             &format!("chr1\tGENCODE\tgene\t101\t200\t.\t+\t.\t{attributes}"),
             1,
             "GRCh38",
             &intervals,
+            &feature_types,
         )
         .unwrap();
         assert_eq!(gene.len(), 4);
@@ -700,6 +922,7 @@ mod tests {
                 2,
                 "GRCh38",
                 &intervals,
+                &feature_types,
             )
             .unwrap();
             assert!(child.is_empty(), "unexpected {feature} locus records");
@@ -738,8 +961,104 @@ mod tests {
                 ..SummaryBin::default()
             },
         );
-        let parent = summary_level_bins(0, &manifest, 4_000, &base).unwrap();
+        let parent = summary_base_level_bins(0, &manifest, 4_000, &base).unwrap();
         assert_eq!(parent[0].covered_bases, 30);
         assert_eq!(parent[0].tile_count, 3);
+    }
+
+    #[test]
+    fn linear_summary_levels_preserve_every_tile_record_total() {
+        let manifest = ReferenceManifest {
+            sample: "ref".into(),
+            contig: "fragment".into(),
+            start: 1_100,
+            end: 40_000,
+            grid_start: 0,
+            window_size: 100,
+            bucket_span: 3_200,
+            first_page_offset: 0,
+            page_count: 1,
+            entry_count: 8,
+            codec: ChunkCodec::Zstd3,
+        };
+        let children = (0_u64..10)
+            .map(|index| SummaryBin {
+                covered_bases: index + 1,
+                tile_count: 1,
+                encoded_bytes: index + 2,
+                decoded_bytes: index + 3,
+                node_records: index + 4,
+                edge_records: index + 5,
+                gbwt_records: index + 6,
+                occurrences: index + 7,
+            })
+            .collect::<Vec<_>>();
+        let expected = children
+            .iter()
+            .fold(SummaryBin::default(), |mut total, bin| {
+                add_bin(&mut total, bin).unwrap();
+                total
+            });
+        let (parent_first, parents) =
+            aggregate_summary_level(&manifest, 0, 4_000, 16_000, &children).unwrap();
+        let actual = parents
+            .iter()
+            .fold(SummaryBin::default(), |mut total, bin| {
+                add_bin(&mut total, bin).unwrap();
+                total
+            });
+        assert_eq!(parent_first, 0);
+        assert_eq!(actual, expected);
+    }
+
+    #[test]
+    fn gff3_feature_types_and_partial_archive_policy_are_explicit() {
+        let intervals = BTreeMap::from([("chr1", vec![(100, 200)])]);
+        let types = annotation_feature_types(&["pseudogene".into(), "gene".into()]).unwrap();
+        let attributes = "ID=gene%3A1;Name=BRCA1";
+        let contained = gff3_records_for_line(
+            &format!("chr1\ttest\tpseudogene\t101\t200\t.\t+\t.\t{attributes}"),
+            1,
+            "GRCh38",
+            &intervals,
+            &types,
+        )
+        .unwrap();
+        assert!(!contained.is_empty());
+        let overlapping = gff3_records_for_line(
+            &format!("chr1\ttest\tgene\t100\t200\t.\t+\t.\t{attributes}"),
+            2,
+            "GRCh38",
+            &intervals,
+            &types,
+        )
+        .unwrap();
+        assert!(overlapping.is_empty());
+    }
+
+    #[test]
+    fn gff3_sequence_region_is_validated_even_when_directive_follows_records() {
+        let path = simple_sds::serialize::temp_file_name("gff3-sequence-region");
+        std::fs::write(
+            &path,
+            "chr1\ttest\tgene\t101\t200\t.\t+\t.\tID=gene1;Name=ONE\n##sequence-region chr1 1 150\n",
+        )
+        .unwrap();
+        let manifests = vec![ReferenceManifest {
+            sample: "GRCh38".into(),
+            contig: "chr1".into(),
+            start: 0,
+            end: 1_000,
+            grid_start: 0,
+            window_size: 100,
+            bucket_span: 3_200,
+            first_page_offset: 0,
+            page_count: 1,
+            entry_count: 1,
+            codec: ChunkCodec::Zstd3,
+        }];
+        let types = annotation_feature_types(&[]).unwrap();
+        assert!(read_gff3(&path, "GRCh38", &manifests, &types).is_err());
+        std::fs::remove_file(path).unwrap();
     }
 }

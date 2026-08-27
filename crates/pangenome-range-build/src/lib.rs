@@ -14,8 +14,15 @@ mod fixed;
 mod local_subgraph;
 mod scale;
 mod source;
+#[cfg(test)]
+mod test_support;
 
-pub use disk_source::{DiskGbzSource, DiskSourceStats};
+pub use disk_source::{
+    DiskGbzSource, DiskSourceStats, PersistentSourceCache, SourceCacheDiskPreflight,
+    SourceCacheManifest, SourceCacheOpenMetrics, build_persistent_source_cache,
+    inspect_persistent_source_cache, open_persistent_source_cache, prune_persistent_source_cache,
+    source_cache_disk_preflight,
+};
 pub use experiment::{ExperimentMode, ExperimentOptions, run_fixed_window_experiment};
 pub use fixed::{
     ArchiveBuildMetrics, ArchiveBuildOptions, ArchiveValidationSummary, BuildProgressMode,

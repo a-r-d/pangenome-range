@@ -63,8 +63,8 @@ coordinate-based rather than inferred from compressed bytes.
 
 Progress covers every potentially long CLI phase. Input and output checksum
 workers report bytes, percentage, transfer rate, elapsed time, and ETA. For the
-default disk source, input SHA-256 overlaps source-cache construction; the
-report retains each worker wall plus their combined critical-path wall. GBZ
+default disk source, input SHA-256 is computed by the same sequential reads that
+construct the source cache, eliminating a redundant whole-source pass. GBZ
 load/cache construction and compact path-index construction emit elapsed-time
 heartbeats because those parsers do not expose reliable partial-work counts.
 The final structural validation reports directory entries/pages and unique physical payloads,
@@ -92,13 +92,28 @@ on one cache lock; the total explicit read-cache limit remains 64 MiB. The
 source cache is removed on exit and is independent of the atomic `.pngr`
 temporary sibling.
 
+An explicit persistent source cache stores the same four indexed data files
+plus a deterministic serialized `SourcePathIndex` and an atomic versioned JSON
+manifest. Its source byte length/SHA-256, GBZ serialization versions, component
+lengths, reference metadata digest, index interval, counts, bytes, and checksum
+are validated before reuse. Each raw component also has BLAKE3-128 per 256 KiB
+block, verified lazily before a block enters the bounded memory cache, so warm
+open does not require rereading 11.9 GB merely to detect later touched-block
+corruption. Builds use a temporary sibling and interprocess
+lock; warm encodes authenticate the input GBZ, open the cache read-only, and
+deserialize the sparse real-reference index instead of repeating cache creation
+and reference traversal. Persistent caches require explicit pruning; ephemeral
+caches retain cleanup-on-drop behavior.
+
 GBZ v1 stores 425,853,421 record offsets and 212,926,710 sequence offsets for
 the retained HPRC source. The cache therefore intentionally trades 11.92 GB of
-temporary disk for a measured 608,060 KiB whole-encode process peak instead of
-fully loading the 5.49 GB GBZ at an 8,775,928 KiB peak. The compact simple-sds indices used
-while constructing the cache still scale with record/sequence count; “bounded”
-means the source body and active reads are not retained in RAM, not constant
-memory independent of graph metadata.
+ephemeral disk, or 12.06 GB for the reusable cache including integrity sidecars
+and the sparse reference index, for a measured 621,808 KiB populated
+whole-encode process peak instead of fully loading the 5.49 GB GBZ at an
+8,775,928 KiB peak. The compact simple-sds indices used while constructing the
+cache still scale with record/sequence count; “bounded” means the source body
+and active reads are not retained in RAM, not constant memory independent of
+graph metadata.
 
 `SourcePathIndex` is project-owned and samples only real reference paths roughly
 every 1,000 bp using length-only sequence lookup. `LocalSubgraph` performs interval walking and bidirectional
@@ -178,16 +193,16 @@ and raw request evidence. Browser/library and HTTP cache effects remain
 reported separately.
 
 The archive reader retains the bounded bootstrap/root, uses separate
-byte-bounded LRU caches for directory pages, compressed graph payloads, and
-extension descriptors/pages, fetches
+byte-bounded LRU caches for directory pages, compressed graph payloads,
+encoded extension descriptors/pages, and decoded feature pages, fetches
 missing pages as contiguous spans, and coalesces selected payloads into one
 parallel dependency round. Optional query traces report exact ranges and layer
 bytes, dependency rounds, cache hits, decode/decompression/merge timings,
 selected counts, and the canonical BLAKE3 result. When tracing is disabled,
 the merge remains required but trace accounting and hashing are skipped.
 
-The default `named-loci-v1---` extension is a sorted fence descriptor plus
-independently compressed leaves. It is empty unless an exact GFF3 input and
+The optional `named-loci-v1---` extension is a sorted fence descriptor plus
+independently compressed leaves. It is emitted only with an exact GFF3 input and
 real reference sample binding are supplied. The default `summary-pyr-v1--`
 extension is a fixed-grid, factor-four pyramid built from accepted core-tile
 counters. Both are lazy range APIs and remain optional extension entries so an

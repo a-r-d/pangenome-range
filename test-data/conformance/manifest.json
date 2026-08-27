@@ -82,6 +82,33 @@
       "sha256": "81d263276409f4c20cc45f28378e23c850888753c11b1dddcf097c14e2dc48c0"
     },
     {
+      "bytes": 126,
+      "expected": "reject",
+      "file": "unsupported-zstd-content-checksum.zstd3",
+      "id": "unsupported-zstd-content-checksum",
+      "inputKind": "zstd-frame",
+      "rejectionStage": "zstd-policy",
+      "sha256": "694ee31fb73fcdd7d73c2d04be7947001153affd508f277fc56f86c86edd4b49"
+    },
+    {
+      "bytes": 126,
+      "expected": "reject",
+      "file": "corrupt-zstd-content-checksum.zstd3",
+      "id": "corrupt-zstd-content-checksum",
+      "inputKind": "zstd-frame",
+      "rejectionStage": "zstd-policy",
+      "sha256": "2e768d8f31c282175f8fb9928a6be863ee380a587d92f08cfdfec59a0c5600b5"
+    },
+    {
+      "bytes": 267,
+      "expected": "reject",
+      "file": "corrupt-archive-metadata-version.bin",
+      "id": "corrupt-archive-metadata-version",
+      "inputKind": "archive-metadata",
+      "rejectionStage": "archive-metadata-decode",
+      "sha256": "929f1027d039ac673d2c01583cc608f898cf36f184f8c9b563ea3f3d029df10b"
+    },
+    {
       "bytes": 315,
       "expected": "reject",
       "file": "corrupt-regional-truncated.bin",
@@ -89,6 +116,51 @@
       "inputKind": "regional-payload",
       "rejectionStage": "regional-decode",
       "sha256": "e7ec4c6a5d7c4572d9f67aa3272dc0883b4665fd6cb4943f1b3aff4bec4f4c7d"
+    },
+    {
+      "bytes": 332,
+      "expected": "reject",
+      "file": "corrupt-regional-descending-edges.bin",
+      "id": "corrupt-regional-descending-edges",
+      "inputKind": "regional-payload",
+      "rejectionStage": "edge-decode",
+      "sha256": "46d40331236545a39bfbec577339b39c84d1a6cb79fde493cd89b4806ce71bc2"
+    },
+    {
+      "bytes": 332,
+      "expected": "reject",
+      "file": "corrupt-regional-duplicate-edges.bin",
+      "id": "corrupt-regional-duplicate-edges",
+      "inputKind": "regional-payload",
+      "rejectionStage": "edge-decode",
+      "sha256": "0fb7b7f19f0119cf3218ebf4122cc5f645e5718b611f1cabf430a6d50483d206"
+    },
+    {
+      "bytes": 316,
+      "expected": "reject",
+      "file": "corrupt-regional-noncanonical-edge.bin",
+      "id": "corrupt-regional-noncanonical-edge",
+      "inputKind": "regional-payload",
+      "rejectionStage": "edge-decode",
+      "sha256": "58c6fdf57245acd9fa2f52a5ecdca75f410cdaa494fb1eaeb3f84f6bf0fcb204"
+    },
+    {
+      "bytes": 316,
+      "expected": "reject",
+      "file": "corrupt-regional-nonlocal-edge-source.bin",
+      "id": "corrupt-regional-nonlocal-edge-source",
+      "inputKind": "regional-payload",
+      "rejectionStage": "edge-decode",
+      "sha256": "859c10c65c8a5ca576f0c764870f2da01c2b61b7e661ec101df239b233e8b01b"
+    },
+    {
+      "bytes": 316,
+      "expected": "reject",
+      "file": "corrupt-regional-malformed-boundary-edge.bin",
+      "id": "corrupt-regional-malformed-boundary-edge",
+      "inputKind": "regional-payload",
+      "rejectionStage": "edge-decode",
+      "sha256": "38094bc40255ceb7d1e6671b13f7e8f4acdb3c6846afdb70749047ed19258adf"
     },
     {
       "bytes": 316,
@@ -305,17 +377,17 @@
         "tileLocalHaplotypeHash": "283a80ba58d2841b5dc39b91b6623698f84aeec100938793db7bb39f65f6aabb"
       },
       "files": {
+        "format-v1-optional-extension.archive-meta.bin": {
+          "bytes": 267,
+          "sha256": "aed2dc13bd6659185503cd8499f5714a0c7592df4249106d8e16cee9603ec8a1"
+        },
         "format-v1-optional-extension.directory.bin": {
           "bytes": 4096,
           "sha256": "e034d17377187954c968f91e22a61659df25221f67f4cd040ce6c494a7621f0e"
         },
-        "format-v1-optional-extension.extension-provenance.json": {
-          "bytes": 45,
-          "sha256": "8cca419e1ee76e6f50bd20889579523f40400203bfe9ce3856bd37d012f13761"
-        },
         "format-v1-optional-extension.extensions.bin": {
           "bytes": 96,
-          "sha256": "655f97d4c91b894549767fba5aecc3c06c04da089b37c7930759e3f5c1f93f97"
+          "sha256": "c330c0b6b33b1844ba09e28c15459f1c568e5742cb50c0bcbb20d8fb2ba28ce2"
         },
         "format-v1-optional-extension.header.bin": {
           "bytes": 64,
@@ -338,8 +410,8 @@
           "sha256": "665dbc676efc482b38a3a6958e6c88c885484a20dd61a3f94971f3e0c0723d60"
         },
         "format-v1-optional-extension.pngr": {
-          "bytes": 4529,
-          "sha256": "03d3f08bebe9cd8490def1fef4ad13aced7362dc94412c84dcd72c3c5ff2be74"
+          "bytes": 4751,
+          "sha256": "721f6a9fdcb185649599bf41286f3dad5c5470bad93dc518397fa35c2fe488f1"
         },
         "format-v1-optional-extension.root.bin": {
           "bytes": 106,
@@ -365,8 +437,8 @@
         },
         "extensionPayload": {
           "codec": "none",
-          "decodedLength": 45,
-          "encodedLength": 45,
+          "decodedLength": 267,
+          "encodedLength": 267,
           "offset": 4484,
           "required": false
         },

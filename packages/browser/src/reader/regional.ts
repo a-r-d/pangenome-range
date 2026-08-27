@@ -343,6 +343,7 @@ function parseRecordPayload(bytes: Uint8Array): ParsedRecordPayload {
     "edge",
   );
   const seenEdges = new Set<string>();
+  let previousEdge: readonly [bigint, bigint] | undefined;
   for (let index = 0; index < edgeTotal; index += 1) {
     const from = reader.u64();
     const to = reader.u64();
@@ -353,7 +354,15 @@ function parseRecordPayload(bytes: Uint8Array): ParsedRecordPayload {
     if (seenEdges.has(key)) {
       throw corrupt("record payload contains a duplicate edge");
     }
+    if (
+      previousEdge !== undefined &&
+      (from < previousEdge[0] ||
+        (from === previousEdge[0] && to <= previousEdge[1]))
+    ) {
+      throw corrupt("record payload edges are not strictly ordered");
+    }
     seenEdges.add(key);
+    previousEdge = [from, to];
     edges.push(from, to);
   }
   const records: PackedRecord[] = [];

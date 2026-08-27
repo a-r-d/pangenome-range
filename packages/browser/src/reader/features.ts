@@ -1,5 +1,6 @@
 export const NAMED_LOCI_TYPE_ID = "named-loci-v1---";
 export const SUMMARY_PYRAMID_TYPE_ID = "summary-pyr-v1--";
+export const ARCHIVE_METADATA_TYPE_ID = "archive-meta-v1-";
 
 const FEATURE_VERSION = 1;
 const MAX_DESCRIPTOR_BYTES = 16 * 1024 * 1024;
@@ -66,6 +67,71 @@ export interface SummaryPyramidDescriptor {
   series: SummarySeriesDescriptor[];
 }
 
+export function selectSummarySeries(
+  descriptor: SummaryPyramidDescriptor,
+  manifestIndexes: readonly number[],
+  queryStart: bigint,
+  queryEnd: bigint,
+  maxBins: number,
+): SummarySeriesDescriptor[] {
+  const seriesByManifest = manifestIndexes.map((manifestIndex) =>
+    descriptor.series.filter(
+      (series) => series.manifestIndex === manifestIndex,
+    ),
+  );
+  if (seriesByManifest.some((series) => series.length === 0)) {
+    fail("summary descriptor does not cover the selected references");
+  }
+  const selectedIndexes = seriesByManifest.map(() => 0);
+  const count = (series: SummarySeriesDescriptor): number => {
+    const seriesBytes = series.binCount * series.binSpan;
+    if (seriesBytes > 0xffff_ffff_ffff_ffffn)
+      fail("summary series end overflows u64");
+    const seriesEnd = checkedAdd(
+      series.firstBinStart,
+      seriesBytes,
+      "summary series end",
+    );
+    const start =
+      queryStart > series.firstBinStart ? queryStart : series.firstBinStart;
+    const end = queryEnd < seriesEnd ? queryEnd : seriesEnd;
+    if (start >= end) return 0;
+    const first = (start - series.firstBinStart) / series.binSpan;
+    const last = (end - 1n - series.firstBinStart) / series.binSpan;
+    return safeNumber(last - first + 1n, "selected summary bin count");
+  };
+  const total = () =>
+    seriesByManifest.reduce((sum, series, index) => {
+      const selected = series[selectedIndexes[index] as number];
+      if (selected === undefined) fail("summary series is missing");
+      return sum + count(selected);
+    }, 0);
+  while (total() > maxBins) {
+    let bestManifest = -1;
+    let bestReduction = 0;
+    for (let index = 0; index < seriesByManifest.length; index += 1) {
+      const series = seriesByManifest[index] as SummarySeriesDescriptor[];
+      const selectedIndex = selectedIndexes[index] as number;
+      const current = series[selectedIndex];
+      const next = series[selectedIndex + 1];
+      if (current === undefined || next === undefined) continue;
+      const reduction = count(current) - count(next);
+      if (reduction > bestReduction) {
+        bestReduction = reduction;
+        bestManifest = index;
+      }
+    }
+    if (bestManifest < 0) break;
+    selectedIndexes[bestManifest] =
+      (selectedIndexes[bestManifest] as number) + 1;
+  }
+  return seriesByManifest.map((series, index) => {
+    const selected = series[selectedIndexes[index] as number];
+    if (selected === undefined) fail("summary series is missing");
+    return selected;
+  });
+}
+
 export interface DecodedSummaryBin {
   coveredBases: bigint;
   tileCount: bigint;
@@ -75,6 +141,25 @@ export interface DecodedSummaryBin {
   edgeRecords: bigint;
   gbwtRecords: bigint;
   occurrences: bigint;
+}
+
+export interface DecodedArchiveMetadata {
+  sourceGbzBytes: bigint;
+  sourceGbzSha256: Uint8Array;
+  encoderPackageVersion: string;
+  formatImplementation: string;
+  regionalWindowSize: bigint;
+  constructionContext: bigint;
+  payloadCodec: FeatureCodec;
+  referenceSample?: string;
+  referenceAssembly?: string;
+  datasetTitle?: string;
+  datasetDescription?: string;
+  sourceUri?: string;
+  annotationFilename?: string;
+  annotationSha256?: Uint8Array;
+  annotationRelease?: string;
+  annotationAssembly?: string;
 }
 
 class Reader {
@@ -139,6 +224,83 @@ export function normalizeLocusKey(value: string): string {
   return value
     .replace(/^[\t\n\v\f\r ]+|[\t\n\v\f\r ]+$/g, "")
     .replace(/[A-Z]/g, (character) => character.toLowerCase());
+}
+
+export function decodeArchiveMetadata(
+  bytes: Uint8Array,
+): DecodedArchiveMetadata {
+  if (bytes.byteLength > 1024 * 1024)
+    fail("archive metadata exceeds its limit");
+  const reader = new Reader(bytes);
+  if (
+    textDecoder.decode(reader.take(8)) !== "PNGMET01" ||
+    reader.u32() !== 1 ||
+    reader.u32() !== 112
+  ) {
+    fail("invalid archive metadata header");
+  }
+  const sourceGbzBytes = reader.u64();
+  const sourceGbzSha256 = reader.take(32).slice();
+  const regionalWindowSize = reader.u64();
+  const constructionContext = reader.u64();
+  const payloadCodec = reader.u8();
+  if (![0, 1, 3, 6].includes(payloadCodec)) fail("invalid metadata codec");
+  if (reader.u8() !== 2) fail("invalid metadata haplotype semantics");
+  const annotationPresent = reader.u8();
+  if (annotationPresent > 1 || reader.take(5).some((value) => value !== 0)) {
+    fail("invalid archive metadata flags or reserved bytes");
+  }
+  const annotationBytes = reader.take(32).slice();
+  const encoderPackageVersion = reader.string();
+  const formatImplementation = reader.string();
+  const fields = Array.from({ length: 8 }, () => reader.string());
+  reader.finish();
+  const annotationAllZero = annotationBytes.every((value) => value === 0);
+  if (
+    sourceGbzBytes === 0n ||
+    sourceGbzSha256.every((value) => value === 0) ||
+    regionalWindowSize === 0n ||
+    constructionContext !== 100n ||
+    encoderPackageVersion.length === 0 ||
+    formatImplementation.length === 0 ||
+    (annotationPresent === 0) !== annotationAllZero ||
+    (annotationPresent === 1) !== (fields[5]?.length !== 0) ||
+    (annotationPresent === 0 &&
+      ((fields[6]?.length ?? 0) !== 0 || (fields[7]?.length ?? 0) !== 0))
+  ) {
+    fail("invalid archive metadata");
+  }
+  const optional = (value: string | undefined): string | undefined =>
+    value === undefined || value.length === 0 ? undefined : value;
+  const referenceSample = optional(fields[0]);
+  const referenceAssembly = optional(fields[1]);
+  const datasetTitle = optional(fields[2]);
+  const datasetDescription = optional(fields[3]);
+  const sourceUri = optional(fields[4]);
+  const annotationRelease = optional(fields[6]);
+  const annotationAssembly = optional(fields[7]);
+  return {
+    sourceGbzBytes,
+    sourceGbzSha256,
+    encoderPackageVersion,
+    formatImplementation,
+    regionalWindowSize,
+    constructionContext,
+    payloadCodec: payloadCodec as FeatureCodec,
+    ...(referenceSample === undefined ? {} : { referenceSample }),
+    ...(referenceAssembly === undefined ? {} : { referenceAssembly }),
+    ...(datasetTitle === undefined ? {} : { datasetTitle }),
+    ...(datasetDescription === undefined ? {} : { datasetDescription }),
+    ...(sourceUri === undefined ? {} : { sourceUri }),
+    ...(annotationPresent === 0
+      ? {}
+      : {
+          annotationFilename: fields[5] as string,
+          annotationSha256: annotationBytes,
+        }),
+    ...(annotationRelease === undefined ? {} : { annotationRelease }),
+    ...(annotationAssembly === undefined ? {} : { annotationAssembly }),
+  };
 }
 
 export function compareFeatureKeys(left: string, right: string): number {
@@ -402,6 +564,7 @@ function readStoredPage(
     ![0, 1, 3, 6].includes(codec) ||
     encodedLength === 0n ||
     decodedLength === 0n ||
+    encodedLength > BigInt(MAX_PAGE_BYTES) ||
     decodedLength > BigInt(MAX_PAGE_BYTES) ||
     offset < dataOffset ||
     end > sourceSize

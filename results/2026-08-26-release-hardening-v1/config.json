@@ -1,0 +1,39 @@
+{
+  "schemaVersion": 1,
+  "runId": "2026-08-26-release-hardening-v1",
+  "source": {
+    "name": "hprc-v2.1-mc-grch38.gbz",
+    "url": "https://s3-us-west-2.amazonaws.com/human-pangenomics/pangenomes/freeze/release2/minigraph-cactus/v2.1/hprc-v2.1-mc-grch38/hprc-v2.1-mc-grch38.gbz",
+    "bytes": 5492627216,
+    "sha256": "11d6047f79575ffb83757462484bad134ed20928bd2c8171ec52e35a54976e2b"
+  },
+  "annotation": {
+    "name": "gencode.v50.annotation.gff3",
+    "url": "https://ftp.ebi.ac.uk/pub/databases/gencode/Gencode_human/release_50/gencode.v50.annotation.gff3.gz",
+    "release": "GENCODE Human Release 50",
+    "assembly": "GRCh38.p14",
+    "bytes": 4763975927,
+    "sha256": "d97bc25b7d4d4aa9614c4cf6fa4748c083b1531cb60c52c0612c9ff7ec4813eb",
+    "sample": "GRCh38",
+    "featureTypes": ["gene"]
+  },
+  "encode": {
+    "windowSize": 16384,
+    "codec": "zstd-3",
+    "threads": 8,
+    "maxQueuedBytes": 268435456,
+    "sourceAccess": "disk",
+    "sourceCache": "persistent",
+    "referenceAssembly": "GRCh38.p14",
+    "datasetTitle": "HPRC Release 2 Minigraph-Cactus v2.1 GRCh38",
+    "haplotypeSemantics": "anonymous-distinct-weighted-tile-paths"
+  },
+  "verificationWorkload": "../2026-08-25-record-preserving-v4/verification-workload.json",
+  "cacheLayoutExperiment": {
+    "seed": 20260826,
+    "sampleBlocks": 2048,
+    "blockBytes": 262144,
+    "randomReads": 4096,
+    "readBytes": 4096
+  }
+}

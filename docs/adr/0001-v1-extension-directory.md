@@ -95,14 +95,14 @@ fixtures before an encoder may mark it required.
 
 ## Product placement decisions
 
-- Archive title, description, and source provenance belong in one optional
-  metadata extension once its schema is registered. Stable v1 remains blocked
-  until provenance is either emitted there or explicitly external and securely
-  bound.
+- Archive title, description, source identity, encoder identity, and optional
+  annotation provenance use the registered optional `archive-meta-v1-` binary
+  schema. The reference encoder emits it deterministically and both reference
+  readers expose it through archive-information APIs.
 - Named loci and aliases use the registered optional `named-loci-v1---`
-  descriptor and sorted leaves. The encoder emits an empty descriptor by
-  default and populates it only from an explicit, SHA-256-recorded GFF3 bound
-  to a real reference sample.
+  descriptor and sorted leaves. The encoder omits it by default and emits it
+  only from an explicit, SHA-256-recorded GFF3 bound to a real reference sample,
+  annotation release, and assembly.
 - Multiscale summaries use the registered optional `summary-pyr-v1--`
   descriptor and arithmetic series pages. The encoder emits it by default from
   exact core-tile counters. Neither extension is required to decode a regional
@@ -116,8 +116,7 @@ meaning. Extension-enabled objects are intentionally rejected by older
 pre-release readers. There is no historical compatibility decoder.
 
 The reference implementations now parse the pointer and directory, understand
-the two registered viewer indexes, skip unknown optional entries, and reject
-unknown required entries. The shared cross-language fixtures include both an
-unknown-optional provenance example and an annotated default-feature archive.
-The release candidate still needs a registered archive-level provenance
-type/schema before stable v1.
+the two viewer indexes and registered provenance schema, skip unknown optional
+entries, and reject unknown required entries. Shared cross-language fixtures
+include known provenance, unknown-optional behavior, annotation search, and
+corrupt metadata rejection.

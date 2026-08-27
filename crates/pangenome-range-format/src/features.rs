@@ -42,6 +42,7 @@ impl ExtensionPage {
             .ok_or_else(|| invalid_data("extension page range overflow"))?;
         if self.encoded_len == 0
             || self.decoded_len == 0
+            || self.encoded_len > MAX_FEATURE_PAGE_BYTES
             || self.decoded_len > MAX_FEATURE_PAGE_BYTES
             || self.offset < data_offset
             || end > object_len

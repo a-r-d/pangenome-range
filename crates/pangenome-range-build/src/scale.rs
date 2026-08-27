@@ -1,4 +1,6 @@
-use super::disk_source::{DiskGbzSource, DiskSourceStats};
+use super::disk_source::{
+    DiskGbzSource, DiskSourceStats, open_persistent_source_cache_with_digest,
+};
 use super::fixed::{
     ArchiveBuildMetrics, ArchiveBuildOptions, BuildProgressMode, ChunkCodec,
     DEFAULT_MAX_QUEUED_BYTES, DEFAULT_MAX_UNCOMPRESSED_CHUNK_BYTES, DEFAULT_MIN_WINDOW_SIZE,
@@ -12,10 +14,12 @@ use super::source::{
 };
 use gbz::GBZ;
 use gbz_base::PathIndex;
+use pangenome_range_format::{ArchiveMetadata, CONSTRUCTION_CONTEXT};
 use serde::Serialize;
 use serde_json::json;
 use sha2::{Digest, Sha256};
 use simple_sds::serialize;
+use std::fmt::Write as _;
 use std::fs::{self, File};
 use std::io::{self, BufReader, BufWriter, Read, Write};
 use std::path::{Path, PathBuf};
@@ -53,12 +57,20 @@ pub struct EncodeOptions {
     pub max_queued_bytes: u64,
     pub source_mode: EncodeSourceMode,
     pub scratch_dir: Option<PathBuf>,
+    pub source_cache: Option<PathBuf>,
     pub keep_partial: bool,
     pub progress: BuildProgressMode,
     pub progress_interval_ms: u64,
     pub max_chunks: Option<u64>,
     pub annotations: Option<PathBuf>,
     pub annotation_sample: Option<String>,
+    pub annotation_feature_types: Vec<String>,
+    pub reference_assembly: Option<String>,
+    pub dataset_title: Option<String>,
+    pub dataset_description: Option<String>,
+    pub source_uri: Option<String>,
+    pub annotation_release: Option<String>,
+    pub annotation_assembly: Option<String>,
 }
 
 impl EncodeOptions {
@@ -80,12 +92,20 @@ impl EncodeOptions {
             max_queued_bytes: DEFAULT_MAX_QUEUED_BYTES,
             source_mode: EncodeSourceMode::Disk,
             scratch_dir: None,
+            source_cache: None,
             keep_partial: false,
             progress: BuildProgressMode::Off,
             progress_interval_ms: DEFAULT_PROGRESS_INTERVAL_MS,
             max_chunks: None,
             annotations: None,
             annotation_sample: None,
+            annotation_feature_types: Vec::new(),
+            reference_assembly: None,
+            dataset_title: None,
+            dataset_description: None,
+            source_uri: None,
+            annotation_release: None,
+            annotation_assembly: None,
         }
     }
 }
@@ -107,6 +127,8 @@ pub struct EncodeSummary {
     pub source_access_is_bounded: bool,
     pub source_mode: EncodeSourceMode,
     pub source_cache: Option<DiskSourceStats>,
+    pub persistent_source_cache_path: Option<PathBuf>,
+    pub persistent_source_cache_reused: bool,
     pub source_memory_preflight: SourceMemoryPreflight,
     pub source_memory_preflight_applies: bool,
     pub source_sha256: String,
@@ -114,6 +136,9 @@ pub struct EncodeSummary {
     pub source_prepare_and_checksum_wall_ms: f64,
     pub source_load_wall_ms: f64,
     pub source_cache_build_wall_ms: f64,
+    pub source_cache_open_wall_ms: f64,
+    pub source_cache_manifest_validation_wall_ms: f64,
+    pub path_index_deserialize_wall_ms: f64,
     pub rss_after_source_load_kib: Option<u64>,
     pub path_index_wall_ms: f64,
     pub rss_after_path_index_kib: Option<u64>,
@@ -132,6 +157,13 @@ pub struct EncodeSummary {
     pub max_chunks: Option<u64>,
     pub annotations: Option<PathBuf>,
     pub annotation_sample: Option<String>,
+    pub annotation_feature_types: Vec<String>,
+    pub reference_assembly: Option<String>,
+    pub dataset_title: Option<String>,
+    pub dataset_description: Option<String>,
+    pub source_uri: Option<String>,
+    pub annotation_release: Option<String>,
+    pub annotation_assembly: Option<String>,
     pub window_size: u64,
     pub codec: ChunkCodec,
     pub haplotype_semantics: &'static str,
@@ -230,6 +262,35 @@ pub fn run_encode(options: &EncodeOptions) -> ExperimentResult<EncodeSummary> {
         )
         .into());
     }
+    if options.annotations.is_none()
+        && (!options.annotation_feature_types.is_empty()
+            || options.annotation_release.is_some()
+            || options.annotation_assembly.is_some())
+    {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "annotation feature type/release/assembly requires --annotations",
+        )
+        .into());
+    }
+    if options.annotations.is_some()
+        && (options.annotation_release.is_none() || options.annotation_assembly.is_none())
+    {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "--annotations requires both --annotation-release and --annotation-assembly",
+        )
+        .into());
+    }
+    if let Some(uri) = &options.source_uri
+        && (Path::new(uri).is_absolute() || uri.starts_with("file:"))
+    {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "--source-uri must not be an absolute local path or file URI",
+        )
+        .into());
+    }
     if options.output.exists() {
         return Err(io::Error::new(
             io::ErrorKind::AlreadyExists,
@@ -250,6 +311,13 @@ pub fn run_encode(options: &EncodeOptions) -> ExperimentResult<EncodeSummary> {
     if let Some(scratch_dir) = &options.scratch_dir {
         fs::create_dir_all(scratch_dir)?;
     }
+    if options.source_cache.is_some() && !matches!(options.source_mode, EncodeSourceMode::Disk) {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "--source-cache is only valid with the disk-backed source mode",
+        )
+        .into());
+    }
     let source_gbz_bytes = fs::metadata(&options.input)?.len();
     let source_memory_preflight = source_memory_preflight(source_gbz_bytes)?;
     let scratch_parent = options.scratch_dir.as_deref().unwrap_or_else(|| {
@@ -267,7 +335,54 @@ pub fn run_encode(options: &EncodeOptions) -> ExperimentResult<EncodeSummary> {
         EncodeSourceMode::Loaded => ("source_load", "loading GBZ source into memory"),
     };
     let source_prepare_and_checksum_started = Instant::now();
-    let (source, source_prepare_wall_ms, source_sha256, source_checksum_wall_ms) =
+    let (
+        source,
+        cached_path_index,
+        cache_open_metrics,
+        source_prepare_wall_ms,
+        source_sha256_bytes,
+        source_checksum_wall_ms,
+    ) = if let Some(cache_path) = &options.source_cache {
+        let checksum_started = Instant::now();
+        let source_sha256 = file_sha256_with_progress(
+            &options.input,
+            options.progress,
+            "source_checksum",
+            "hashing GBZ source to authenticate persistent cache",
+            options.progress_interval_ms,
+        )?;
+        let source_checksum_wall_ms = elapsed_ms(checksum_started);
+        let open_started = Instant::now();
+        let persistent =
+            open_persistent_source_cache_with_digest(source_gbz_bytes, source_sha256, cache_path)?;
+        let source_prepare_wall_ms = elapsed_ms(open_started);
+        let open_metrics = persistent.open_metrics.clone();
+        (
+            ActiveEncoderSource::Disk(Box::new(persistent.source)),
+            Some(persistent.path_index),
+            Some(open_metrics),
+            source_prepare_wall_ms,
+            source_sha256,
+            source_checksum_wall_ms,
+        )
+    } else if matches!(options.source_mode, EncodeSourceMode::Disk) {
+        let source_prepare_started = Instant::now();
+        let (source, digest) = run_with_phase_heartbeat(
+            options.progress,
+            source_phase,
+            "streaming GBZ into a bounded disk cache while computing its SHA-256",
+            options.progress_interval_ms,
+            || DiskGbzSource::build_with_digest(&options.input, scratch_parent),
+        )?;
+        (
+            ActiveEncoderSource::Disk(Box::new(source)),
+            None,
+            None,
+            elapsed_ms(source_prepare_started),
+            digest,
+            0.0,
+        )
+    } else {
         std::thread::scope(|scope| -> ExperimentResult<_> {
             let checksum = scope.spawn(|| {
                 let checksum_started = Instant::now();
@@ -301,35 +416,64 @@ pub fn run_encode(options: &EncodeOptions) -> ExperimentResult<EncodeSummary> {
                 .map_err(|_| io::Error::other("source checksum worker panicked"))?;
             Ok((
                 source,
+                None,
+                None,
                 source_prepare_wall_ms,
                 source_sha256?,
                 source_checksum_wall_ms,
             ))
-        })?;
+        })?
+    };
     let source_prepare_and_checksum_wall_ms = elapsed_ms(source_prepare_and_checksum_started);
+    let source_sha256 = sha256_hex(&source_sha256_bytes);
     let source_access_mode = source.access_mode();
     let source_load_wall_ms = match options.source_mode {
         EncodeSourceMode::Loaded => source_prepare_wall_ms,
         EncodeSourceMode::Disk => 0.0,
     };
-    let source_cache_build_wall_ms = match options.source_mode {
-        EncodeSourceMode::Disk => source_prepare_wall_ms,
-        EncodeSourceMode::Loaded => 0.0,
+    let source_cache_build_wall_ms = if matches!(options.source_mode, EncodeSourceMode::Disk)
+        && options.source_cache.is_none()
+    {
+        source_prepare_wall_ms
+    } else {
+        0.0
     };
+    let source_cache_open_wall_ms = cache_open_metrics
+        .as_ref()
+        .map_or(0.0, |metrics| metrics.total_wall_ms);
+    let source_cache_manifest_validation_wall_ms = cache_open_metrics
+        .as_ref()
+        .map_or(0.0, |metrics| metrics.manifest_validation_wall_ms);
+    let path_index_deserialize_wall_ms = cache_open_metrics
+        .as_ref()
+        .map_or(0.0, |metrics| metrics.path_index_deserialize_wall_ms);
     let source_cache = match &source {
         ActiveEncoderSource::Disk(source) => Some(source.stats().clone()),
         ActiveEncoderSource::Loaded(_) => None,
     };
     let rss_after_source_load_kib = process_current_rss_kib();
     let index_started = Instant::now();
-    let path_index = run_with_phase_heartbeat(
-        options.progress,
-        "path_index",
-        "building compact reference path index",
-        options.progress_interval_ms,
-        || SourcePathIndex::new(&source, PATH_INDEX_INTERVAL),
-    )?;
-    let path_index_wall_ms = elapsed_ms(index_started);
+    let path_index = if let Some(index) = cached_path_index {
+        encode_progress(
+            options.progress,
+            "path_index",
+            "reusing authenticated sparse reference path index from persistent cache",
+        );
+        index
+    } else {
+        run_with_phase_heartbeat(
+            options.progress,
+            "path_index",
+            "building compact reference path index",
+            options.progress_interval_ms,
+            || SourcePathIndex::new(&source, PATH_INDEX_INTERVAL),
+        )?
+    };
+    let path_index_wall_ms = if options.source_cache.is_some() {
+        0.0
+    } else {
+        elapsed_ms(index_started)
+    };
     let rss_after_path_index_kib = process_current_rss_kib();
     let config = FixedArchiveConfig {
         experiment_id: "fixed-v1-record".into(),
@@ -352,6 +496,28 @@ pub fn run_encode(options: &EncodeOptions) -> ExperimentResult<EncodeSummary> {
         progress_interval_ms: options.progress_interval_ms,
         annotations: options.annotations.clone(),
         annotation_sample: options.annotation_sample.clone(),
+        annotation_feature_types: options.annotation_feature_types.clone(),
+        archive_metadata: Some(ArchiveMetadata {
+            source_gbz_bytes,
+            source_gbz_sha256: source_sha256_bytes,
+            encoder_package_version: env!("CARGO_PKG_VERSION").into(),
+            format_implementation: "pangenome-range-rust-v1".into(),
+            regional_window_size: options.window_size,
+            construction_context: CONSTRUCTION_CONTEXT,
+            payload_codec: options.codec,
+            haplotype_semantics: "anonymous-distinct-weighted-tile-paths".into(),
+            reference_sample: options.sample.clone(),
+            reference_assembly: options.reference_assembly.clone(),
+            dataset_title: options.dataset_title.clone(),
+            dataset_description: options.dataset_description.clone(),
+            source_uri: options.source_uri.clone(),
+            annotation_filename: None,
+            annotation_sha256: None,
+            annotation_release: options.annotation_release.clone(),
+            annotation_assembly: options.annotation_assembly.clone(),
+        }),
+        #[cfg(test)]
+        test_reverse_worker_completion: false,
     };
     encode_progress(
         options.progress,
@@ -368,13 +534,13 @@ pub fn run_encode(options: &EncodeOptions) -> ExperimentResult<EncodeSummary> {
         &build_options,
     )?;
     let output_checksum_started = Instant::now();
-    let output_sha256 = file_sha256_with_progress(
+    let output_sha256 = sha256_hex(&file_sha256_with_progress(
         &options.output,
         options.progress,
         "output_checksum",
         "hashing completed archive",
         options.progress_interval_ms,
-    )?;
+    )?);
     let output_checksum_wall_ms = elapsed_ms(output_checksum_started);
     let encode_wall_ms_before_report = elapsed_ms(encode_started);
     let accounted_critical_path_wall_ms =
@@ -393,7 +559,7 @@ pub fn run_encode(options: &EncodeOptions) -> ExperimentResult<EncodeSummary> {
         0.0
     };
     let summary = EncodeSummary {
-        schema_version: 6,
+        schema_version: 7,
         archive_version: 1,
         regional_payload_version: 1,
         source_path: options.input.clone(),
@@ -402,6 +568,8 @@ pub fn run_encode(options: &EncodeOptions) -> ExperimentResult<EncodeSummary> {
         source_access_is_bounded: matches!(options.source_mode, EncodeSourceMode::Disk),
         source_mode: options.source_mode,
         source_cache,
+        persistent_source_cache_path: options.source_cache.clone(),
+        persistent_source_cache_reused: options.source_cache.is_some(),
         source_memory_preflight,
         source_memory_preflight_applies: matches!(options.source_mode, EncodeSourceMode::Loaded),
         source_sha256,
@@ -409,6 +577,9 @@ pub fn run_encode(options: &EncodeOptions) -> ExperimentResult<EncodeSummary> {
         source_prepare_and_checksum_wall_ms,
         source_load_wall_ms,
         source_cache_build_wall_ms,
+        source_cache_open_wall_ms,
+        source_cache_manifest_validation_wall_ms,
+        path_index_deserialize_wall_ms,
         rss_after_source_load_kib,
         path_index_wall_ms,
         rss_after_path_index_kib,
@@ -427,6 +598,13 @@ pub fn run_encode(options: &EncodeOptions) -> ExperimentResult<EncodeSummary> {
         max_chunks: options.max_chunks,
         annotations: options.annotations.clone(),
         annotation_sample: options.annotation_sample.clone(),
+        annotation_feature_types: options.annotation_feature_types.clone(),
+        reference_assembly: options.reference_assembly.clone(),
+        dataset_title: options.dataset_title.clone(),
+        dataset_description: options.dataset_description.clone(),
+        source_uri: options.source_uri.clone(),
+        annotation_release: options.annotation_release.clone(),
+        annotation_assembly: options.annotation_assembly.clone(),
         window_size: options.window_size,
         codec: options.codec,
         haplotype_semantics: "anonymous-distinct-weighted-tile-paths",
@@ -739,6 +917,16 @@ fn file_sha256(path: &Path) -> io::Result<String> {
         "hashing file",
         DEFAULT_PROGRESS_INTERVAL_MS,
     )
+    .map(|digest| sha256_hex(&digest))
+}
+
+fn sha256_hex(digest: &[u8; 32]) -> String {
+    digest
+        .iter()
+        .fold(String::with_capacity(64), |mut output, byte| {
+            write!(output, "{byte:02x}").expect("writing to String cannot fail");
+            output
+        })
 }
 
 fn run_with_phase_heartbeat<T>(
@@ -807,7 +995,7 @@ fn file_sha256_with_progress(
     phase: &'static str,
     message: &'static str,
     interval_ms: u64,
-) -> io::Result<String> {
+) -> io::Result<[u8; 32]> {
     encode_progress(mode, phase, message);
     let total_bytes = fs::metadata(path)?.len();
     let mut input = BufReader::new(File::open(path)?);
@@ -851,7 +1039,7 @@ fn file_sha256_with_progress(
             started.elapsed().as_secs_f64(),
         );
     }
-    Ok(format!("{:x}", hasher.finalize()))
+    Ok(hasher.finalize().into())
 }
 
 #[allow(clippy::cast_precision_loss)]
@@ -984,6 +1172,8 @@ fn elapsed_ms(started: Instant) -> f64 {
 mod tests {
     use super::*;
     use crate::fixed::ReferencePathSpec;
+    use crate::test_support::tiny_gbz_fixture;
+    use crate::{build_persistent_source_cache, prune_persistent_source_cache};
     use gbz::FullPathName;
 
     #[test]
@@ -1021,5 +1211,43 @@ mod tests {
                 .iter()
                 .all(|query| query.sample == "reference" && query.contig == "chr2")
         );
+    }
+
+    #[test]
+    fn persistent_and_ephemeral_encode_paths_are_byte_identical() {
+        let input = tiny_gbz_fixture();
+        let cache = serialize::temp_file_name("encode-persistent-cache");
+        let ephemeral_output = serialize::temp_file_name("encode-ephemeral-output");
+        let persistent_output = serialize::temp_file_name("encode-persistent-output");
+        let ephemeral_report = serialize::temp_file_name("encode-ephemeral-report");
+        let persistent_report = serialize::temp_file_name("encode-persistent-report");
+        let built = build_persistent_source_cache(&input, &cache, false).unwrap();
+        drop(built);
+
+        let mut ephemeral = EncodeOptions::new(input.clone(), ephemeral_output.clone());
+        ephemeral.report = Some(ephemeral_report.clone());
+        ephemeral.threads = 1;
+        let mut persistent = EncodeOptions::new(input, persistent_output.clone());
+        persistent.report = Some(persistent_report.clone());
+        persistent.threads = 4;
+        persistent.source_cache = Some(cache.clone());
+        let ephemeral_summary = run_encode(&ephemeral).unwrap();
+        let persistent_summary = run_encode(&persistent).unwrap();
+        assert_eq!(
+            fs::read(&ephemeral_output).unwrap(),
+            fs::read(&persistent_output).unwrap()
+        );
+        assert_eq!(
+            ephemeral_summary.output_sha256,
+            persistent_summary.output_sha256
+        );
+        assert!(persistent_summary.path_index_wall_ms.abs() < f64::EPSILON);
+        assert!(persistent_summary.persistent_source_cache_reused);
+
+        fs::remove_file(ephemeral_output).unwrap();
+        fs::remove_file(persistent_output).unwrap();
+        fs::remove_file(ephemeral_report).unwrap();
+        fs::remove_file(persistent_report).unwrap();
+        prune_persistent_source_cache(&cache).unwrap();
     }
 }

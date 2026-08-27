@@ -568,6 +568,14 @@ pub fn compress(codec: ChunkCodec, bytes: &[u8]) -> io::Result<Vec<u8>> {
 /// bytes, unsupported sizes, decompressor failure, or length mismatch.
 pub fn decompress(codec: ChunkCodec, bytes: &[u8], expected_len: u64) -> io::Result<Vec<u8>> {
     let result = if codec.level().is_some() {
+        if bytes
+            .get(4)
+            .is_some_and(|descriptor| descriptor & 0x04 != 0)
+        {
+            return Err(invalid_data(
+                "zstd content-checksum frames are not supported in file-format v1",
+            ));
+        }
         let declared_len = zstd::zstd_safe::get_frame_content_size(bytes)
             .map_err(|error| invalid_data(format!("invalid zstd frame header: {error:?}")))?
             .ok_or_else(|| invalid_data("zstd frame omits its content size"))?;
@@ -600,6 +608,7 @@ pub fn decompress(codec: ChunkCodec, bytes: &[u8], expected_len: u64) -> io::Res
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::io::Write;
 
     fn manifest() -> ReferenceManifest {
         ReferenceManifest {
@@ -732,5 +741,15 @@ mod tests {
         truncated_checksum[4] |= 0x04;
         truncated_checksum.truncate(truncated_checksum.len() - 3);
         assert!(decompress(ChunkCodec::Zstd3, &truncated_checksum, raw.len() as u64).is_err());
+
+        let mut checksum_encoder = zstd::stream::Encoder::new(Vec::new(), 3).unwrap();
+        checksum_encoder.include_checksum(true).unwrap();
+        checksum_encoder
+            .set_pledged_src_size(Some(raw.len() as u64))
+            .unwrap();
+        checksum_encoder.write_all(raw).unwrap();
+        let checksum_frame = checksum_encoder.finish().unwrap();
+        assert_ne!(checksum_frame[4] & 0x04, 0);
+        assert!(decompress(ChunkCodec::Zstd3, &checksum_frame, raw.len() as u64).is_err());
     }
 }

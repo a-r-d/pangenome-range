@@ -115,18 +115,19 @@ MUST NOT interpret an unknown type by inspecting its payload. Extension types
 and decoded schemas require a normative registry entry before they can be
 emitted as required.
 
-### 3.2 Registered default feature extensions
+### 3.2 Registered extensions
 
-The reference encoder emits the following two entries for every newly encoded
-archive. Both entries have the required flag clear. "Emitted by default" and
-"required to decode the graph" are deliberately different: readers that do not
-implement these viewer features MUST be able to skip them and continue serving
-regional graph queries.
+All registered v1 entries have the required flag clear. The reference encoder
+always emits the summary and deterministic archive metadata entries. It emits
+the named-locus entry only when explicit annotation input is supplied. Readers
+that do not implement these features MUST be able to skip them and continue
+serving regional graph queries.
 
 | Type identifier (exactly 16 bytes) | Purpose |
 | --- | --- |
 | `named-loci-v1---` | binary-searchable names, aliases, and genomic intervals |
 | `summary-pyr-v1--` | arithmetic multiscale overview bins |
+| `archive-meta-v1-` | deterministic source, encoder, reference, and annotation provenance |
 
 Each extension-directory entry addresses a small descriptor. A known
 descriptor MAY own child page ranges elsewhere at or after `data_offset`.
@@ -146,7 +147,7 @@ Known-extension child pages MUST stay within the object, MUST NOT overlap any
 regional payload, extension descriptor, or other child page, and MUST pass
 their digest before decompression. A parser MUST consume every descriptor and
 page exactly. This is one bounded level of indirection, not a generic recursive
-extension graph.
+extension graph. Both encoded and decoded child-page lengths are at most 64 MiB.
 
 #### 3.2.1 Named loci
 
@@ -193,9 +194,30 @@ The reference encoder selects only records whose GFF3 feature type is exactly
 CDS, codon, or UTR child records. This selection is an encoder policy rather
 than a restriction on the feature-type field of independently produced v1
 archives.
-An encoder MUST NOT download annotations implicitly or invent assembly,
-sample, or locus identity. Without explicit annotation input, the default
-entry is a valid empty descriptor.
+The reference encoder's default accepted feature type is exactly `gene`.
+Repeatable explicit feature-type options replace that default and compare the
+GFF3 type field byte-for-byte. Duplicate aliases and duplicate expanded records
+are removed only after the complete record tuple is formed; features sharing a
+normalized key or stable identifier remain distinct and deterministically
+ordered. Percent escapes MUST decode to valid UTF-8. A malformed recognized
+`##sequence-region` directive, conflicting bounds for one contig, or an
+accepted feature outside declared sequence bounds is an error.
+
+The reference encoder requires user-supplied annotation release and assembly
+identifiers whenever annotations are supplied. It never guesses `chr1` versus
+`1`, downloads annotations, infers parent/child biological identity, or invents
+assembly, sample, or locus identity. For a partial or fragmented archive it
+indexes only a feature completely contained within one encoded manifest
+interval. It MUST NOT return a locus interval partly absent from the archive.
+An equal-key group MUST remain in one leaf and therefore MUST fail before page
+construction if it exceeds 65,536 records or the 64 MiB encoded/decoded page
+limit; the error SHOULD identify the key and limit.
+
+An explicitly empty descriptor remains valid for independent producers and
+conformance. The reference encoder omits `named-loci-v1---` when no annotation
+input is supplied, so feature capability presence means a usable index was
+requested. Readers SHOULD distinguish absent, present-empty, and
+present-populated states in archive-information APIs.
 
 #### 3.2.2 Multiscale summaries
 
@@ -244,6 +266,50 @@ of base-bin values. Node, edge, GBWT-record, and occurrence fields are
 tile-record totals, not globally unique graph elements, individuals, allele
 frequencies, or globally stitchable haplotypes. Readers and viewers MUST label
 them accordingly.
+
+#### 3.2.3 Archive metadata
+
+`archive-meta-v1-` is stored without compression by the reference encoder and
+is limited to 1 MiB. Its fixed 112-byte prefix is:
+
+| Offset | Size | Type | Field |
+| ---: | ---: | --- | --- |
+| 0 | 8 | bytes | magic `PNGMET01` |
+| 8 | 4 | `u32` | schema version, exactly `1` |
+| 12 | 4 | `u32` | fixed prefix bytes, exactly `112` |
+| 16 | 8 | `u64` | source GBZ byte length, nonzero |
+| 24 | 32 | bytes | SHA-256 of the exact source GBZ, nonzero |
+| 56 | 8 | `u64` | regional window size, nonzero |
+| 64 | 8 | `u64` | construction context, exactly `100` |
+| 72 | 1 | `u8` | regional payload codec |
+| 73 | 1 | `u8` | haplotype semantics, exactly `2` |
+| 74 | 1 | `u8` | annotation checksum present, `0` or `1` |
+| 75 | 5 | bytes | reserved, all zero |
+| 80 | 32 | bytes | annotation SHA-256, nonzero iff the presence byte is `1` |
+
+The prefix is followed by exactly ten byte strings in this order:
+
+1. encoder package version, nonempty;
+2. format implementation identifier, nonempty;
+3. reference sample;
+4. reference assembly;
+5. dataset title;
+6. dataset description;
+7. canonical source URI;
+8. annotation filename;
+9. annotation release;
+10. annotation assembly.
+
+Strings 3 through 10 use an empty string to represent absence. Annotation
+filename and checksum MUST be present together. Annotation release/assembly
+MUST be absent when annotation provenance is absent. Encoders MUST NOT insert
+an absolute local path, `file:` URI, current clock time, worker count,
+source-access mode, scratch path, or other operational setting. They MUST NOT
+invent absent identity. The extension-directory BLAKE3-128 binds these exact
+metadata bytes to the archive; the source and annotation SHA-256 values bind
+the named inputs. This is integrity and identity evidence, not a keyed
+authenticity signature. Published whole-object SHA-256 or a strong immutable
+HTTP identity remains necessary to bind the complete object externally.
 
 ## 4. Root index and reference manifests
 
@@ -384,8 +450,10 @@ uncompressed lengths to match.
 The zstd frame MUST include its content-size field. Concatenated frames,
 skippable frames, dictionaries, trailing bytes after the frame, reserved frame
 or block bits, and frames whose encoded extent differs from the directory range
-are corruption. A checksum internal to the zstd frame MAY be present and, when
-present, MUST validate.
+are corruption. The zstd frame content-checksum flag MUST be clear. V1 rejects
+checksum-bearing zstd frames because every regional and extension payload is
+already protected by BLAKE3-128 over the exact encoded bytes; this avoids
+decoder-dependent checksum behavior.
 
 Readers reject unknown codecs, truncated frames, decompression failure, output
 larger than configured safety bounds, and decompressed-length mismatch.

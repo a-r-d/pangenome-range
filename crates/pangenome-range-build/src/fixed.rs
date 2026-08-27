@@ -6,11 +6,12 @@ use gbz::support;
 use gbz::{FullPathName, GBZ, Orientation, Pos};
 use gbz_base::{HaplotypeOutput, PathIndex, Subgraph, SubgraphQuery};
 use pangenome_range_format::{
-    ARCHIVE_VERSION, ArchiveEntry, ArchiveValidationProgress, Bootstrap, DIRECTORY_BUCKET_WINDOWS,
-    DIRECTORY_ENTRIES_PER_PAGE, DIRECTORY_PAGE_BYTES, EXTENSION_DIRECTORY_HEADER_BYTES,
-    EXTENSION_ENTRY_BYTES, FileRangeSource, HEADER_LEN, NetworkProfile, PackedEdge,
-    PackedGbwtRecord, REGION_VERSION, RangeSource, RecordRegionalPayload, ReferenceManifest,
-    TracingRangeSource, bootstrap as format_bootstrap, compress as format_compress,
+    ARCHIVE_METADATA_TYPE_ID, ARCHIVE_VERSION, ArchiveEntry, ArchiveValidationProgress, Bootstrap,
+    DIRECTORY_BUCKET_WINDOWS, DIRECTORY_ENTRIES_PER_PAGE, DIRECTORY_PAGE_BYTES,
+    EXTENSION_DIRECTORY_HEADER_BYTES, EXTENSION_ENTRY_BYTES, FileRangeSource, HEADER_LEN,
+    NetworkProfile, PackedEdge, PackedGbwtRecord, REGION_VERSION, RangeSource,
+    RecordRegionalPayload, ReferenceManifest, TracingRangeSource, bootstrap as format_bootstrap,
+    compress as format_compress, decode_archive_metadata as format_decode_archive_metadata,
     decode_directory_page as format_decode_directory_page, decompress as format_decompress,
     directory_page_offset as format_directory_page_offset,
     encode_directory_page as format_encode_directory_page,
@@ -20,8 +21,9 @@ use pangenome_range_format::{
     encode_root_index as format_encode_root_index,
     validate_archive_with_options as format_validate_archive_with_options,
     validate_archive_with_progress as format_validate_archive_with_progress,
+    validate_extension_payload as format_validate_extension_payload,
 };
-use pangenome_range_format::{ExtensionEntry, ValidationMode, ValidationOptions};
+use pangenome_range_format::{ArchiveMetadata, ExtensionEntry, ValidationMode, ValidationOptions};
 use pangenome_range_query::{
     CanonicalHaplotypeTile, CanonicalPath, CanonicalSubgraph, Edge, HaplotypeSemantics,
     OrientedNode, ReferenceInterval, WeightedTraversal,
@@ -89,6 +91,10 @@ pub struct ArchiveBuildOptions {
     pub progress_interval_ms: u64,
     pub annotations: Option<PathBuf>,
     pub annotation_sample: Option<String>,
+    pub annotation_feature_types: Vec<String>,
+    pub archive_metadata: Option<ArchiveMetadata>,
+    #[cfg(test)]
+    pub test_reverse_worker_completion: bool,
 }
 
 impl Default for ArchiveBuildOptions {
@@ -106,6 +112,10 @@ impl Default for ArchiveBuildOptions {
             progress_interval_ms: DEFAULT_PROGRESS_INTERVAL_MS,
             annotations: None,
             annotation_sample: None,
+            annotation_feature_types: Vec::new(),
+            archive_metadata: None,
+            #[cfg(test)]
+            test_reverse_worker_completion: false,
         }
     }
 }
@@ -407,8 +417,19 @@ pub struct ArchiveBuildMetrics {
     pub payload_bytes: u64,
     pub extension_encoded_bytes: u64,
     pub extension_decoded_bytes: u64,
+    pub annotation_input_bytes: u64,
+    pub annotation_feature_rows: u64,
+    pub annotation_expanded_records: u64,
     pub named_locus_records: u64,
     pub named_locus_pages: u64,
+    pub named_locus_page_encoded_bytes: u64,
+    pub named_locus_page_decoded_bytes: u64,
+    pub named_locus_descriptor_encoded_bytes: u64,
+    pub annotation_checksum_wall_ms: f64,
+    pub annotation_parse_expand_wall_ms: f64,
+    pub annotation_sort_dedup_wall_ms: f64,
+    pub named_locus_page_build_wall_ms: f64,
+    pub named_locus_descriptor_wall_ms: f64,
     pub summary_series: u64,
     pub summary_bins: u64,
     pub peak_queued_raw_bytes: u64,
@@ -1421,6 +1442,7 @@ fn with_persistent_workers<R>(
     path_index: &SourcePathIndex,
     max_uncompressed_bytes: u64,
     threads: usize,
+    #[cfg(test)] reverse_completion: bool,
     work: impl FnOnce(Option<&ConstructionWorkers>, Option<&CompressionWorkers>) -> ExperimentResult<R>,
 ) -> ExperimentResult<R> {
     std::thread::scope(|scope| {
@@ -1457,6 +1479,12 @@ fn with_persistent_workers<R>(
                                 job.task.end,
                                 max_uncompressed_bytes,
                             );
+                            #[cfg(test)]
+                            if reverse_completion {
+                                std::thread::sleep(std::time::Duration::from_millis(
+                                    u64::try_from(threads - (job.sequence % threads)).unwrap(),
+                                ));
+                            }
                             if construction_results
                                 .send(ConstructionWorkerResult {
                                     sequence: job.sequence,
@@ -1469,6 +1497,12 @@ fn with_persistent_workers<R>(
                         }
                         PipelineJob::Compression(job) => {
                             let compressed = compress(job.codec, &job.chunk.raw);
+                            #[cfg(test)]
+                            if reverse_completion {
+                                std::thread::sleep(std::time::Duration::from_millis(
+                                    u64::try_from(threads - (job.sequence % threads)).unwrap(),
+                                ));
+                            }
                             if compression_results
                                 .send(CompressionWorkerResult {
                                     sequence: job.sequence,
@@ -2181,6 +2215,9 @@ pub fn build_fixed_archive_from_source_with_options(
     if options.annotation_sample.is_some() && options.annotations.is_none() {
         return Err(invalid_input("--annotation-sample requires --annotations").into());
     }
+    if !options.annotation_feature_types.is_empty() && options.annotations.is_none() {
+        return Err(invalid_input("--annotation-feature-type requires --annotations").into());
+    }
     let started = Instant::now();
     let manifest_started = Instant::now();
     let references = selected_reference_paths(path_index, config, options)?;
@@ -2239,9 +2276,13 @@ pub fn build_fixed_archive_from_source_with_options(
         })
         .collect::<ExperimentResult<Vec<_>>>()?;
     let provisional_root = encode_root_index(&manifests)?;
+    let extension_count = 1_usize
+        .checked_add(usize::from(options.annotations.is_some()))
+        .and_then(|count| count.checked_add(usize::from(options.archive_metadata.is_some())))
+        .ok_or_else(|| invalid_data("extension directory length overflow"))?;
     let extension_directory_len = EXTENSION_DIRECTORY_HEADER_BYTES
         .checked_add(
-            2_usize
+            extension_count
                 .checked_mul(EXTENSION_ENTRY_BYTES)
                 .ok_or_else(|| invalid_data("extension directory length overflow"))?,
         )
@@ -2326,6 +2367,8 @@ pub fn build_fixed_archive_from_source_with_options(
         path_index,
         config.max_uncompressed_chunk_bytes,
         options.threads,
+        #[cfg(test)]
+        options.test_reverse_worker_completion,
         |construction_workers, compression_workers| -> ExperimentResult<()> {
             for (reference_id, reference) in references.iter().enumerate() {
                 emit_reference_start(
@@ -2592,6 +2635,8 @@ pub fn build_fixed_archive_from_source_with_options(
         &FeatureBuildOptions {
             annotation_path: options.annotations.clone(),
             annotation_sample: options.annotation_sample.clone(),
+            annotation_feature_types: options.annotation_feature_types.clone(),
+            archive_metadata: options.archive_metadata.clone(),
         },
         data_offset,
     )?;
@@ -2732,8 +2777,19 @@ pub fn build_fixed_archive_from_source_with_options(
         payload_bytes: archive_bytes.saturating_sub(data_offset),
         extension_encoded_bytes: feature_metrics.extension_encoded_bytes,
         extension_decoded_bytes: feature_metrics.extension_decoded_bytes,
+        annotation_input_bytes: feature_metrics.annotation_input_bytes,
+        annotation_feature_rows: feature_metrics.annotation_feature_rows,
+        annotation_expanded_records: feature_metrics.annotation_expanded_records,
         named_locus_records: feature_metrics.named_locus_records,
         named_locus_pages: feature_metrics.named_locus_pages,
+        named_locus_page_encoded_bytes: feature_metrics.named_locus_page_encoded_bytes,
+        named_locus_page_decoded_bytes: feature_metrics.named_locus_page_decoded_bytes,
+        named_locus_descriptor_encoded_bytes: feature_metrics.named_locus_descriptor_encoded_bytes,
+        annotation_checksum_wall_ms: feature_metrics.annotation_checksum_wall_ms,
+        annotation_parse_expand_wall_ms: feature_metrics.annotation_parse_expand_wall_ms,
+        annotation_sort_dedup_wall_ms: feature_metrics.annotation_sort_dedup_wall_ms,
+        named_locus_page_build_wall_ms: feature_metrics.named_locus_page_build_wall_ms,
+        named_locus_descriptor_wall_ms: feature_metrics.named_locus_descriptor_wall_ms,
         summary_series: feature_metrics.summary_series,
         summary_bins: feature_metrics.summary_bins,
         peak_queued_raw_bytes: writer.peak_queued_raw_bytes,
@@ -2849,6 +2905,29 @@ impl FixedArchiveReader {
         self.directory_cache_limit = bytes;
         self.evict_directory_cache();
         self
+    }
+
+    /// Reads the deterministic, integrity-bound archive provenance extension.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when the extension range, digest, codec, or schema is
+    /// corrupt. Archives produced before provenance was registered return
+    /// `None`.
+    pub fn archive_metadata(&self) -> ExperimentResult<Option<ArchiveMetadata>> {
+        let Some(entry) = self
+            .bootstrap
+            .extensions
+            .iter()
+            .find(|entry| entry.type_id == ARCHIVE_METADATA_TYPE_ID)
+        else {
+            return Ok(None);
+        };
+        let encoded = self
+            .source
+            .read_range(entry.offset, u64_to_usize(entry.encoded_len)?)?;
+        let decoded = format_validate_extension_payload(entry, &encoded)?;
+        Ok(Some(format_decode_archive_metadata(&decoded)?))
     }
 
     /// Drops all reusable leaf-directory state while keeping the file open.
@@ -3979,7 +4058,7 @@ fn conformance_archive(
                 .ok_or_else(|| invalid_data("conformance extension offset overflow"))?;
             let digest = blake3::hash(extension_payload);
             let extension_entry = ExtensionEntry {
-                type_id: *b"provenance-v1---",
+                type_id: ARCHIVE_METADATA_TYPE_ID,
                 required: false,
                 codec: ChunkCodec::None,
                 offset: extension_offset,
@@ -4139,7 +4218,7 @@ fn write_conformance_fixture(
         files.push((format!("{id}.extensions.bin"), bytes));
     }
     if let Some(bytes) = parts.extension_payload.clone() {
-        files.push((format!("{id}.extension-provenance.json"), bytes));
+        files.push((format!("{id}.archive-meta.bin"), bytes));
     }
     let mut file_metadata = serde_json::Map::new();
     for (name, bytes) in files {
@@ -4211,11 +4290,41 @@ fn write_conformance_failure(
     }))
 }
 
+fn checksum_zstd_frame(raw: &[u8]) -> io::Result<Vec<u8>> {
+    let mut encoder = zstd::stream::Encoder::new(Vec::new(), 3)?;
+    encoder.include_checksum(true)?;
+    encoder.set_pledged_src_size(Some(usize_to_u64(raw.len())?))?;
+    encoder.write_all(raw)?;
+    encoder.finish()
+}
+
+fn conformance_two_edge_payload(raw: &[u8], second: PackedEdge) -> io::Result<Vec<u8>> {
+    const EDGE_OFFSET: usize = 188;
+    const EDGE_END: usize = EDGE_OFFSET + 16;
+    if raw.get(EDGE_OFFSET..EDGE_END)
+        != Some(
+            [2_u64.to_le_bytes(), 4_u64.to_le_bytes()]
+                .concat()
+                .as_slice(),
+        )
+    {
+        return Err(invalid_data("conformance edge layout changed"));
+    }
+    let mut bytes = raw.to_vec();
+    bytes[32..40].copy_from_slice(&2_u64.to_le_bytes());
+    let mut encoded = Vec::with_capacity(16);
+    encoded.extend_from_slice(&second.from.to_le_bytes());
+    encoded.extend_from_slice(&second.to.to_le_bytes());
+    bytes.splice(EDGE_END..EDGE_END, encoded);
+    Ok(bytes)
+}
+
 #[allow(clippy::too_many_lines)]
 fn write_conformance_failures(
     directory: &Path,
     archive: &[u8],
     raw: &[u8],
+    archive_metadata: &[u8],
 ) -> ExperimentResult<Vec<serde_json::Value>> {
     let mut failures = Vec::new();
     failures.push(write_conformance_failure(
@@ -4319,6 +4428,39 @@ fn write_conformance_failures(
         &corrupt_payload,
     )?);
 
+    let checksum_frame = checksum_zstd_frame(raw)?;
+    failures.push(write_conformance_failure(
+        directory,
+        "unsupported-zstd-content-checksum",
+        "zstd3",
+        "zstd-frame",
+        "zstd-policy",
+        &checksum_frame,
+    )?);
+    let mut corrupt_checksum_frame = checksum_frame;
+    *corrupt_checksum_frame
+        .last_mut()
+        .ok_or_else(|| invalid_data("checksum-bearing zstd frame is empty"))? ^= 0xff;
+    failures.push(write_conformance_failure(
+        directory,
+        "corrupt-zstd-content-checksum",
+        "zstd3",
+        "zstd-frame",
+        "zstd-policy",
+        &corrupt_checksum_frame,
+    )?);
+
+    let mut corrupt_metadata = archive_metadata.to_vec();
+    corrupt_metadata[8..12].copy_from_slice(&99_u32.to_le_bytes());
+    failures.push(write_conformance_failure(
+        directory,
+        "corrupt-archive-metadata-version",
+        "bin",
+        "archive-metadata",
+        "archive-metadata-decode",
+        &corrupt_metadata,
+    )?);
+
     failures.push(write_conformance_failure(
         directory,
         "corrupt-regional-truncated",
@@ -4327,6 +4469,53 @@ fn write_conformance_failures(
         "regional-decode",
         &raw[..raw.len() - 1],
     )?);
+
+    let descending_edges = conformance_two_edge_payload(raw, PackedEdge { from: 2, to: 3 })?;
+    failures.push(write_conformance_failure(
+        directory,
+        "corrupt-regional-descending-edges",
+        "bin",
+        "regional-payload",
+        "edge-decode",
+        &descending_edges,
+    )?);
+
+    let duplicate_edges = conformance_two_edge_payload(raw, PackedEdge { from: 2, to: 4 })?;
+    failures.push(write_conformance_failure(
+        directory,
+        "corrupt-regional-duplicate-edges",
+        "bin",
+        "regional-payload",
+        "edge-decode",
+        &duplicate_edges,
+    )?);
+
+    for (id, edge) in [
+        (
+            "corrupt-regional-noncanonical-edge",
+            PackedEdge { from: 4, to: 2 },
+        ),
+        (
+            "corrupt-regional-nonlocal-edge-source",
+            PackedEdge { from: 6, to: 8 },
+        ),
+        (
+            "corrupt-regional-malformed-boundary-edge",
+            PackedEdge { from: 2, to: 0 },
+        ),
+    ] {
+        let mut invalid_edge = raw.to_vec();
+        invalid_edge[188..196].copy_from_slice(&edge.from.to_le_bytes());
+        invalid_edge[196..204].copy_from_slice(&edge.to.to_le_bytes());
+        failures.push(write_conformance_failure(
+            directory,
+            id,
+            "bin",
+            "regional-payload",
+            "edge-decode",
+            &invalid_edge,
+        )?);
+    }
 
     let mut huge_node_count = raw.to_vec();
     huge_node_count[24..32].copy_from_slice(&u64::MAX.to_le_bytes());
@@ -4392,6 +4581,26 @@ pub fn export_conformance_fixtures(directory: impl AsRef<Path>) -> ExperimentRes
     };
     let record_payload = conformance_record_payload();
     let record = record_payload.clone().into_regional_graph()?;
+    let synthetic_metadata = ArchiveMetadata {
+        source_gbz_bytes: usize_to_u64(record_payload.encode()?.len())?,
+        source_gbz_sha256: Sha256::digest(record_payload.encode()?).into(),
+        encoder_package_version: env!("CARGO_PKG_VERSION").into(),
+        format_implementation: "pangenome-range-rust-v1".into(),
+        regional_window_size: 16_384,
+        construction_context: CONSTRUCTION_CONTEXT,
+        payload_codec: ChunkCodec::Zstd3,
+        haplotype_semantics: "anonymous-distinct-weighted-tile-paths".into(),
+        reference_sample: Some("GRCh38".into()),
+        reference_assembly: Some("synthetic-v1".into()),
+        dataset_title: Some("Synthetic conformance archive".into()),
+        dataset_description: None,
+        source_uri: None,
+        annotation_filename: None,
+        annotation_sha256: None,
+        annotation_release: None,
+        annotation_assembly: None,
+    };
+    let synthetic_metadata = pangenome_range_format::encode_archive_metadata(&synthetic_metadata)?;
     let fixtures = vec![
         write_conformance_fixture(
             directory,
@@ -4407,12 +4616,12 @@ pub fn export_conformance_fixtures(directory: impl AsRef<Path>) -> ExperimentRes
             &record,
             &record_payload.encode()?,
             &query,
-            Some(b"{ \"title\": \"Synthetic conformance archive\" }\n"),
+            Some(&synthetic_metadata),
         )?,
     ];
     let archive = std::fs::read(directory.join("format-v1.pngr"))?;
     let raw = std::fs::read(directory.join("format-v1.payload.raw"))?;
-    let failures = write_conformance_failures(directory, &archive, &raw)?;
+    let failures = write_conformance_failures(directory, &archive, &raw, &synthetic_metadata)?;
     let manifest = serde_json::json!({
         "schemaVersion": 2,
         "provenance": "deterministic synthetic two-node graph generated by the Rust reference encoder; no external source data",
@@ -4649,7 +4858,7 @@ mod tests {
     #[test]
     #[allow(clippy::too_many_lines)]
     fn record_archive_v1_golden_is_deterministic_and_matches_source_oracle() {
-        let source = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../test-data/micb-kir3dl1.gbz");
+        let source = crate::test_support::tiny_gbz_fixture();
         let fixture = Path::new(env!("CARGO_MANIFEST_DIR"))
             .join("../../test-data/golden/record-archive-v1.pngr");
         let metadata: serde_json::Value = serde_json::from_slice(
@@ -4662,6 +4871,7 @@ mod tests {
         .unwrap();
         let annotations = Path::new(env!("CARGO_MANIFEST_DIR"))
             .join("../../test-data/golden/record-annotations-v1.gff3");
+        let source_sha256: [u8; 32] = Sha256::digest(std::fs::read(&source).unwrap()).into();
         let graph: GBZ = simple_sds::serialize::load_from(&source).unwrap();
         let path_index = PathIndex::new(&graph, 1_000, false).unwrap();
         let config = FixedArchiveConfig {
@@ -4687,6 +4897,25 @@ mod tests {
                 threads: 1,
                 annotations: Some(annotations),
                 annotation_sample: Some("CHM13".into()),
+                archive_metadata: Some(ArchiveMetadata {
+                    source_gbz_bytes: 73_920,
+                    source_gbz_sha256: source_sha256,
+                    encoder_package_version: env!("CARGO_PKG_VERSION").into(),
+                    format_implementation: "pangenome-range-rust-v1".into(),
+                    regional_window_size: 16_384,
+                    construction_context: CONSTRUCTION_CONTEXT,
+                    payload_codec: ChunkCodec::Zstd3,
+                    haplotype_semantics: "anonymous-distinct-weighted-tile-paths".into(),
+                    reference_sample: Some("CHM13".into()),
+                    reference_assembly: Some("GRCh38".into()),
+                    dataset_title: Some("Record-preserving v1 golden".into()),
+                    dataset_description: None,
+                    source_uri: Some("https://example.test/micb-kir3dl1.gbz".into()),
+                    annotation_filename: None,
+                    annotation_sha256: None,
+                    annotation_release: Some("fixture-v1".into()),
+                    annotation_assembly: Some("GRCh38".into()),
+                }),
                 ..ArchiveBuildOptions::default()
             },
         )
@@ -4747,6 +4976,13 @@ mod tests {
         assert_eq!(validation.reference_manifests, 1);
         assert_eq!(validation.directory_entries, 1);
         assert_eq!(validation.physical_payloads, 1);
+        let metadata = FixedArchiveReader::open(&fixture)
+            .unwrap()
+            .archive_metadata()
+            .unwrap()
+            .expect("golden archive provenance");
+        assert_eq!(metadata.source_gbz_sha256, source_sha256);
+        assert_eq!(metadata.annotation_release.as_deref(), Some("fixture-v1"));
         let mut validation_progress = Vec::new();
         let progress_validation = format_validate_archive_with_progress(&fixture, 0, |snapshot| {
             validation_progress.push(snapshot.clone());
@@ -4930,6 +5166,15 @@ mod tests {
                     );
                 }
                 "regional-payload" => assert!(RecordRegionalPayload::decode(&bytes).is_err()),
+                "archive-metadata" => {
+                    assert!(format_decode_archive_metadata(&bytes).is_err());
+                }
+                "zstd-frame" => {
+                    let raw_len = std::fs::metadata(directory.join("format-v1.payload.raw"))
+                        .unwrap()
+                        .len();
+                    assert!(format_decompress(ChunkCodec::Zstd3, &bytes, raw_len).is_err());
+                }
                 other => panic!("unsupported conformance failure input kind {other}"),
             }
         }
@@ -5015,6 +5260,7 @@ mod tests {
             &config,
             &ArchiveBuildOptions {
                 threads: 4,
+                test_reverse_worker_completion: true,
                 ..base_options
             },
         )

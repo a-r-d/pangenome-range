@@ -2,8 +2,15 @@ use gbz::bwt::{BWT, Record};
 use gbz::support;
 use gbz::{FullPathName, GBWT, GBZ, Orientation, Pos};
 use serde::Serialize;
+use sha2::{Digest, Sha256};
 use std::collections::BTreeSet;
-use std::io;
+use std::io::{self, Cursor, Read};
+
+const SOURCE_PATH_INDEX_MAGIC: &[u8; 8] = b"PNGSPX01";
+const SOURCE_PATH_INDEX_VERSION: u32 = 1;
+const MAX_SOURCE_PATHS: usize = 1_000_000;
+const MAX_SOURCE_PATH_SAMPLES: usize = 100_000_000;
+const MAX_SOURCE_PATH_STRING_BYTES: usize = 1024 * 1024;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct SourceReference {
@@ -143,6 +150,7 @@ struct IndexedReference {
 /// one row per global haplotype visit.
 #[derive(Clone, Debug)]
 pub struct SourcePathIndex {
+    interval: usize,
     paths: Vec<IndexedReference>,
 }
 
@@ -212,7 +220,175 @@ impl SourcePathIndex {
         if paths.is_empty() {
             return Err(invalid_data("GBZ has no reference paths"));
         }
-        Ok(Self { paths })
+        Ok(Self { interval, paths })
+    }
+
+    #[must_use]
+    pub const fn interval(&self) -> usize {
+        self.interval
+    }
+
+    #[must_use]
+    pub fn path_count(&self) -> usize {
+        self.paths.len()
+    }
+
+    #[must_use]
+    pub fn sample_count(&self) -> usize {
+        self.paths.iter().map(|path| path.positions.len()).sum()
+    }
+
+    pub(crate) fn reference_seeds(&self) -> io::Result<Vec<SourceReferenceSeed>> {
+        self.paths
+            .iter()
+            .map(|path| {
+                Ok(SourceReferenceSeed {
+                    path_id: path.reference.path_id,
+                    name: path.reference.name.clone(),
+                    position: path
+                        .positions
+                        .first()
+                        .map(|(_, position)| *position)
+                        .ok_or_else(|| invalid_data("cached reference has no path samples"))?,
+                })
+            })
+            .collect()
+    }
+
+    /// Encodes the sparse real-reference coordinate index for a persistent source cache.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error for non-representable lengths or arithmetic overflow.
+    pub fn encode(&self) -> io::Result<Vec<u8>> {
+        let mut output = Vec::new();
+        output.extend_from_slice(SOURCE_PATH_INDEX_MAGIC);
+        output.extend_from_slice(&SOURCE_PATH_INDEX_VERSION.to_le_bytes());
+        output.extend_from_slice(&0_u32.to_le_bytes());
+        put_index_u64(&mut output, self.interval)?;
+        put_index_u64(&mut output, self.paths.len())?;
+        for path in &self.paths {
+            put_index_u64(&mut output, path.reference.path_id)?;
+            put_index_string(&mut output, &path.reference.name.sample)?;
+            put_index_string(&mut output, &path.reference.name.contig)?;
+            put_index_u64(&mut output, path.reference.name.haplotype)?;
+            put_index_u64(&mut output, path.reference.name.fragment)?;
+            output.extend_from_slice(&path.reference.start.to_le_bytes());
+            output.extend_from_slice(&path.reference.end.to_le_bytes());
+            put_index_u64(&mut output, path.positions.len())?;
+            for (offset, position) in &path.positions {
+                put_index_u64(&mut output, *offset)?;
+                put_index_u64(&mut output, position.node)?;
+                put_index_u64(&mut output, position.offset)?;
+            }
+        }
+        Ok(output)
+    }
+
+    /// Decodes and validates a persistent sparse real-reference coordinate index.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error for malformed, excessive, trailing, or noncanonical data.
+    pub fn decode(bytes: &[u8]) -> io::Result<Self> {
+        let mut reader = Cursor::new(bytes);
+        let mut magic = [0_u8; 8];
+        reader.read_exact(&mut magic)?;
+        if &magic != SOURCE_PATH_INDEX_MAGIC
+            || read_index_u32(&mut reader)? != SOURCE_PATH_INDEX_VERSION
+            || read_index_u32(&mut reader)? != 0
+        {
+            return Err(invalid_data("invalid source path index header"));
+        }
+        let interval = read_index_usize(&mut reader, "source path interval")?;
+        let path_count = read_index_usize(&mut reader, "source path count")?;
+        if interval == 0 || path_count == 0 || path_count > MAX_SOURCE_PATHS {
+            return Err(invalid_data("invalid source path index dimensions"));
+        }
+        let mut paths = Vec::with_capacity(path_count);
+        let mut total_samples = 0_usize;
+        for _ in 0..path_count {
+            let path_id = read_index_usize(&mut reader, "source path id")?;
+            let sample = read_index_string(&mut reader)?;
+            let contig = read_index_string(&mut reader)?;
+            let haplotype = read_index_usize(&mut reader, "source path haplotype")?;
+            let fragment = read_index_usize(&mut reader, "source path fragment")?;
+            let start = read_index_u64(&mut reader)?;
+            let end = read_index_u64(&mut reader)?;
+            let position_count = read_index_usize(&mut reader, "source path sample count")?;
+            total_samples = total_samples
+                .checked_add(position_count)
+                .ok_or_else(|| invalid_data("source path sample count overflow"))?;
+            if sample.is_empty()
+                || contig.is_empty()
+                || start >= end
+                || position_count == 0
+                || total_samples > MAX_SOURCE_PATH_SAMPLES
+            {
+                return Err(invalid_data("invalid cached source reference"));
+            }
+            let mut positions = Vec::with_capacity(position_count);
+            let mut previous_offset = None;
+            for _ in 0..position_count {
+                let offset = read_index_usize(&mut reader, "source path sample offset")?;
+                let node = read_index_usize(&mut reader, "source path sample node")?;
+                let record_offset = read_index_usize(&mut reader, "source path record offset")?;
+                if node == 0 || previous_offset.is_some_and(|previous| offset <= previous) {
+                    return Err(invalid_data("noncanonical cached source path samples"));
+                }
+                previous_offset = Some(offset);
+                positions.push((offset, Pos::new(node, record_offset)));
+            }
+            paths.push(IndexedReference {
+                reference: SourceReference {
+                    path_id,
+                    name: FullPathName {
+                        sample,
+                        contig,
+                        haplotype,
+                        fragment,
+                    },
+                    start,
+                    end,
+                },
+                positions,
+            });
+        }
+        if usize::try_from(reader.position()).ok() != Some(bytes.len()) {
+            return Err(invalid_data("trailing source path index bytes"));
+        }
+        Ok(Self { interval, paths })
+    }
+
+    /// Returns the stable digest of the real-reference identity and coordinate metadata.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the metadata cannot be represented.
+    pub fn reference_metadata_sha256(&self) -> io::Result<[u8; 32]> {
+        let mut digest = Sha256::new();
+        for path in &self.paths {
+            digest.update(
+                u64::try_from(path.reference.path_id)
+                    .map_err(|_| invalid_data("source reference path id does not fit u64"))?
+                    .to_le_bytes(),
+            );
+            digest.update(
+                u64::try_from(path.reference.name.sample.len())
+                    .map_err(|_| invalid_data("source reference sample length does not fit u64"))?
+                    .to_le_bytes(),
+            );
+            digest.update(path.reference.name.sample.as_bytes());
+            digest.update(
+                u64::try_from(path.reference.name.contig.len())
+                    .map_err(|_| invalid_data("source reference contig length does not fit u64"))?
+                    .to_le_bytes(),
+            );
+            digest.update(path.reference.name.contig.as_bytes());
+            digest.update(path.reference.start.to_le_bytes());
+            digest.update(path.reference.end.to_le_bytes());
+        }
+        Ok(digest.finalize().into())
     }
 
     #[must_use]
@@ -298,6 +474,51 @@ impl SourcePathIndex {
     }
 }
 
+fn put_index_u64(output: &mut Vec<u8>, value: usize) -> io::Result<()> {
+    output.extend_from_slice(
+        &u64::try_from(value)
+            .map_err(|_| invalid_data("source index value does not fit u64"))?
+            .to_le_bytes(),
+    );
+    Ok(())
+}
+
+fn put_index_string(output: &mut Vec<u8>, value: &str) -> io::Result<()> {
+    if value.len() > MAX_SOURCE_PATH_STRING_BYTES {
+        return Err(invalid_data("source path string exceeds its limit"));
+    }
+    put_index_u64(output, value.len())?;
+    output.extend_from_slice(value.as_bytes());
+    Ok(())
+}
+
+fn read_index_u32(reader: &mut Cursor<&[u8]>) -> io::Result<u32> {
+    let mut bytes = [0_u8; 4];
+    reader.read_exact(&mut bytes)?;
+    Ok(u32::from_le_bytes(bytes))
+}
+
+fn read_index_u64(reader: &mut Cursor<&[u8]>) -> io::Result<u64> {
+    let mut bytes = [0_u8; 8];
+    reader.read_exact(&mut bytes)?;
+    Ok(u64::from_le_bytes(bytes))
+}
+
+fn read_index_usize(reader: &mut Cursor<&[u8]>, label: &str) -> io::Result<usize> {
+    usize::try_from(read_index_u64(reader)?)
+        .map_err(|_| invalid_data(format!("{label} does not fit usize")))
+}
+
+fn read_index_string(reader: &mut Cursor<&[u8]>) -> io::Result<String> {
+    let length = read_index_usize(reader, "source path string length")?;
+    if length > MAX_SOURCE_PATH_STRING_BYTES {
+        return Err(invalid_data("source path string exceeds its limit"));
+    }
+    let mut bytes = vec![0_u8; length];
+    reader.read_exact(&mut bytes)?;
+    String::from_utf8(bytes).map_err(|_| invalid_data("source path string is not UTF-8"))
+}
+
 #[derive(Clone, Debug, Serialize)]
 pub struct SourceMemoryPreflight {
     pub source_bytes: u64,
@@ -350,5 +571,36 @@ mod tests {
         assert_eq!(report.recommended_available_bytes, 512 * 1024 * 1024 + 2048);
         assert!(report.estimate.contains("not a bounded-access guarantee"));
         assert!(source_memory_preflight(u64::MAX).is_err());
+    }
+
+    #[test]
+    fn sparse_source_path_index_round_trips_canonically() {
+        let index = SourcePathIndex {
+            interval: 1_000,
+            paths: vec![IndexedReference {
+                reference: SourceReference {
+                    path_id: 7,
+                    name: FullPathName {
+                        sample: "GRCh38".into(),
+                        contig: "chr1".into(),
+                        haplotype: 0,
+                        fragment: 100,
+                    },
+                    start: 100,
+                    end: 2_100,
+                },
+                positions: vec![(0, Pos::new(4, 2)), (1_000, Pos::new(8, 3))],
+            }],
+        };
+        let bytes = index.encode().unwrap();
+        let decoded = SourcePathIndex::decode(&bytes).unwrap();
+        assert_eq!(decoded.interval(), 1_000);
+        assert_eq!(decoded.references(None, None), index.references(None, None));
+        assert_eq!(decoded.encode().unwrap(), bytes);
+        assert_eq!(
+            decoded.reference_metadata_sha256().unwrap(),
+            index.reference_metadata_sha256().unwrap()
+        );
+        assert!(SourcePathIndex::decode(&bytes[..bytes.len() - 1]).is_err());
     }
 }

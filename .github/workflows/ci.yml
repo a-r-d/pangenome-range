@@ -24,4 +24,6 @@ jobs:
       - run: pnpm check
       - run: pnpm build
       - run: pnpm exec playwright install --with-deps chromium
+      - name: Smoke-test the built Pages artifact
+        run: pnpm --filter @pangenome-range/docs test:pages
       - run: pnpm test:browser:ci

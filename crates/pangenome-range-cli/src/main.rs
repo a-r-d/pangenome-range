@@ -3,8 +3,9 @@ use gbz_base::PathIndex;
 use pangenome_range_build::{
     BuildProgressMode, ChunkCodec, EncodeOptions, EncodeSourceMode, EncoderScaleOptions,
     ExperimentMode, ExperimentOptions, FixedArchiveConfig, FixedArchiveReader, QueryMeasurement,
-    QuerySpec, export_conformance_fixtures, internal_gbz_base_query, run_encode,
-    run_encoder_scale_experiment, run_fixed_window_experiment, source_oracle,
+    QuerySpec, build_persistent_source_cache, export_conformance_fixtures,
+    inspect_persistent_source_cache, internal_gbz_base_query, prune_persistent_source_cache,
+    run_encode, run_encoder_scale_experiment, run_fixed_window_experiment, source_oracle,
     validate_fixed_archive_with_options,
 };
 use pangenome_range_format::{
@@ -36,6 +37,7 @@ fn run(mut args: impl Iterator<Item = String>) -> AppResult<()> {
 
     match command.as_str() {
         "encode" => encode(&mut args),
+        "source-cache" => source_cache(&mut args),
         "verify" => verify(&mut args),
         "validate" => validate_archive(&mut args),
         "evaluate-integrity" => evaluate_integrity(&mut args),
@@ -221,11 +223,65 @@ fn read_probe(source: &impl RangeSource, offset: u64, length: u64) -> AppResult<
     Ok(())
 }
 
+fn source_cache(args: &mut impl Iterator<Item = String>) -> AppResult<()> {
+    let usage = "usage: pangenome-range source-cache build <input.gbz> <cache-dir> [--rebuild]\n       pangenome-range source-cache inspect <cache-dir>\n       pangenome-range source-cache prune <cache-dir>";
+    let command = args.next().ok_or(usage)?;
+    match command.as_str() {
+        "build" => {
+            let input = PathBuf::from(args.next().ok_or(usage)?);
+            let cache = PathBuf::from(args.next().ok_or(usage)?);
+            let mut rebuild = false;
+            for flag in args {
+                match flag.as_str() {
+                    "--rebuild" => rebuild = true,
+                    "--help" | "-h" => {
+                        println!("{usage}");
+                        return Ok(());
+                    }
+                    _ => return Err(format!("unknown source-cache build option '{flag}'").into()),
+                }
+            }
+            let persistent = build_persistent_source_cache(&input, &cache, rebuild)?;
+            println!("{}", serde_json::to_string_pretty(&persistent.manifest)?);
+            Ok(())
+        }
+        "inspect" => {
+            let path = PathBuf::from(args.next().ok_or(usage)?);
+            if let Some(extra) = args.next() {
+                return Err(format!("unexpected source-cache inspect argument '{extra}'").into());
+            }
+            let manifest = inspect_persistent_source_cache(&path)?;
+            println!("{}", serde_json::to_string_pretty(&manifest)?);
+            Ok(())
+        }
+        "prune" => {
+            let path = PathBuf::from(args.next().ok_or(usage)?);
+            if let Some(extra) = args.next() {
+                return Err(format!("unexpected source-cache prune argument '{extra}'").into());
+            }
+            let manifest = prune_persistent_source_cache(&path)?;
+            println!(
+                "pruned cache for {} bytes / {}",
+                manifest.source_gbz_bytes, manifest.source_gbz_sha256
+            );
+            Ok(())
+        }
+        "--help" | "-h" => {
+            println!("{usage}");
+            Ok(())
+        }
+        _ => Err(format!("unknown source-cache command '{command}'\n{usage}").into()),
+    }
+}
+
 fn print_help() {
     println!("pangenome-range research CLI");
     println!();
     println!("Usage:");
     println!("  pangenome-range encode <input.gbz> <output.pngr> [options]");
+    println!("  pangenome-range source-cache build <input.gbz> <cache-dir> [--rebuild]");
+    println!("  pangenome-range source-cache inspect <cache-dir>");
+    println!("  pangenome-range source-cache prune <cache-dir>");
     println!("  pangenome-range validate <input.pngr>");
     println!("  pangenome-range evaluate-integrity <input.pngr> [--report PATH]");
     println!("  pangenome-range fixtures export <directory>");
@@ -259,8 +315,16 @@ fn print_help() {
     println!("  --max-queued-bytes N       raw+compressed queue cap");
     println!("  --source-access MODE       disk|loaded (default: disk)");
     println!("  --scratch-dir PATH         source-cache and research scratch location");
+    println!("  --source-cache PATH        reuse an authenticated persistent source cache");
     println!("  --annotations PATH         populate the default named-locus index from GFF3");
     println!("  --annotation-sample NAME   bind GFF3 coordinates to this reference sample");
+    println!("  --annotation-feature-type TYPE  repeatable exact GFF3 type (default: gene)");
+    println!("  --reference-assembly ID    user-supplied reference assembly identifier");
+    println!("  --dataset-title TEXT       deterministic archive title metadata");
+    println!("  --dataset-description TEXT deterministic archive description metadata");
+    println!("  --source-uri URI           canonical source URI (never a local path)");
+    println!("  --annotation-release ID    user-supplied annotation release identifier");
+    println!("  --annotation-assembly ID   user-supplied annotation assembly identifier");
     println!("  --keep-partial             retain the sibling temp archive on failure");
     println!("  --progress auto|plain|json|off");
     println!("  --progress-interval-seconds N  chunk progress cadence (default: 5)");
@@ -690,6 +754,10 @@ fn validate_archive(args: &mut impl Iterator<Item = String>) -> AppResult<()> {
     Ok(())
 }
 
+#[allow(
+    clippy::too_many_lines,
+    reason = "keeping the flat CLI option table in one place makes the public contract auditable"
+)]
 fn encode(args: &mut impl Iterator<Item = String>) -> AppResult<()> {
     let usage = "usage: pangenome-range encode <input.gbz> <output.pngr> [options]";
     let first = args.next().ok_or(usage)?;
@@ -726,11 +794,33 @@ fn encode(args: &mut impl Iterator<Item = String>) -> AppResult<()> {
             "--scratch-dir" => {
                 options.scratch_dir = Some(PathBuf::from(option_value(args, &flag)?));
             }
+            "--source-cache" => {
+                options.source_cache = Some(PathBuf::from(option_value(args, &flag)?));
+            }
             "--annotations" => {
                 options.annotations = Some(PathBuf::from(option_value(args, &flag)?));
             }
             "--annotation-sample" => {
                 options.annotation_sample = Some(option_value(args, &flag)?);
+            }
+            "--annotation-feature-type" => {
+                options
+                    .annotation_feature_types
+                    .push(option_value(args, &flag)?);
+            }
+            "--reference-assembly" => {
+                options.reference_assembly = Some(option_value(args, &flag)?);
+            }
+            "--dataset-title" => options.dataset_title = Some(option_value(args, &flag)?),
+            "--dataset-description" => {
+                options.dataset_description = Some(option_value(args, &flag)?);
+            }
+            "--source-uri" => options.source_uri = Some(option_value(args, &flag)?),
+            "--annotation-release" => {
+                options.annotation_release = Some(option_value(args, &flag)?);
+            }
+            "--annotation-assembly" => {
+                options.annotation_assembly = Some(option_value(args, &flag)?);
             }
             "--report" => options.report = Some(PathBuf::from(option_value(args, &flag)?)),
             "--keep-partial" => options.keep_partial = true,

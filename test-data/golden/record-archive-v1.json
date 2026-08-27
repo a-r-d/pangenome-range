@@ -5,12 +5,22 @@
   "sourceBytes": 73920,
   "sourceSha256": "1d574ede7533150eb87f6837a7763d4eac120aa03f34877392ecdd53b0410788",
   "archive": "test-data/golden/record-archive-v1.pngr",
-  "archiveBytes": 8045,
-  "archiveSha256": "817de27e942b0126c3e0bb01848df0a3ea9dd31631c78943b8e838e8481d1047",
+  "archiveBytes": 8446,
+  "archiveSha256": "0f68b085409cc11664937c501156e6f5ee696b369b62b716b92bd4c6d8fb403c",
   "annotations": "test-data/golden/record-annotations-v1.gff3",
   "annotationSample": "CHM13",
   "features": {
-    "typeIds": ["named-loci-v1---", "summary-pyr-v1--"],
+    "typeIds": ["archive-meta-v1-", "named-loci-v1---", "summary-pyr-v1--"],
+    "provenance": {
+      "encoderPackageVersion": "0.1.0",
+      "formatImplementation": "pangenome-range-rust-v1",
+      "referenceSample": "CHM13",
+      "referenceAssembly": "GRCh38",
+      "datasetTitle": "Record-preserving v1 golden",
+      "sourceUri": "https://example.test/micb-kir3dl1.gbz",
+      "annotationRelease": "fixture-v1",
+      "annotationAssembly": "GRCh38"
+    },
     "namedLoci": {
       "recordCount": 4,
       "pageCount": 1,
@@ -42,5 +52,5 @@
   "end": 31351896,
   "windowSize": 16384,
   "codec": "zstd-3",
-  "command": "target/release/pangenome-range encode test-data/micb-kir3dl1.gbz test-data/golden/record-archive-v1.pngr --source-access loaded --sample CHM13 --contig chr6 --start 31350872 --end 31351896 --threads 1 --codec zstd-3 --annotations test-data/golden/record-annotations-v1.gff3 --annotation-sample CHM13 --report /tmp/record-archive-v1.report.json"
+  "command": "target/release/pangenome-range encode test-data/micb-kir3dl1.gbz test-data/golden/record-archive-v1.pngr --source-access loaded --sample CHM13 --contig chr6 --start 31350872 --end 31351896 --threads 1 --codec zstd-3 --annotations test-data/golden/record-annotations-v1.gff3 --annotation-sample CHM13 --reference-assembly GRCh38 --dataset-title 'Record-preserving v1 golden' --source-uri https://example.test/micb-kir3dl1.gbz --annotation-release fixture-v1 --annotation-assembly GRCh38 --report /tmp/record-archive-v1.report.json"
 }

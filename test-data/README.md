@@ -1,7 +1,8 @@
 # Test data
 
-The medium MHC fixture is intentionally committed for hermetic integration and
-benchmark smoke tests. Other third-party binary fixtures remain fetched locally.
+The tiny MICB/KIR3DL1 and medium MHC fixtures are intentionally committed for
+hermetic integration, conformance, and benchmark smoke tests. Ordinary tests do
+not fetch data or require network access.
 
 Fetch the Tier 1 fixture with:
 
@@ -15,8 +16,8 @@ Fetch the medium MHC integration fixture with:
 ./scripts/fetch-test-data.sh mhc
 ```
 
-Use `./scripts/fetch-test-data.sh all` to fetch and verify both. The tiny
-MICB/KIR3DL1 GBZ remains ignored by Git; `mhc-10.gbz` is tracked intentionally.
+Use `./scripts/fetch-test-data.sh all` to restore and verify both fixtures if a
+local copy is missing. Both GBZ files are tracked intentionally.
 
 The script downloads `micb-kir3dl1.gbz` from `jltsiren/gbz-base` commit
 `a5ed1ff3ddc402e230d1187afa438e05c8b3654e` and requires this SHA-256:
@@ -32,9 +33,10 @@ case, covering:
 - `GRCh38#chr6:31498145-31511124` (MICB)
 - `GRCh38#chr19:54816468-54830778` (KIR3DL1)
 
-Source and provenance links are recorded in `docs/UPSTREAM.md`. This fetch model
-keeps provenance explicit and lets us revisit redistribution/data-use terms
-before publishing any derived fixture.
+Source and provenance links are recorded in `docs/UPSTREAM.md`. The exact
+73,920-byte file is retained for test-only use under the upstream MIT license.
+Rust tests verify its checksum before opening it. The fetch script remains a
+checksum-verified restoration path.
 
 ## Medium MHC integration fixture
 

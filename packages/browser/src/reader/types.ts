@@ -19,6 +19,8 @@ export interface RangeSource {
     options?: RangeReadOptions,
   ): Promise<Uint8Array>;
   close?(): void | Promise<void>;
+  /** Strong immutable identity, when the source can expose one. */
+  strongIdentity?(): string | undefined;
 }
 
 export interface ChunkDecompressor {
@@ -55,6 +57,7 @@ export interface OpenPangenomeOptions {
   directoryCacheBytes?: number;
   payloadCacheBytes?: number;
   extensionCacheBytes?: number;
+  decodedFeatureCacheBytes?: number;
   payloadCoalescingGapBytes?: number;
   maxRootBytes?: number;
   maxChunkBytes?: number;
@@ -179,11 +182,51 @@ export interface ArchiveCacheStats {
   readonly payloadEntries: number;
   readonly extensionBytes: number;
   readonly extensionEntries: number;
+  readonly decodedFeatureBytes: number;
+  readonly decodedFeatureEntries: number;
 }
 
 export interface ArchiveCapabilities {
   readonly namedLoci: boolean;
   readonly multiscaleSummaries: boolean;
+}
+
+export interface ArchiveProvenance {
+  readonly sourceGbzBytes: bigint;
+  readonly sourceGbzSha256: string;
+  readonly encoderPackageVersion: string;
+  readonly formatImplementation: string;
+  readonly regionalWindowSize: number;
+  readonly constructionContext: number;
+  readonly payloadCodec: "none" | "zstd-1" | "zstd-3" | "zstd-6";
+  readonly haplotypeSemantics: HaplotypeSemantics;
+  readonly referenceSample?: string;
+  readonly referenceAssembly?: string;
+  readonly datasetTitle?: string;
+  readonly datasetDescription?: string;
+  readonly sourceUri?: string;
+  readonly annotationFilename?: string;
+  readonly annotationSha256?: string;
+  readonly annotationRelease?: string;
+  readonly annotationAssembly?: string;
+}
+
+export interface ArchiveInfo {
+  readonly formatVersion: number;
+  readonly haplotypeSemantics: HaplotypeSemantics;
+  readonly archiveBytes: bigint;
+  readonly strongRemoteIdentity?: string;
+  readonly references: readonly ReferenceDescriptor[];
+  readonly extensions: readonly string[];
+  readonly namedLoci: {
+    readonly state: "absent" | "present-empty" | "present-populated";
+    readonly recordCount: bigint;
+  };
+  readonly summaries?: {
+    readonly baseBinSpan: number;
+    readonly levelsByManifest: readonly number[];
+  };
+  readonly provenance?: ArchiveProvenance;
 }
 
 export interface FeatureRequestRange {
@@ -197,6 +240,7 @@ export interface FeatureQueryTrace {
   readonly requestRanges: readonly FeatureRequestRange[];
   readonly totalBytes: number;
   readonly cacheHits: number;
+  readonly pagesAvoidedByLimit: number;
   readonly integrityMs: number;
   readonly decompressionMs: number;
   readonly decodeMs: number;
@@ -268,9 +312,11 @@ export interface PangenomeArchive {
   readonly semantics: HaplotypeSemantics;
   references(): readonly ReferenceDescriptor[];
   capabilities(): ArchiveCapabilities;
+  info(options?: { signal?: AbortSignal }): Promise<ArchiveInfo>;
   searchLoci(query: LocusSearch): Promise<LocusSearchResult>;
   summary(query: SummaryQuery): Promise<SummaryResult>;
   query(query: RegionQuery): Promise<RegionResult>;
+  /** Streams tiles as decoding completes; progressive event order is intentionally unspecified. */
   queryTiles(query: RegionQuery): AsyncIterable<RegionTile>;
   cacheStats(): ArchiveCacheStats;
   clearCaches(): void;

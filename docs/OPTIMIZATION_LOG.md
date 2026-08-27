@@ -715,3 +715,50 @@ hashes and all 23 selected tile-local haplotype hashes matched the prior
 source-oracle-qualified archive. Mandatory structural validation passed before
 rename. Full evidence is retained in
 `results/2026-08-26-gencode-v50-whole-hprc/`.
+
+## 2026-08-26: persistent source reuse and release hardening accepted
+
+The default disk-backed source remains the bounded-memory production path. A
+new optional persistent form retains its raw project-owned component cache,
+per-256 KiB BLAKE3-128 integrity sidecars, and deterministic serialized sparse
+reference index behind an atomic, source-bound manifest. It does not store
+global haplotype occurrences or materialized paths. Persistent caches are
+explicitly built, inspected, and pruned; ephemeral caches keep their existing
+cleanup behavior.
+
+On the exact 5,492,627,216-byte HPRC source, the persistent cache occupied
+12,055,087,949 bytes. Cold creation took 130.040 seconds and peaked at 408,148
+KiB. Exact cold-ephemeral and warm-persistent populated GENCODE encodes produced
+the same 8,832,750,626 archive bytes and SHA-256
+`d1308fce7c5811d8ca8566e0c3ede3dc1b908c77eaa948ae2663edde17435be4`.
+
+| Measurement | Cold ephemeral | Warm persistent |
+| --- | ---: | ---: |
+| Whole wall | 612.870 s | 384.080 s |
+| Prebuild | 118.944 s | 21.685 s |
+| Time to first payload | 118.979 s | 21.725 s |
+| Source-cache build + fused SHA-256 | 55.941 s | 0 s |
+| Path-index build | 63.003 s | 0 s |
+| Input authentication | fused above | 21.026 s |
+| Peak RSS | 685,992 KiB | 621,808 KiB |
+
+Only the 97.259-second prebuild reduction is claimed as directly attributable
+to reuse. The cold run followed a memory-heavy source-oracle run and had slower
+payload, validation, and output-checksum I/O, so the full wall difference is
+not treated as a pure speedup.
+
+The final archive contains 157,466 GENCODE gene-name/stable-ID records, 591
+summary series, and 8,017 summary bins. All 363,105 physical payloads passed the
+mandatory pre-rename gate, followed by 9/9 independent graph and 58/58
+tile-local source-oracle comparisons. Peak RSS was 621,808 KiB. The provenance
+extension adds 677 bytes versus the prior populated archive; regional payload
+and viewer-index schemas remain unchanged.
+
+A deterministic cache-layout experiment rejected both tested alternatives:
+zstd-3 independent blocks used 36.52% of raw space but averaged 608.70
+microseconds per warm random 4 KiB read versus 3.22 microseconds for raw
+`pread`; warm `mmap` averaged 5.13 microseconds. The production cache therefore
+remains raw, byte-bounded, and integrity checked.
+
+Full evidence is retained in
+`results/2026-08-26-release-hardening-v1/`.

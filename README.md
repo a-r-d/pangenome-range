@@ -67,11 +67,28 @@ cargo run --release -- fixtures export test-data/conformance
 and sequence sections are streamed into an ephemeral indexed cache below
 `--scratch-dir` (or beside the output), read through a fixed 64 MiB block-cache
 budget, and removed when the command exits. The final whole-HPRC encode used
-11.92 GB of scratch for a 5.49 GB source and peaked at 608,060 KiB RSS instead
-of 8,775,928 KiB for the fully loaded baseline. Use
+11.92 GB of ephemeral scratch for a 5.49 GB source and peaked below 686,000 KiB
+RSS instead of 8,775,928 KiB for the fully loaded baseline. The final
+persistent-cache, populated GENCODE run peaked at 621,808 KiB RSS. Use
 `--source-access loaded` only for the fully deserialized correctness baseline.
 Plan scratch capacity before large runs; this cache is separate from the `.pngr`
 temporary sibling and does not contain a global occurrence table.
+
+Repeated experiments can retain that bounded source representation and its
+sparse real-reference coordinate index:
+
+```bash
+pangenome-range source-cache build input.gbz /data/cache/input-v1
+pangenome-range source-cache inspect /data/cache/input-v1
+pangenome-range encode input.gbz output.pngr --source-cache /data/cache/input-v1
+pangenome-range source-cache prune /data/cache/input-v1
+```
+
+Persistent caches are versioned, checksum-bound to the source, built through a
+temporary sibling, protected by an interprocess lock, and never deleted
+implicitly. Component blocks carry BLAKE3-128 and are verified lazily before
+use. A warm encode still hashes the GBZ to authenticate the cache, but
+does not rebuild the raw cache or traverse the reference paths again.
 
 Development checks:
 
@@ -131,6 +148,7 @@ const archive = await openPangenome({
   directoryCacheBytes: 1024 * 1024,
   payloadCacheBytes: 32 * 1024 * 1024,
   extensionCacheBytes: 8 * 1024 * 1024,
+  decodedFeatureCacheBytes: 16 * 1024 * 1024,
 });
 
 const result = await archive.query({
@@ -157,24 +175,27 @@ console.log(genes.hits, overview.bins);
 await archive.close();
 ```
 
-`queryTiles()` is the streaming primitive. It preserves anonymous haplotype
+`queryTiles()` is the streaming primitive. Tile events arrive as decoding
+completes, so progressive event order is intentionally unspecified. `query()`
+sorts semantic results deterministically before merging and hashing. It preserves anonymous haplotype
 evidence per source tile; `query()` merges only globally mergeable graph
 topology and keeps those tiles alongside the merged graph.
 
-Every newly encoded archive includes a multiscale summary pyramid and a
-named-locus index. Summaries are populated from exact tile-local counters.
-Named loci are populated only when the encoder receives an explicit GFF3:
+Every newly encoded archive includes a multiscale summary pyramid and bound
+provenance metadata. A named-locus index is included only when the encoder
+receives an explicit GFF3:
 
 ```bash
 pangenome-range encode graph.gbz graph.pngr \
-  --annotations genes.gff3 --annotation-sample GRCh38
+  --annotations genes.gff3 --annotation-sample GRCh38 \
+  --annotation-release v50 --annotation-assembly GRCh38.p14
 ```
 
 The named-locus index selects GFF3 `gene` features. It indexes their stable
 IDs, names, and declared aliases without duplicating the gene label for every
 transcript, exon, CDS, codon, or UTR child feature.
 
-Without `--annotations`, the named-locus index is present but empty. The
+Without `--annotations`, the named-locus extension is absent. The
 encoder never downloads or guesses an annotation assembly. Both features are
 skippable by readers that only need regional graph queries.
 

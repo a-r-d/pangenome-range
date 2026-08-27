@@ -156,4 +156,5 @@ rustc-ice-*.txt
 /test-data/*.gbz
 /test-data/*.part
 !/test-data/README.md
+!/test-data/micb-kir3dl1.gbz
 !/test-data/mhc-10.gbz

@@ -6,6 +6,7 @@ mod cost;
 mod extensions;
 mod features;
 mod integrity;
+mod metadata;
 mod regional;
 mod source;
 mod validation;
@@ -36,6 +37,11 @@ pub use features::{
     encode_summary_page, normalize_locus_key, validate_extension_page,
 };
 pub use integrity::{IntegrityEvaluation, IntegrityPlacementEstimate, evaluate_integrity_options};
+pub use metadata::{
+    ARCHIVE_METADATA_HEADER_BYTES, ARCHIVE_METADATA_MAGIC, ARCHIVE_METADATA_TYPE_ID,
+    ARCHIVE_METADATA_VERSION, ArchiveMetadata, MAX_ARCHIVE_METADATA_BYTES, decode_archive_metadata,
+    encode_archive_metadata,
+};
 pub use regional::{
     CONSTRUCTION_CONTEXT, MAX_DECODED_OCCURRENCES_PER_TILE, PackedEdge, PackedGbwtRecord,
     REGION_MAGIC, REGION_VERSION, ReconstructedTraversals, RecordRegionalPayload,

@@ -182,6 +182,14 @@ function delayedArchive(): PangenomeArchive {
     semantics: "anonymous-distinct-weighted-tile-paths",
     references: () => [],
     capabilities: () => ({ namedLoci: false, multiscaleSummaries: false }),
+    info: async () => ({
+      formatVersion: 1,
+      haplotypeSemantics: "anonymous-distinct-weighted-tile-paths",
+      archiveBytes: 0n,
+      references: [],
+      extensions: [],
+      namedLoci: { state: "absent", recordCount: 0n },
+    }),
     searchLoci: async () => {
       throw new Error("not implemented by viewer test archive");
     },
@@ -205,6 +213,8 @@ function delayedArchive(): PangenomeArchive {
       payloadEntries: 0,
       extensionBytes: 0,
       extensionEntries: 0,
+      decodedFeatureBytes: 0,
+      decodedFeatureEntries: 0,
     }),
     clearCaches: () => undefined,
     close: () => undefined,

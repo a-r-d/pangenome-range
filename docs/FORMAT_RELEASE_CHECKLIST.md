@@ -61,7 +61,7 @@ declaring stable v1.
 | V1-Z01 | Stored payload lengths match exactly. | Both decompressors. | PASS |
 | V1-Z02 | Compressed payload is exactly one standard zstd frame with declared content size. | Rust/TypeScript single-frame and trailing-byte tests. | PASS |
 | V1-Z03 | Dictionaries, skippable/concatenated frames, reserved bits, truncation, and mismatched size reject. | Rust/TypeScript zstd adversarial matrix. | PASS |
-| V1-Z04 | Optional zstd content checksum is validated. | Decoder-library behavior test. | OPEN |
+| V1-Z04 | Zstd content-checksum frames reject under the explicit v1 policy. | Shared valid and corrupt checksum-bearing frame fixtures plus both decoder tests. | PASS |
 | V1-P01 | Regional prefix is exactly 128 bytes with `PNGRGN01`, version 1, flags 1, semantics 2, and zero reserved bytes. | Golden raw payload plus version/flags/reserved tests. | PASS |
 | V1-P02 | Counts, core, context 100, and reference anchor fields occupy the specified offsets. | Machine manifest and golden raw round trip. | PASS |
 | V1-P03 | Required reference strings are nonempty UTF-8 and `fragment_start + query_offset == core_start`. | Rust/TypeScript regional decoders. | PASS |
@@ -76,7 +76,7 @@ declaring stable v1.
 | V1-N02 | Handle packing is `node_id * 2 + reverse_bit`; zero/overflow reject. | Rust/TypeScript oriented-handle tests. | PASS |
 | V1-E01 | Edges are handle pairs in canonical bidirected orientation. | Canonical-orientation tests and malformed payload matrix. | PASS |
 | V1-E02 | Edge source is local; target may be nonlocal for boundary topology. | Boundary-edge activation test. | PASS |
-| V1-E03 | Edge tuples are strictly ordered and duplicate-free; decoders do not normalize malformed input. | Rust/TypeScript edge-order tests. | OPEN |
+| V1-E03 | Edge tuples are strictly ordered and duplicate-free; decoders do not normalize malformed input. | Shared descending/duplicate edge fixtures consumed by Rust and TypeScript. | PASS |
 | V1-G01 | `record_count == node_count * 2`; records are strictly increasing, local, nonzero-occurrence handles. | Both decoders and corrupt-count tests. | PASS |
 | V1-G02 | Sum of record occurrences equals header total and does not exceed 16,777,216. | Exact maximum/next-value Rust test and huge-count corrupt fixture. | PASS |
 | V1-G03 | Base-128 integers are unsigned, little-endian, terminating, and overflow-checked. | Malformed-varint fixture and fuzz target. | PASS |
@@ -101,7 +101,7 @@ declaring stable v1.
 | V1-M03 | Context selection uses the real reference interval and merged topology. | Rust/TypeScript canonical-hash conformance. | PASS |
 | V1-M04 | Anonymous evidence remains per tile and is never stitched or named. | Public types, semantic label, viewer tests. | PASS |
 | V1-M05 | Each physical tile is included once; halo evidence is not double-counted. | Physical-range deduplication and keyed payload-cache tests. | PASS |
-| V1-M06 | Merge result is independent of request completion order. | Shuffled tile-arrival hash test. | OPEN |
+| V1-M06 | Merge result is independent of request completion order. | Opposite delayed-decompressor schedules preserve ordered tiles, graph hash, tile hashes, and reference traversal; duplicate logical physical-payload test. | PASS |
 | V1-X01 | Graph hash uses the exact v1 domain, integer/string encoding, sorting, graph/reference fields. | Shared graph hash in manifest consumed by Rust and TypeScript. | PASS |
 | V1-X02 | Tile hash uses exact provenance, weights, orientation, and v1 ordering. | Shared tile-local hash in manifest consumed by Rust and TypeScript. | PASS |
 
@@ -119,7 +119,7 @@ declaring stable v1.
 | V1-HR3 | A 200 response is accepted only below an explicit full-response cap; large objects reject. | HTTP fallback tests. | PASS |
 | V1-HR4 | Public origin exposes range/identity headers and prevents transformation. | Probe script and hosting documentation; live origin is not a format-freeze prerequisite. | PASS |
 | V1-DET1 | Same bytes/options/locks/encoder yield byte-identical output across worker counts. | MHC t1/t4 exact SHA-256 and conformance export repeat. | PASS |
-| V1-DET2 | Request/worker completion order cannot affect directory, payload, merge, or hash order. | Encoder t1/t4 plus shuffled reader test. | OPEN |
+| V1-DET2 | Request/worker completion order cannot affect directory, payload, merge, or hash order. | Forced reverse worker completion in MHC t1/t4 plus opposite delayed reader schedules. | PASS |
 | V1-VER1 | Pre-stable incompatible changes replace v1 without compatibility decoding; old research archives regenerate. | Version-policy tests and release notes. | PASS |
 
 ## Release-policy and whole-source gates
@@ -128,12 +128,12 @@ declaring stable v1.
 | --- | --- | --- |
 | Extension policy | ADR 0001; optional/required behavior implemented in Rust, TypeScript, spec, and fixtures. | PASS |
 | Payload integrity | ADR 0002; BLAKE3-128 directory field, full-HPRC occupancy/scan model, MHC encoder and TypeScript query measurements. | PASS |
-| Provenance | Embedded and identity-bound, or explicitly external with a secure binding. | OPEN |
-| Timing integrity | Schema-3 encoder report plus RC retained result; output SHA-256 is timed and worker CPU is separate. | PASS |
+| Provenance | `archive-meta-v1-` binary schema, Rust/TypeScript `info()`, extension BLAKE3, source/annotation SHA-256, golden and corrupt shared fixtures. | PASS |
+| Timing integrity | Schema-7 encoder report plus RC retained result; source-cache and annotation stages, output SHA-256, wall phases, and aggregate worker CPU are distinct. | PASS |
 | Atomic validation | Standard gate checks ranges, BLAKE3, exact decompression, and structural decode before rename; full/source modes remain distinct. | PASS |
-| Whole HPRC | Candidate validated 363,105 payloads and passed 9/9 graph plus 9/9 tile-set source-oracle queries; MHC t1/t4 proves worker determinism. | PASS |
-| Source RAM | Project-owned disk source whole-HPRC run peaked at 608,060 KiB with byte-identical graph payloads; loaded mode remains an oracle. | PASS |
-| Default viewer indexes | Bounded MHC size/determinism and annotated cross-language golden pass; whole-HPRC regeneration remains required before freeze. | OPEN |
+| Whole HPRC | Candidate SHA `d1308fce...17435be4` validated 363,105 payloads and passed 9/9 graph plus 58/58 tile-local source-oracle comparisons; MHC t1/t4 proves worker determinism. | PASS |
+| Source RAM | Project-owned persistent disk source whole-HPRC run peaked at 621,808 KiB; cold ephemeral and warm persistent modes produced byte-identical populated archives, while loaded mode remains the independent oracle. | PASS |
+| Default viewer indexes | Whole-HPRC report retains 363,105 validated payloads, 591 summary series, 8,017 bins, 157,466 named-locus records, 9/9 graph and 58/58 tile comparisons. | PASS |
 | 1000GP responsibility | Two-chunk pilot remained at 8,776,080 KiB RSS; whole 1000GP is explicitly not authorized. | PASS |
 
 Stable v1 is blocked while any `OPEN` row above is release-critical. A row may

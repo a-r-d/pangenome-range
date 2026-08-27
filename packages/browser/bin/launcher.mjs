@@ -51,7 +51,18 @@ export function detectLinuxLibc(report = process.report) {
   return typeof header?.glibcVersionRuntime === "string" &&
     header.glibcVersionRuntime.length > 0
     ? "gnu"
-    : "musl";
+    : undefined;
+}
+
+function explicitLinuxLibc(libc, env = process.env) {
+  const value = libc ?? env.PANGENOME_RANGE_LIBC;
+  if (value === undefined || value === "") return undefined;
+  if (value !== "gnu" && value !== "musl") {
+    throw new NativeCliError(
+      `Invalid Linux libc override ${JSON.stringify(value)}; PANGENOME_RANGE_LIBC must be gnu or musl.`,
+    );
+  }
+  return value;
 }
 
 export function selectPlatformPackage({
@@ -59,10 +70,20 @@ export function selectPlatformPackage({
   arch = process.arch,
   libc,
   report = process.report,
+  env = process.env,
 } = {}) {
+  const linuxLibc =
+    platform === "linux"
+      ? (explicitLinuxLibc(libc, env) ?? detectLinuxLibc(report))
+      : undefined;
+  if (platform === "linux" && linuxLibc === undefined) {
+    throw new NativeCliError(
+      `Could not determine Linux libc for ${platform}-${arch}. Set PANGENOME_RANGE_LIBC=gnu or PANGENOME_RANGE_LIBC=musl explicitly.`,
+    );
+  }
   const target =
     platform === "linux"
-      ? `${platform}-${arch}-${libc ?? detectLinuxLibc(report)}`
+      ? `${platform}-${arch}-${linuxLibc}`
       : `${platform}-${arch}`;
   const selected = PLATFORM_PACKAGES[target];
   if (!selected) {
@@ -83,10 +104,60 @@ export async function resolveNativeCli({
   arch,
   libc,
   report,
+  env = process.env,
   resolve = createRequire(import.meta.url).resolve,
 } = {}) {
   const mainManifest = await readJson(mainPackageJson);
-  const selected = selectPlatformPackage({ platform, arch, libc, report });
+  const actualPlatform = platform ?? process.platform;
+  const actualArch = arch ?? process.arch;
+  let selected;
+  const override =
+    actualPlatform === "linux" ? explicitLinuxLibc(libc, env) : undefined;
+  const detected =
+    actualPlatform === "linux" && override === undefined
+      ? detectLinuxLibc(report)
+      : undefined;
+  if (
+    actualPlatform === "linux" &&
+    override === undefined &&
+    detected === undefined
+  ) {
+    const candidates = ["gnu", "musl"].map((candidate) =>
+      selectPlatformPackage({
+        platform: actualPlatform,
+        arch: actualArch,
+        libc: candidate,
+        env,
+      }),
+    );
+    const installed = [];
+    for (const candidate of candidates) {
+      try {
+        installed.push({
+          selected: candidate,
+          manifestPath: resolve(`${candidate.packageName}/package.json`),
+        });
+      } catch {
+        // Optional packages for other libc families are normally absent.
+      }
+    }
+    if (installed.length !== 1) {
+      throw new NativeCliError(
+        installed.length === 0
+          ? `Could not determine Linux libc and neither exact-version optional package (${candidates.map(({ packageName }) => packageName).join(", ")}) is installed. Set PANGENOME_RANGE_LIBC=gnu or musl, then reinstall pangenome-range without --omit=optional.`
+          : `Could not determine Linux libc and both GNU and musl optional packages are installed. Set PANGENOME_RANGE_LIBC=gnu or musl explicitly.`,
+      );
+    }
+    selected = installed[0].selected;
+  } else {
+    selected = selectPlatformPackage({
+      platform: actualPlatform,
+      arch: actualArch,
+      libc: override ?? detected,
+      report,
+      env,
+    });
+  }
   let nativeManifestPath;
   try {
     nativeManifestPath = resolve(`${selected.packageName}/package.json`);

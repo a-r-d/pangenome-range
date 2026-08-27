@@ -1,0 +1,59 @@
+{
+  "schemaVersion": 1,
+  "manifest": {
+    "magic": "pangenome-range-source-cache",
+    "cacheFormatVersion": 1,
+    "implementationVersion": "0.1.0",
+    "sourceGbzBytes": 5492627216,
+    "sourceGbzSha256": "11d6047f79575ffb83757462484bad134ed20928bd2c8171ec52e35a54976e2b",
+    "gbzSerializationVersion": 1,
+    "gbwtSerializationVersion": 5,
+    "sequencesSerializationVersion": 3,
+    "recordCount": 425853421,
+    "recordBytes": 3393944577,
+    "recordOffsetBytes": 3406827376,
+    "sequenceCount": 212926710,
+    "sequenceBytes": 3417672786,
+    "sequenceOffsetBytes": 1703413688,
+    "referenceMetadataSha256": "6ee0cb2d44a51b6b9b6efa413f0390447dba5704a9b52425e97b7614c249fe0c",
+    "pathIndexInterval": 1000,
+    "pathIndexBytes": 132492865,
+    "pathIndexSha256": "9587e8e8973b68d12a04d5f50a8f60548246af1ffca11ea0412fd86cdbda9fae"
+  },
+  "coldPersistentBuild": {
+    "wallMs": 130040,
+    "peakRssKiB": 408148,
+    "cacheBytes": 12055087949
+  },
+  "coldEphemeralEncode": {
+    "wholeWallMs": 612870,
+    "sourceCacheBuildAndChecksumWallMs": 55940.755228,
+    "pathIndexWallMs": 63003.461106,
+    "prebuildWallMs": 118944.361267,
+    "timeToFirstPayloadMs": 118979.202445,
+    "peakRssKiB": 685992,
+    "ephemeralCacheBytes": 11922586123,
+    "archiveSha256": "d1308fce7c5811d8ca8566e0c3ede3dc1b908c77eaa948ae2663edde17435be4"
+  },
+  "warmPersistentEncode": {
+    "wholeWallMs": 384080,
+    "sourceAuthenticationWallMs": 21025.91711,
+    "cacheOpenWallMs": 652.627872,
+    "pathIndexDeserializeWallMs": 647.669859,
+    "prebuildWallMs": 21685.454288,
+    "timeToFirstPayloadMs": 21725.342954,
+    "peakRssKiB": 621808,
+    "archiveSha256": "d1308fce7c5811d8ca8566e0c3ede3dc1b908c77eaa948ae2663edde17435be4"
+  },
+  "directlyAttributableWarmPrebuildSavingMs": 97258.906979,
+  "archiveBytesIdentical": true,
+  "boundedLayoutExperiment": {
+    "sampleRawBytes": 536870912,
+    "zstd3Bytes": 196076877,
+    "zstd3Ratio": 0.3652216438,
+    "rawPreadMeanUs": 3.21733,
+    "rawMmapMeanUs": 5.128662,
+    "zstdIndependentBlockMeanUs": 608.695579,
+    "decision": "retain raw pread cache; neither mmap nor compressed blocks is a measured Pareto improvement"
+  }
+}

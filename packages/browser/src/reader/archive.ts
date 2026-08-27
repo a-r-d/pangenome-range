@@ -2,6 +2,9 @@ import { blake3 } from "@noble/hashes/blake3.js";
 import { decompress as fzstdDecompress } from "fzstd";
 import { assembleCanonicalGraph, canonicalGraphHash } from "./canonical.js";
 import {
+  ARCHIVE_METADATA_TYPE_ID,
+  type DecodedArchiveMetadata,
+  decodeArchiveMetadata,
   decodeLocusPage,
   decodeNamedLociDescriptor,
   decodeSummaryDescriptor,
@@ -12,14 +15,16 @@ import {
   normalizeLocusKey,
   SUMMARY_PYRAMID_TYPE_ID,
   type SummaryPyramidDescriptor,
-  type SummarySeriesDescriptor,
   selectLocusPages,
+  selectSummarySeries,
 } from "./features.js";
 import { decodeRegionalPayload } from "./regional.js";
 import { BlobRangeSource, HttpRangeSource } from "./sources.js";
 import type {
   ArchiveCacheStats,
   ArchiveCapabilities,
+  ArchiveInfo,
+  ArchiveProvenance,
   ChunkDecompressor,
   FeatureQueryTrace,
   FeatureRequestRange,
@@ -51,6 +56,8 @@ const DIRECTORY_ENTRY_CAPACITY = 72;
 const DEFAULT_DIRECTORY_CACHE_BYTES = 1024 * 1024;
 const DEFAULT_PAYLOAD_CACHE_BYTES = 32 * 1024 * 1024;
 const DEFAULT_EXTENSION_CACHE_BYTES = 8 * 1024 * 1024;
+const DEFAULT_DECODED_FEATURE_CACHE_BYTES = 16 * 1024 * 1024;
+const FEATURE_SEARCH_CONCURRENCY = 4;
 const DEFAULT_MAX_ROOT_BYTES = 16 * 1024 * 1024;
 const MAX_EXTENSION_DIRECTORY_BYTES = 1024 * 1024;
 const DEFAULT_MAX_CHUNK_BYTES = 64 * 1024 * 1024;
@@ -247,6 +254,7 @@ interface MutableFeatureTrace {
   integrityMs: number;
   decompressionMs: number;
   decodeMs: number;
+  pagesAvoidedByLimit: number;
 }
 
 function featureTraceState(): MutableFeatureTrace {
@@ -258,6 +266,7 @@ function featureTraceState(): MutableFeatureTrace {
     integrityMs: 0,
     decompressionMs: 0,
     decodeMs: 0,
+    pagesAvoidedByLimit: 0,
   };
 }
 
@@ -273,6 +282,7 @@ function finishFeatureTrace(state: MutableFeatureTrace): FeatureQueryTrace {
     integrityMs: state.integrityMs,
     decompressionMs: state.decompressionMs,
     decodeMs: state.decodeMs,
+    pagesAvoidedByLimit: state.pagesAvoidedByLimit,
   };
 }
 
@@ -613,6 +623,7 @@ function decodeExtensionDirectory(
       throw corrupt("invalid extension entry");
     }
     const known =
+      typeIdText(typeId) === ARCHIVE_METADATA_TYPE_ID ||
       typeIdText(typeId) === NAMED_LOCI_TYPE_ID ||
       typeIdText(typeId) === SUMMARY_PYRAMID_TYPE_ID;
     if ((flags & 1) !== 0 && !known) {
@@ -694,25 +705,6 @@ function validateSummaryDescriptor(
   }
 }
 
-function selectedSummaryBinCount(
-  series: SummarySeriesDescriptor,
-  queryStart: bigint,
-  queryEnd: bigint,
-): number {
-  const seriesEnd = checkedAdd(
-    series.firstBinStart,
-    checkedMultiply(series.binCount, series.binSpan, "summary series end"),
-    "summary series end",
-  );
-  const start =
-    queryStart > series.firstBinStart ? queryStart : series.firstBinStart;
-  const end = queryEnd < seriesEnd ? queryEnd : seriesEnd;
-  if (start >= end) return 0;
-  const first = (start - series.firstBinStart) / series.binSpan;
-  const last = (end - 1n - series.firstBinStart) / series.binSpan;
-  return safeNumber(last - first + 1n, "selected summary bin count");
-}
-
 function validateSummaryQuery(query: SummaryQuery): void {
   if (query.sample.length === 0 || query.contig.length === 0) {
     throw new TypeError("summary sample and contig must not be empty");
@@ -736,6 +728,54 @@ function validateSummaryQuery(query: SummaryQuery): void {
 
 function hex(bytes: Uint8Array): string {
   return [...bytes].map((byte) => byte.toString(16).padStart(2, "0")).join("");
+}
+
+function archiveProvenance(
+  metadata: DecodedArchiveMetadata,
+): ArchiveProvenance {
+  return {
+    sourceGbzBytes: metadata.sourceGbzBytes,
+    sourceGbzSha256: hex(metadata.sourceGbzSha256),
+    encoderPackageVersion: metadata.encoderPackageVersion,
+    formatImplementation: metadata.formatImplementation,
+    regionalWindowSize: safeNumber(
+      metadata.regionalWindowSize,
+      "regional window size",
+    ),
+    constructionContext: safeNumber(
+      metadata.constructionContext,
+      "construction context",
+    ),
+    payloadCodec: codecLabel(metadata.payloadCodec),
+    haplotypeSemantics: "anonymous-distinct-weighted-tile-paths",
+    ...(metadata.referenceSample === undefined
+      ? {}
+      : { referenceSample: metadata.referenceSample }),
+    ...(metadata.referenceAssembly === undefined
+      ? {}
+      : { referenceAssembly: metadata.referenceAssembly }),
+    ...(metadata.datasetTitle === undefined
+      ? {}
+      : { datasetTitle: metadata.datasetTitle }),
+    ...(metadata.datasetDescription === undefined
+      ? {}
+      : { datasetDescription: metadata.datasetDescription }),
+    ...(metadata.sourceUri === undefined
+      ? {}
+      : { sourceUri: metadata.sourceUri }),
+    ...(metadata.annotationFilename === undefined
+      ? {}
+      : { annotationFilename: metadata.annotationFilename }),
+    ...(metadata.annotationSha256 === undefined
+      ? {}
+      : { annotationSha256: hex(metadata.annotationSha256) }),
+    ...(metadata.annotationRelease === undefined
+      ? {}
+      : { annotationRelease: metadata.annotationRelease }),
+    ...(metadata.annotationAssembly === undefined
+      ? {}
+      : { annotationAssembly: metadata.annotationAssembly }),
+  };
 }
 
 function decodeDirectoryPage(
@@ -936,6 +976,11 @@ function zstdFrameMetadata(compressed: Uint8Array): {
   if ((descriptor & 0x18) !== 0) {
     throw corrupt("zstd frame uses reserved descriptor bits");
   }
+  if ((descriptor & 0x04) !== 0) {
+    throw corrupt(
+      "zstd content-checksum frames are not supported in file-format v1",
+    );
+  }
   const singleSegment = (descriptor & 0x20) !== 0;
   const dictionaryFlag = descriptor & 0x03;
   if (dictionaryFlag !== 0) {
@@ -988,12 +1033,6 @@ function zstdFrameMetadata(compressed: Uint8Array): {
     }
     position += encodedBlockSize;
   }
-  if ((descriptor & 0x04) !== 0) {
-    if (position + 4 > compressed.byteLength) {
-      throw corrupt("zstd content checksum is truncated");
-    }
-    position += 4;
-  }
   return { contentSize, encodedLength: position };
 }
 
@@ -1009,6 +1048,7 @@ class ArchiveReader implements PangenomeArchive {
   readonly #directoryCache: ByteCache;
   readonly #payloadCache: ByteCache;
   readonly #extensionCache: ByteCache;
+  readonly #decodedFeatureCache: ByteCache;
   readonly #decompressor: ChunkDecompressor;
   readonly #maxChunkBytes: number;
   readonly #payloadCoalescingGapBytes: number;
@@ -1016,6 +1056,7 @@ class ArchiveReader implements PangenomeArchive {
   readonly #openDependencyRounds: number;
   #namedLociDescriptor: NamedLociDescriptor | undefined;
   #summaryDescriptor: SummaryPyramidDescriptor | undefined;
+  #archiveMetadata: DecodedArchiveMetadata | undefined;
   #closed = false;
 
   constructor(
@@ -1046,6 +1087,9 @@ class ArchiveReader implements PangenomeArchive {
     this.#extensionCache = new ByteCache(
       options.extensionCacheBytes ?? DEFAULT_EXTENSION_CACHE_BYTES,
     );
+    this.#decodedFeatureCache = new ByteCache(
+      options.decodedFeatureCacheBytes ?? DEFAULT_DECODED_FEATURE_CACHE_BYTES,
+    );
     this.#decompressor = options.decompressor ?? new FzstdDecompressor();
     this.#maxChunkBytes = options.maxChunkBytes ?? DEFAULT_MAX_CHUNK_BYTES;
     this.#payloadCoalescingGapBytes =
@@ -1074,6 +1118,67 @@ class ArchiveReader implements PangenomeArchive {
     };
   }
 
+  async info(options: { signal?: AbortSignal } = {}): Promise<ArchiveInfo> {
+    this.#assertOpen();
+    options.signal?.throwIfAborted();
+    const namedEntry = this.#extension(NAMED_LOCI_TYPE_ID);
+    const summaryEntry = this.#extension(SUMMARY_PYRAMID_TYPE_ID);
+    const metadataEntry = this.#extension(ARCHIVE_METADATA_TYPE_ID);
+    const [named, summaries, metadata] = await Promise.all([
+      namedEntry === undefined
+        ? undefined
+        : this.#loadNamedLociDescriptor(options.signal),
+      summaryEntry === undefined
+        ? undefined
+        : this.#loadSummaryDescriptor(options.signal),
+      metadataEntry === undefined
+        ? undefined
+        : this.#loadArchiveMetadata(options.signal),
+    ]);
+    const levelsByManifest = summaries?.series.reduce<number[]>(
+      (levels, series) => {
+        levels[series.manifestIndex] = Math.max(
+          levels[series.manifestIndex] ?? 0,
+          series.level + 1,
+        );
+        return levels;
+      },
+      this.#manifests.map(() => 0),
+    );
+    const strongRemoteIdentity = this.#source.strongIdentity?.();
+    return {
+      formatVersion: this.formatVersion,
+      haplotypeSemantics: this.semantics,
+      archiveBytes: this.#sourceSize,
+      ...(strongRemoteIdentity === undefined ? {} : { strongRemoteIdentity }),
+      references: this.references(),
+      extensions: this.#extensions.map((entry) => typeIdText(entry.typeId)),
+      namedLoci: {
+        state:
+          named === undefined
+            ? "absent"
+            : named.recordCount === 0n
+              ? "present-empty"
+              : "present-populated",
+        recordCount: named?.recordCount ?? 0n,
+      },
+      ...(summaries === undefined || levelsByManifest === undefined
+        ? {}
+        : {
+            summaries: {
+              baseBinSpan: safeNumber(
+                summaries.baseBinSpan,
+                "summary base bin span",
+              ),
+              levelsByManifest,
+            },
+          }),
+      ...(metadata === undefined
+        ? {}
+        : { provenance: archiveProvenance(metadata) }),
+    };
+  }
+
   async searchLoci(query: LocusSearch): Promise<LocusSearchResult> {
     this.#assertOpen();
     query.signal?.throwIfAborted();
@@ -1093,66 +1198,76 @@ class ArchiveReader implements PangenomeArchive {
     const trace = instrument ? featureTraceState() : undefined;
     const descriptor = await this.#loadNamedLociDescriptor(query.signal, trace);
     const candidates = selectLocusPages(descriptor, normalizedQuery, mode);
-    const decoded = await Promise.all(
-      candidates.map(async (page) => {
-        const raw = await this.#readFeatureDecoded(
-          page.storage,
-          "extension-page",
-          query.signal,
-          trace,
-        );
-        const started = performance.now();
-        const records = decodeFeature(() => decodeLocusPage(raw));
-        if (
-          BigInt(records.length) !== page.recordCount ||
-          records.at(0)?.normalizedKey !== page.firstKey ||
-          records.at(-1)?.normalizedKey !== page.lastKey
-        ) {
-          throw corrupt("named-locus page differs from its descriptor");
-        }
-        if (trace !== undefined) trace.decodeMs += performance.now() - started;
-        return records;
-      }),
-    );
+    const decodePage = async (page: (typeof candidates)[number]) => {
+      const raw = await this.#readFeatureDecoded(
+        page.storage,
+        "extension-page",
+        query.signal,
+        trace,
+      );
+      const started = performance.now();
+      const records = decodeFeature(() => decodeLocusPage(raw));
+      if (
+        BigInt(records.length) !== page.recordCount ||
+        records.at(0)?.normalizedKey !== page.firstKey ||
+        records.at(-1)?.normalizedKey !== page.lastKey
+      ) {
+        throw corrupt("named-locus page differs from its descriptor");
+      }
+      if (trace !== undefined) trace.decodeMs += performance.now() - started;
+      return records;
+    };
     const hits: LocusHit[] = [];
     let truncated = false;
-    outer: for (const records of decoded) {
-      for (const record of records) {
-        const nameMatches =
-          mode === "exact"
-            ? record.normalizedKey === normalizedQuery
-            : record.normalizedKey.startsWith(normalizedQuery);
-        if (
-          !nameMatches ||
-          (query.sample !== undefined && record.sample !== query.sample) ||
-          (query.contig !== undefined && record.contig !== query.contig)
-        ) {
-          continue;
+    let fetchedPages = 0;
+    outer: while (fetchedPages < candidates.length) {
+      const batch = candidates.slice(
+        fetchedPages,
+        fetchedPages + FEATURE_SEARCH_CONCURRENCY,
+      );
+      const decoded = await Promise.all(batch.map(decodePage));
+      fetchedPages += batch.length;
+      for (const records of decoded) {
+        for (const record of records) {
+          const nameMatches =
+            mode === "exact"
+              ? record.normalizedKey === normalizedQuery
+              : record.normalizedKey.startsWith(normalizedQuery);
+          if (
+            !nameMatches ||
+            (query.sample !== undefined && record.sample !== query.sample) ||
+            (query.contig !== undefined && record.contig !== query.contig)
+          ) {
+            continue;
+          }
+          if (hits.length === limit) {
+            truncated = true;
+            break outer;
+          }
+          hits.push({
+            matchedName: record.matchedName,
+            displayName: record.displayName,
+            stableId: record.stableId,
+            featureType: record.featureType,
+            reference: {
+              sample: record.sample,
+              contig: record.contig,
+              start: safeNumber(record.start, "locus start"),
+              end: safeNumber(record.end, "locus end"),
+              orientation: "forward",
+            },
+            strand:
+              record.strand === 1
+                ? "forward"
+                : record.strand === 2
+                  ? "reverse"
+                  : "unknown",
+          });
         }
-        if (hits.length === limit) {
-          truncated = true;
-          break outer;
-        }
-        hits.push({
-          matchedName: record.matchedName,
-          displayName: record.displayName,
-          stableId: record.stableId,
-          featureType: record.featureType,
-          reference: {
-            sample: record.sample,
-            contig: record.contig,
-            start: safeNumber(record.start, "locus start"),
-            end: safeNumber(record.end, "locus end"),
-            orientation: "forward",
-          },
-          strand:
-            record.strand === 1
-              ? "forward"
-              : record.strand === 2
-                ? "reverse"
-                : "unknown",
-        });
       }
+    }
+    if (trace !== undefined && truncated) {
+      trace.pagesAvoidedByLimit = candidates.length - fetchedPages;
     }
     const completedTrace = trace && finishFeatureTrace(trace);
     if (typeof query.trace === "function" && completedTrace !== undefined) {
@@ -1204,33 +1319,15 @@ class ArchiveReader implements PangenomeArchive {
         `archive has no reference interval for ${query.sample}#${query.contig}:${query.start}-${query.end}`,
       );
     }
-    const levelGroups = new Map<number, SummarySeriesDescriptor[]>();
-    for (const series of descriptor.series) {
-      if (manifestIndexes.some(({ index }) => index === series.manifestIndex)) {
-        const group = levelGroups.get(series.level) ?? [];
-        group.push(series);
-        levelGroups.set(series.level, group);
-      }
-    }
-    const levels = [...levelGroups.keys()].sort((left, right) => left - right);
-    let selected = levelGroups.get(levels.at(-1) ?? -1) ?? [];
-    for (const level of levels) {
-      const candidate = levelGroups.get(level) ?? [];
-      const count = candidate.reduce(
-        (total, series) =>
-          total + selectedSummaryBinCount(series, queryStart, queryEnd),
-        0,
-      );
-      if (count <= maxBins) {
-        selected = candidate;
-        break;
-      }
-    }
-    if (selected.length !== manifestIndexes.length) {
-      throw corrupt(
-        "summary descriptor does not cover the selected references",
-      );
-    }
+    const selected = decodeFeature(() =>
+      selectSummarySeries(
+        descriptor,
+        manifestIndexes.map(({ index }) => index),
+        queryStart,
+        queryEnd,
+        maxBins,
+      ),
+    );
     const pages = await Promise.all(
       selected.map(async (series) => {
         const raw = await this.#readFeatureDecoded(
@@ -1264,11 +1361,23 @@ class ArchiveReader implements PangenomeArchive {
             sample: manifest.sample,
             contig: manifest.contig,
             start: safeNumber(
-              binStart > manifest.start ? binStart : manifest.start,
+              binStart > manifest.start
+                ? binStart > queryStart
+                  ? binStart
+                  : queryStart
+                : manifest.start > queryStart
+                  ? manifest.start
+                  : queryStart,
               "summary bin start",
             ),
             end: safeNumber(
-              binEnd < manifest.end ? binEnd : manifest.end,
+              binEnd < manifest.end
+                ? binEnd < queryEnd
+                  ? binEnd
+                  : queryEnd
+                : manifest.end < queryEnd
+                  ? manifest.end
+                  : queryEnd,
               "summary bin end",
             ),
             orientation: "forward",
@@ -1408,6 +1517,8 @@ class ArchiveReader implements PangenomeArchive {
       payloadEntries: this.#payloadCache.entries,
       extensionBytes: this.#extensionCache.bytes,
       extensionEntries: this.#extensionCache.entries,
+      decodedFeatureBytes: this.#decodedFeatureCache.bytes,
+      decodedFeatureEntries: this.#decodedFeatureCache.entries,
     };
   }
 
@@ -1416,8 +1527,10 @@ class ArchiveReader implements PangenomeArchive {
     this.#directoryCache.clear();
     this.#payloadCache.clear();
     this.#extensionCache.clear();
+    this.#decodedFeatureCache.clear();
     this.#namedLociDescriptor = undefined;
     this.#summaryDescriptor = undefined;
+    this.#archiveMetadata = undefined;
   }
 
   async close(): Promise<void> {
@@ -1457,6 +1570,24 @@ class ArchiveReader implements PangenomeArchive {
     if (trace !== undefined) trace.decodeMs += performance.now() - started;
     this.#namedLociDescriptor = descriptor;
     return descriptor;
+  }
+
+  async #loadArchiveMetadata(
+    signal?: AbortSignal,
+  ): Promise<DecodedArchiveMetadata> {
+    if (this.#archiveMetadata !== undefined) return this.#archiveMetadata;
+    const entry = this.#extension(ARCHIVE_METADATA_TYPE_ID);
+    if (entry === undefined) {
+      throw new RangeError("archive does not contain provenance metadata");
+    }
+    const raw = await this.#readFeatureDecoded(
+      entry,
+      "extension-descriptor",
+      signal,
+    );
+    const metadata = decodeFeature(() => decodeArchiveMetadata(raw));
+    this.#archiveMetadata = metadata;
+    return metadata;
   }
 
   async #loadSummaryDescriptor(
@@ -1499,6 +1630,12 @@ class ArchiveReader implements PangenomeArchive {
     trace?: MutableFeatureTrace,
   ): Promise<Uint8Array> {
     const key = `${storage.offset}:${storage.encodedLength}`;
+    const decodedKey = `${key}:${storage.decodedLength}:${storage.codec}`;
+    const cachedRaw = this.#decodedFeatureCache.get(decodedKey);
+    if (cachedRaw !== undefined) {
+      if (trace !== undefined) trace.cacheHits += 1;
+      return cachedRaw;
+    }
     let encoded = this.#extensionCache.get(key);
     if (encoded === undefined) {
       const length = safeNumber(
@@ -1578,6 +1715,7 @@ class ArchiveReader implements PangenomeArchive {
     if (raw.byteLength !== expectedLength) {
       throw corrupt("extension decoded length mismatch");
     }
+    this.#decodedFeatureCache.set(decodedKey, raw);
     return raw;
   }
 
@@ -2010,6 +2148,8 @@ export async function openPangenomeArchive(
     options.payloadCacheBytes ?? DEFAULT_PAYLOAD_CACHE_BYTES;
   const extensionCacheBytes =
     options.extensionCacheBytes ?? DEFAULT_EXTENSION_CACHE_BYTES;
+  const decodedFeatureCacheBytes =
+    options.decodedFeatureCacheBytes ?? DEFAULT_DECODED_FEATURE_CACHE_BYTES;
   const maxRootBytes = options.maxRootBytes ?? DEFAULT_MAX_ROOT_BYTES;
   const maxChunkBytes = options.maxChunkBytes ?? DEFAULT_MAX_CHUNK_BYTES;
   const payloadCoalescingGapBytes =
@@ -2018,6 +2158,7 @@ export async function openPangenomeArchive(
     [directoryCacheBytes, "directoryCacheBytes"],
     [payloadCacheBytes, "payloadCacheBytes"],
     [extensionCacheBytes, "extensionCacheBytes"],
+    [decodedFeatureCacheBytes, "decodedFeatureCacheBytes"],
     [maxRootBytes, "maxRootBytes"],
     [maxChunkBytes, "maxChunkBytes"],
     [payloadCoalescingGapBytes, "payloadCoalescingGapBytes"],

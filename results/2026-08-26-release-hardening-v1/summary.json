@@ -1,0 +1,82 @@
+{
+  "schemaVersion": 1,
+  "runId": "2026-08-26-release-hardening-v1",
+  "verdict": "release candidate but not publishable",
+  "archive": {
+    "bytes": 8832750626,
+    "sha256": "d1308fce7c5811d8ca8566e0c3ede3dc1b908c77eaa948ae2663edde17435be4",
+    "indexBytes": 47376841,
+    "regionalAndExtensionBytes": 8785373785,
+    "directoryEntries": 363105,
+    "physicalPayloads": 363105
+  },
+  "warmPersistentEncode": {
+    "wholeWallMs": 384080,
+    "prebuildWallMs": 21685.454288,
+    "payloadPipelineWallMs": 278291.469657,
+    "writerFinalizationWallMs": 23581.729949,
+    "validationWallMs": 28421.686405,
+    "outputChecksumWallMs": 31981.98373,
+    "peakRssKiB": 621808,
+    "peakQueuedBytes": 35562074
+  },
+  "annotation": {
+    "inputBytes": 4763975927,
+    "featureRows": 78733,
+    "expandedRecords": 157466,
+    "deduplicatedRecords": 157466,
+    "leafPages": 612,
+    "pageEncodedBytes": 3658492,
+    "pageDecodedBytes": 23595176,
+    "descriptorEncodedBytes": 61145,
+    "checksumWallMs": 17943.835554,
+    "parseAndExpandWallMs": 5230.45013,
+    "sortAndDedupWallMs": 116.210511,
+    "pageBuildAndCompressionWallMs": 102.330313
+  },
+  "summaries": {
+    "series": 591,
+    "bins": 8017,
+    "exactTotalsCoveredByTests": 8,
+    "linearAggregation": true
+  },
+  "correctness": {
+    "standardValidationPassedBeforeRename": true,
+    "sourceOracleQueriesPassed": 9,
+    "sourceOracleQueriesTotal": 9,
+    "tileLocalComparisonsPassed": 58,
+    "tileLocalComparisonsTotal": 58,
+    "ephemeralAndPersistentBytesIdentical": true,
+    "workerAndCompletionOrderDeterminismPassed": true,
+    "rustAndTypeScriptConformancePassed": true
+  },
+  "search": {
+    "coldExactSymbolBytes": 68729,
+    "coldExactSymbolRequests": 2,
+    "warmExactSymbolBytes": 0,
+    "warmExactSymbolRequests": 0,
+    "broadPrefixPagesAvoided": 446,
+    "gencodeAliasAttributesPresent": false
+  },
+  "package": {
+    "mainTarballBytes": 167274,
+    "mainUnpackedBytes": 759125,
+    "hostNativeTarballBytes": 2851867,
+    "hostNativeUnpackedBytes": 6641832,
+    "bundleBudgetsPassed": true,
+    "hostPackedInstallAndCliPassed": true,
+    "allPackageShapeAllowlistsPassed": true,
+    "realNativeMatrixRun": false
+  },
+  "remote": {
+    "latestCodeql": "success",
+    "latestCi": "failure on earlier commit before hermetic fixture change",
+    "latestPages": "failure on earlier commit before configure-pages separation"
+  },
+  "publicationBlockers": [
+    "commit and push this tranche, then obtain a green clean-checkout CI run",
+    "run the protected six-target native release workflow with real artifacts",
+    "enable GitHub Pages through Actions and configure repository protections",
+    "configure npm ownership, trusted publishing, and the protected release environment"
+  ]
+}
