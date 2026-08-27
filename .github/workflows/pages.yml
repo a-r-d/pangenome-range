@@ -18,7 +18,7 @@ jobs:
   build:
     runs-on: ubuntu-latest
     env:
-      VITE_PANGENOME_RANGE_DEMO_ARCHIVE_URL: ${{ vars.PANGENOME_RANGE_DEMO_ARCHIVE_URL }}
+      VITE_PANGENOME_RANGE_DEMO_ARCHIVE_URL: ${{ vars.PANGENOME_RANGE_DEMO_ARCHIVE_URL || 'https://archives.ard.ninja/pangenome-range/sha256/ecf5ae4fa8c784a80307507f58bed894311b8560724b57de0fcc35237c324b63/hprc-v1-gencode-v50-disk-t8.pngr' }}
     steps:
       - uses: actions/checkout@v7
       - uses: pnpm/setup@v2
@@ -34,7 +34,7 @@ jobs:
       - name: Build the public npm library exports and VitePress site
         run: pnpm docs:build
       - name: Install Chromium
-        run: pnpm exec playwright install --with-deps chromium
+        run: pnpm --filter @pangenome-range/docs exec playwright install --with-deps chromium
       - name: Smoke-test the built Pages site
         run: pnpm --filter @pangenome-range/docs test:pages
       - uses: actions/upload-pages-artifact@v4

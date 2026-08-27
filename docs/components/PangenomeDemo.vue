@@ -32,7 +32,9 @@ const configuredArchiveUrl =
     import.meta.env.VITE_PANGENOME_RANGE_DEMO_ARCHIVE_URL as string | undefined
   )?.trim() ?? "";
 const viewerHost = ref<HTMLElement>();
-const archiveChoice = ref<ArchiveChoice>("fixture");
+const archiveChoice = ref<ArchiveChoice>(
+  configuredArchiveUrl.length === 0 ? "fixture" : "configured",
+);
 const customUrl = ref("");
 const localFile = shallowRef<File>();
 const archive = shallowRef<PangenomeArchive>();
@@ -44,7 +46,11 @@ const start = ref(100);
 const end = ref(102);
 const context = ref(100);
 const phase = ref<Phase>("idle");
-const statusMessage = ref("Preparing the bundled deterministic fixture…");
+const statusMessage = ref(
+  configuredArchiveUrl.length === 0
+    ? "Preparing the bundled deterministic fixture…"
+    : "Preparing the configured whole-genome archive…",
+);
 const errorMessage = ref("");
 const shareMessage = ref("");
 const activeArchiveLabel = ref("Not opened");
@@ -301,7 +307,9 @@ function detachViewer(): void {
 function restoreUrlState(): void {
   const params = new URLSearchParams(window.location.search);
   const choice = params.get("archive");
-  if (choice === "configured" && configuredArchiveUrl.length > 0) {
+  if (choice === "fixture") {
+    archiveChoice.value = "fixture";
+  } else if (choice === "configured" && configuredArchiveUrl.length > 0) {
     archiveChoice.value = "configured";
   } else if (choice === "custom" && params.has("url")) {
     archiveChoice.value = "custom";

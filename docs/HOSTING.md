@@ -69,17 +69,44 @@ archive.example.org`, then probe the final HTTPS URL with the command above.
 Disable any Cloudflare rule that transforms or compresses `.pngr` responses;
 retain the origin's `Content-Range`, CORS, ETag, and `no-transform` headers.
 
+## Canonical whole-genome demo archive
+
+The Pages workflow defaults to the content-addressed HPRC v2.1 / GENCODE v50
+archive at:
+
+```text
+https://archives.ard.ninja/pangenome-range/sha256/ecf5ae4fa8c784a80307507f58bed894311b8560724b57de0fcc35237c324b63/hprc-v1-gencode-v50-disk-t8.pngr
+```
+
+Its byte length is 8,832,749,949 and its SHA-256 is:
+
+```text
+ecf5ae4fa8c784a80307507f58bed894311b8560724b57de0fcc35237c324b63
+```
+
+The current origin host serves that object from:
+
+```text
+/srv/data/public-archives/pangenome-range/sha256/ecf5ae4fa8c784a80307507f58bed894311b8560724b57de0fcc35237c324b63/hprc-v1-gencode-v50-disk-t8.pngr
+```
+
+This is a deployed viewer/demo object, distinct from the later 677-byte-larger
+release-hardening measurement archive carrying the new provenance extension.
+The content-addressed path prevents the demo object from being mistaken for
+those later bytes.
+
 ## Connect the deployed demo
 
-The repository contains no production archive URL. Set the GitHub Actions
-repository variable `PANGENOME_RANGE_DEMO_ARCHIVE_URL` to the final immutable
-HTTPS `.pngr` URL. The Pages workflow maps it to:
+The checked-in Pages workflow supplies the canonical URL above. A repository
+variable named `PANGENOME_RANGE_DEMO_ARCHIVE_URL` may replace it with another
+immutable HTTPS `.pngr` URL without a code change. The workflow maps either
+value to:
 
 ```text
 VITE_PANGENOME_RANGE_DEMO_ARCHIVE_URL
 ```
 
-Run the Pages workflow again. The demo will then offer **Configured external
-archive** while retaining the deterministic bundled fixture and local-file
-fallback. Test the deployed page in a fresh browser session and confirm its
+The deployed demo selects **Configured external archive** by default while
+retaining the deterministic bundled fixture, custom URL, and local-file
+fallbacks. Test the deployed page in a fresh browser session and confirm its
 request panel contains `payload` ranges rather than a whole-object response.

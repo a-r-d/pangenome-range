@@ -11,7 +11,7 @@
     "format": "biome format --write .",
     "format:check": "biome format .",
     "lint": "biome lint .",
-    "typecheck": "pnpm -r typecheck",
+    "typecheck": "pnpm --filter pangenome-range build && pnpm -r typecheck",
     "test": "pnpm -r test",
     "check": "biome check . && pnpm check:versions && pnpm typecheck && pnpm test",
     "check:versions": "node npm/scripts/verify-version-sync.mjs",
