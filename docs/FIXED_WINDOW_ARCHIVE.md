@@ -40,6 +40,10 @@ without external annotations it is a valid empty index. The annotation SHA-256
 and filename are embedded, and coordinates are explicitly bound to a real
 reference sample.
 
+The reference encoder selects GFF3 `gene` features for named-locus search. It
+indexes their stable IDs, names, and declared aliases once at the gene interval;
+child transcript, exon, CDS, codon, and UTR rows are not repeated as loci.
+
 The summary pyramid starts at `window_size * 64` bases and increases by four
 per level until one bin covers a reference fragment. Each requested scale is
 one independently compressed/checksummed series page. Counters are exact sums

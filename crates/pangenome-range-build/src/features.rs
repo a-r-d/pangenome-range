@@ -14,6 +14,7 @@ use std::path::{Path, PathBuf};
 const SUMMARY_WINDOW_MULTIPLIER: u64 = 64;
 const SUMMARY_LEVEL_MULTIPLIER: u64 = 4;
 const LOCUS_TARGET_RECORDS_PER_PAGE: usize = 256;
+const NAMED_LOCUS_GFF3_FEATURE: &str = "gene";
 
 #[derive(Clone, Debug, Default)]
 pub(crate) struct FeatureBuildOptions {
@@ -464,6 +465,9 @@ fn gff3_records_for_line(
             "invalid GFF3 column count at line {line_number}"
         )));
     }
+    if columns[2] != NAMED_LOCUS_GFF3_FEATURE {
+        return Ok(Vec::new());
+    }
     let Some(reference_intervals) = intervals.get(columns[0]) else {
         return Ok(Vec::new());
     };
@@ -659,6 +663,47 @@ mod tests {
         assert_eq!(attributes["ID"], ["gene:1"]);
         assert_eq!(attributes["Alias"], ["RNF53", "BRCC1"]);
         assert_eq!(normalize_locus_key(" BRCA1 "), "brca1");
+    }
+
+    #[test]
+    fn named_loci_index_gene_features_without_child_feature_amplification() {
+        let intervals = BTreeMap::from([("chr1", vec![(0, 1_000)])]);
+        let attributes =
+            "ID=ENSG00000000001.1;gene_id=ENSG00000000001.1;gene_name=BRCA1;Alias=RNF53,BRCC1";
+        let gene = gff3_records_for_line(
+            &format!("chr1\tGENCODE\tgene\t101\t200\t.\t+\t.\t{attributes}"),
+            1,
+            "GRCh38",
+            &intervals,
+        )
+        .unwrap();
+        assert_eq!(gene.len(), 4);
+        assert!(gene.iter().all(|record| record.feature_type == "gene"));
+        assert_eq!(
+            gene.iter()
+                .map(|record| record.matched_name.as_str())
+                .collect::<BTreeSet<_>>(),
+            BTreeSet::from(["BRCA1", "BRCC1", "ENSG00000000001.1", "RNF53",])
+        );
+
+        for feature in [
+            "transcript",
+            "exon",
+            "CDS",
+            "five_prime_UTR",
+            "three_prime_UTR",
+            "start_codon",
+            "stop_codon",
+        ] {
+            let child = gff3_records_for_line(
+                &format!("chr1\tGENCODE\t{feature}\t101\t200\t.\t+\t.\t{attributes}"),
+                2,
+                "GRCh38",
+                &intervals,
+            )
+            .unwrap();
+            assert!(child.is_empty(), "unexpected {feature} locus records");
+        }
     }
 
     #[test]

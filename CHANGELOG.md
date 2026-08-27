@@ -31,6 +31,9 @@
 - Advanced encoder reports to schema 6. Source SHA-256 and disk-cache
   construction now overlap, while their worker-wall times and combined
   critical-path wall remain separately labeled.
+- Restricted the default GFF3 named-locus importer to `gene` features so gene
+  labels and stable IDs are not multiplied across transcript, exon, CDS, codon,
+  and UTR child records.
 
 ### Performance
 
@@ -46,6 +49,10 @@
   archive completed in 409.94 seconds (-18.53%) at 640,556 KiB peak RSS. The
   payload pipeline fell from 328.72 to 267.23 seconds, and archive/index bytes
   plus SHA-256 remained identical.
+- The canonical whole-HPRC GENCODE v50 annotation run indexed all 78,733 CHR
+  genes as 157,466 name/stable-ID records in 612 range-addressable pages. It
+  added 3,719,573 bytes (+0.0421%) and 23.12 seconds of writer finalization;
+  whole wall was 420.85 seconds and peak RSS was 695,816 KiB.
 
 ### Compatibility
 

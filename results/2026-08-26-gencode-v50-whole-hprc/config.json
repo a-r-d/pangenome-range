@@ -1,0 +1,56 @@
+{
+  "schemaVersion": 1,
+  "runId": "2026-08-26-gencode-v50-whole-hprc",
+  "date": "2026-08-26",
+  "host": "apollo",
+  "kernel": "Linux 6.17.0-41-generic x86_64",
+  "cpu": "Intel Core i7-10700, 8 cores / 16 threads",
+  "rustc": "1.97.1 (8bab26f4f 2026-07-14)",
+  "repositoryBaseCommit": "9b442a1a30620e88d5a19f46d5f63eed2b9a90e4",
+  "workingTree": "uncommitted gene-only GFF3 named-locus policy",
+  "releaseBinarySha256": "73bd1cba25e97bacfb8660b3f309d38023b5e19fbe686061d414f98df8bca25b",
+  "source": {
+    "path": "/media/ard/eba76579-d702-4ff0-b5dd-eb503a726a4d/pangenome-range-data/sources/hprc-v2.1-mc-grch38.gbz",
+    "bytes": 5492627216,
+    "sha256": "11d6047f79575ffb83757462484bad134ed20928bd2c8171ec52e35a54976e2b"
+  },
+  "annotation": {
+    "release": "GENCODE Human Release 50",
+    "assembly": "GRCh38.p14",
+    "scope": "comprehensive gene annotation, reference chromosomes only (CHR)",
+    "url": "https://ftp.ebi.ac.uk/pub/databases/gencode/Gencode_human/release_50/gencode.v50.annotation.gff3.gz",
+    "compressedBytes": 160590749,
+    "compressedMd5": "b9b1a3aa6aa0df7723303bf8f3f08717",
+    "compressedSha256": "2aaf245c91ed00e80920953add6cfaffcccc876dc0aceeb6ca0c86d15875899a",
+    "uncompressedBytes": 4763975927,
+    "uncompressedSha256": "d97bc25b7d4d4aa9614c4cf6fa4748c083b1531cb60c52c0612c9ff7ec4813eb",
+    "officialGeneRows": 78733,
+    "officialTranscriptRows": 644292,
+    "featureSelection": "GFF3 feature type exactly gene",
+    "sampleBinding": "GRCh38"
+  },
+  "storage": {
+    "repository": "/dev/nvme1n1 xfs",
+    "sourceOutputAndScratch": "/dev/nvme0n1 xfs",
+    "availableBytesBeforeRun": 870242721792
+  },
+  "options": {
+    "sourceAccess": "disk",
+    "threads": 8,
+    "windowSize": 16384,
+    "codec": "zstd-3",
+    "maxQueuedBytes": 268435456,
+    "sourceReadCacheBytes": 67108864,
+    "annotations": "gencode.v50.annotation.gff3",
+    "annotationSample": "GRCh38"
+  },
+  "commands": [
+    "/usr/bin/time -v -o EXTERNAL_RUN_DIR/time-v.txt target/release/pangenome-range encode SOURCE.gbz EXTERNAL_RUN_DIR/hprc-v1-gencode-v50-disk-t8.pngr --source-access disk --scratch-dir EXTERNAL_RUN_DIR/scratch --window-size 16384 --codec zstd-3 --threads 8 --max-queued-bytes 268435456 --annotations GENCODE_V50.gff3 --annotation-sample GRCh38 --progress plain --progress-interval-seconds 30 --report EXTERNAL_RUN_DIR/encode-report.json"
+  ],
+  "rawEvidenceDirectory": "/media/ard/eba76579-d702-4ff0-b5dd-eb503a726a4d/pangenome-range-data/runs/2026-08-26-gencode-v50-whole-hprc",
+  "comparisonRun": "results/2026-08-26-unified-workers-whole-hprc",
+  "pilotRuns": [
+    "/media/ard/eba76579-d702-4ff0-b5dd-eb503a726a4d/pangenome-range-data/runs/2026-08-26-gencode-v50-chr6-pilot",
+    "/media/ard/eba76579-d702-4ff0-b5dd-eb503a726a4d/pangenome-range-data/runs/2026-08-26-gencode-v50-gene-only-chr6-pilot"
+  ]
+}

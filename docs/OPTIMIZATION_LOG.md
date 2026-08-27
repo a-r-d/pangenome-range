@@ -680,3 +680,38 @@ seconds) and whole source. Mandatory structural validation passed before
 rename; occurrence scratch, payload spool, and general scratch remained zero.
 Full evidence is retained in
 `results/2026-08-26-unified-workers-whole-hprc/`.
+
+## 2026-08-26: GENCODE v50 named-locus policy and whole-HPRC run accepted
+
+The canonical annotation input is the 4,763,975,927-byte uncompressed GENCODE
+v50 comprehensive GFF3 for GRCh38.p14 reference chromosomes. It contains
+78,733 gene rows, 644,292 transcript rows, and 11.24 million feature rows in
+total. The initial unmodified importer bound `GRCh38` and `chr6` correctly but
+repeated `gene_name` and `gene_id` on every transcript, exon, CDS, codon, and
+UTR. A 6 Mbp chr6 pilot therefore emitted 279,428 search records; exact
+`HLA-B` search returned 511 mixed feature hits.
+
+The accepted reference-encoder policy indexes only GFF3 records whose feature
+type is exactly `gene`. The same pilot emitted 1,130 records in five pages;
+`HLA-B`, its Ensembl stable ID, and `MICA` each returned one correct gene
+interval. The file format remains generic and byte-compatible; this is an
+encoder selection policy, not a format change.
+
+On the exact whole-HPRC source, options, host, and storage used by the unified
+worker baseline, the corrected run emitted 157,466 name/stable-ID records in
+612 pages. All 78,733 CHR genes are represented by their GENCODE symbol and
+stable ID. The archive grew by 3,719,573 bytes (+0.0421%), while the arithmetic
+directory/index remained 47,376,777 bytes. Named-locus construction added
+23.122 seconds to writer finalization. Whole wall measured 420.848 seconds
+versus 409.937 seconds (+10.911 seconds); faster payload and validation phases
+in the annotation run are treated as ordinary run-to-run variation rather than
+annotation savings. Peak RSS was 695,816 KiB versus 640,556 KiB.
+
+Cold exact and prefix searches read the 61,145-byte descriptor and one
+6.9-8.0 KiB leaf in two dependency rounds. `TERT`, `HLA-B`, `MICA`, `BRCA2`,
+`TP53`, `BRCA1`, and the BRCA1 stable ID matched their independent GFF3 rows;
+the `BRCA` prefix returned BRCA1, BRCA1P1, and BRCA2. Five gene-region graph
+hashes and all 23 selected tile-local haplotype hashes matched the prior
+source-oracle-qualified archive. Mandatory structural validation passed before
+rename. Full evidence is retained in
+`results/2026-08-26-gencode-v50-whole-hprc/`.

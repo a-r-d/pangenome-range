@@ -192,6 +192,13 @@ peak RSS from 8,775,928 to 608,060 KiB. Whole wall increased from 438.72 to
 499.34 seconds on the exact same source/options/host; the 11,921,858,427-byte
 ephemeral source cache is reported separately from zero encoder scratch.
 
+The canonical GENCODE v50 named-locus run is retained in
+[`results/2026-08-26-gencode-v50-whole-hprc/REPORT.md`](https://github.com/a-r-d/pangenome-range/blob/main/results/2026-08-26-gencode-v50-whole-hprc/REPORT.md).
+On the same whole-HPRC source/options/host as the unified-worker baseline, all
+78,733 CHR genes became 157,466 symbol/stable-ID records in 612 leaves. The
+archive grew by 3,719,573 bytes (+0.0421%); cold exact search requires the
+61,145-byte descriptor and one 6.9-8.0 KiB leaf in two dependency rounds.
+
 ## TypeScript reader conformance result
 
 The current Node integration serves a deterministic 164,259-byte v1 archive made

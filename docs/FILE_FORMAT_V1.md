@@ -188,6 +188,11 @@ half-open. The input is explicitly bound to a real archive reference sample;
 an encoder MUST NOT infer a sample when more than one reference sample is
 present. The reference contig must match exactly. `Name`, `Alias`, `ID`,
 `gene_name`, `gene_id`, and `gene_synonym` values are searchable when present.
+The reference encoder selects only records whose GFF3 feature type is exactly
+`gene`; it does not duplicate gene-level search names onto transcript, exon,
+CDS, codon, or UTR child records. This selection is an encoder policy rather
+than a restriction on the feature-type field of independently produced v1
+archives.
 An encoder MUST NOT download annotations implicitly or invent assembly,
 sample, or locus identity. Without explicit annotation input, the default
 entry is a valid empty descriptor.

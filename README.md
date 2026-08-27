@@ -170,6 +170,10 @@ pangenome-range encode graph.gbz graph.pngr \
   --annotations genes.gff3 --annotation-sample GRCh38
 ```
 
+The named-locus index selects GFF3 `gene` features. It indexes their stable
+IDs, names, and declared aliases without duplicating the gene label for every
+transcript, exon, CDS, codon, or UTR child feature.
+
 Without `--annotations`, the named-locus index is present but empty. The
 encoder never downloads or guesses an annotation assembly. Both features are
 skippable by readers that only need regional graph queries.

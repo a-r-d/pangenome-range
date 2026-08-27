@@ -1,0 +1,84 @@
+{
+  "schemaVersion": 1,
+  "runId": "2026-08-26-gencode-v50-whole-hprc",
+  "verdict": "accepted",
+  "archiveSha256": "ecf5ae4fa8c784a80307507f58bed894311b8560724b57de0fcc35237c324b63",
+  "archiveBytes": 8832749949,
+  "indexBytes": 47376777,
+  "directoryEntries": 363105,
+  "physicalChunks": 363105,
+  "annotation": {
+    "name": "gencode.v50.annotation.gff3",
+    "sha256": "d97bc25b7d4d4aa9614c4cf6fa4748c083b1531cb60c52c0612c9ff7ec4813eb",
+    "sample": "GRCh38",
+    "officialGeneRows": 78733,
+    "indexedRecords": 157466,
+    "pages": 612,
+    "encodedBytes": 3719573,
+    "decodedBytes": 23656257,
+    "recordsPerGene": 2,
+    "searchNames": ["gene_name", "gene_id"]
+  },
+  "baseline": {
+    "wholeWallMs": 409936.712096,
+    "writerFinalizationWallMs": 280.266699,
+    "archiveBytes": 8829030376,
+    "indexBytes": 47376777,
+    "peakRssKiB": 640556
+  },
+  "current": {
+    "wholeWallMs": 420847.994776,
+    "writerFinalizationWallMs": 23401.987211,
+    "payloadPipelineWallMs": 261547.982618,
+    "validationWallMs": 26827.293079,
+    "outputChecksumWallMs": 32403.942755,
+    "peakRssKiB": 695816
+  },
+  "delta": {
+    "wholeWallMs": 10911.28268,
+    "wholeWallPercent": 2.661699,
+    "writerFinalizationWallMs": 23121.720512,
+    "archiveBytes": 3719573,
+    "archivePercent": 0.042129,
+    "indexBytes": 0,
+    "peakRssKiB": 55260,
+    "peakRssPercent": 8.62688
+  },
+  "pilot": {
+    "interval": "GRCh38#chr6:28000000-34000000",
+    "allFeatureRecords": 279428,
+    "geneOnlyRecords": 1130,
+    "allFeatureHlaBHits": 511,
+    "geneOnlyHlaBHits": 1
+  },
+  "labelChecks": [
+    {"name": "TERT", "stableId": "ENSG00000164362.23", "contig": "chr5", "start": 1253146, "end": 1295086, "strand": "reverse", "hits": 1, "coldBytes": 69044},
+    {"name": "HLA-B", "stableId": "ENSG00000234745.16", "contig": "chr6", "start": 31353194, "end": 31367067, "strand": "reverse", "hits": 1, "coldBytes": 69112},
+    {"name": "MICA", "stableId": "ENSG00000204520.16", "contig": "chr6", "start": 31399783, "end": 31415315, "strand": "forward", "hits": 1, "coldBytes": 68939},
+    {"name": "BRCA2", "stableId": "ENSG00000139618.19", "contig": "chr13", "start": 32315085, "end": 32400268, "strand": "forward", "hits": 1, "coldBytes": 68729},
+    {"name": "TP53", "stableId": "ENSG00000141510.21", "contig": "chr17", "start": 7661778, "end": 7687546, "strand": "reverse", "hits": 1, "coldBytes": 68086},
+    {"name": "BRCA1", "stableId": "ENSG00000012048.28", "contig": "chr17", "start": 43044291, "end": 43170245, "strand": "reverse", "hits": 1, "coldBytes": 68729},
+    {"name": "ENSG00000012048.28", "stableId": "ENSG00000012048.28", "contig": "chr17", "start": 43044291, "end": 43170245, "strand": "reverse", "hits": 1, "coldBytes": 68987}
+  ],
+  "prefixCheck": {
+    "query": "BRCA",
+    "hits": ["BRCA1", "BRCA1P1", "BRCA2"],
+    "truncated": false,
+    "coldBytes": 68729,
+    "dependencyRounds": 2
+  },
+  "regionalRegression": {
+    "queries": 5,
+    "graphHashesMatchingBaseline": 5,
+    "tiles": 23,
+    "tileLocalHaplotypeHashesMatchingBaseline": 23
+  },
+  "correctness": {
+    "mandatoryPreRenameValidationPassed": true,
+    "annotationSha256MatchesInput": true,
+    "labelCoordinatesMatchGff3": true,
+    "occurrenceScratchBytes": 0,
+    "payloadSpoolBytes": 0,
+    "generalScratchBytes": 0
+  }
+}
