@@ -23,7 +23,7 @@ jobs:
       - run: pnpm package:cargo
       - run: pnpm check
       - run: pnpm build
-      - run: pnpm --filter @pangenome-range/benchmark exec playwright install --with-deps chromium
+      - run: pnpm --filter @pangenome-range/benchmark exec playwright install --with-deps chromium firefox webkit
       - name: Smoke-test the built Pages artifact
         run: pnpm --filter @pangenome-range/docs test:pages
       - run: pnpm test:browser:ci

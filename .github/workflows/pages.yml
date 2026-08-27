@@ -33,8 +33,8 @@ jobs:
         run: pnpm docs:fixtures
       - name: Build the public npm library exports and VitePress site
         run: pnpm docs:build
-      - name: Install Chromium
-        run: pnpm --filter @pangenome-range/docs exec playwright install --with-deps chromium
+      - name: Install browser matrix
+        run: pnpm --filter @pangenome-range/docs exec playwright install --with-deps chromium firefox webkit
       - name: Smoke-test the built Pages site
         run: pnpm --filter @pangenome-range/docs test:pages
       - uses: actions/upload-pages-artifact@v4
