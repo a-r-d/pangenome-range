@@ -117,10 +117,12 @@ try {
   await search.fill("GRCh38 chr1:100-101");
   await search.press("Enter");
   await waitForReady(page, "first coordinate");
+  await waitForViewportUrl(page, "first coordinate");
   const firstHistoryUrl = page.url();
   await search.fill("GRCh38 chr1:101-102");
   await search.press("Enter");
   await waitForReady(page, "second coordinate");
+  await waitForViewportUrl(page, "second coordinate");
   const secondHistoryUrl = page.url();
   assert.notEqual(firstHistoryUrl, secondHistoryUrl);
   await page.getByRole("button", { name: "Back" }).click();
@@ -761,6 +763,25 @@ async function waitForReady(page, label, timeout = 15_000) {
       .catch(() => "");
     throw new Error(
       `${label} did not reach ready (phase=${phase}, message=${JSON.stringify(message)}): ${error instanceof Error ? error.message : error}`,
+    );
+  }
+}
+
+async function waitForViewportUrl(page, label, timeout = 15_000) {
+  try {
+    await page.waitForFunction(
+      () => {
+        const parameters = new URL(location.href).searchParams;
+        return ["zoom", "center", "vscale"].every((name) =>
+          parameters.has(name),
+        );
+      },
+      undefined,
+      { timeout },
+    );
+  } catch (error) {
+    throw new Error(
+      `${label} did not publish its complete viewport URL (${page.url()}): ${error instanceof Error ? error.message : error}`,
     );
   }
 }
