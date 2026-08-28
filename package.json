@@ -18,7 +18,7 @@
     "check:rust": "bash scripts/check-rust.sh",
     "build": "pnpm --filter pangenome-range build && pnpm --filter pangenome-range test:bundle && pnpm --filter @pangenome-range/benchmark build && pnpm --filter @pangenome-range/docs build && pnpm smoke:exports",
     "smoke:exports": "node packages/browser/test/export-smoke.mjs",
-    "docs:dev": "pnpm --filter @pangenome-range/docs dev",
+    "docs:dev": "node scripts/docs-dev.mjs",
     "docs:fixtures": "pnpm --filter @pangenome-range/docs fixtures",
     "docs:build": "pnpm --filter pangenome-range build && pnpm --filter @pangenome-range/docs build",
     "test:pages": "pnpm --filter pangenome-range build && pnpm --filter @pangenome-range/docs build && pnpm --filter @pangenome-range/docs test:pages",

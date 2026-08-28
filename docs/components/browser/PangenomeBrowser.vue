@@ -626,10 +626,12 @@ function onPopState(): void {
   }
   const opened = archive.value;
   if (opened === undefined) return;
+  const restored = regionFromUrl();
+  if (restored === undefined) return;
+  phase.value = "planning";
+  message.value = `Restoring ${formatShortRegion(restored)} from browser history`;
   void (async () => {
     const restoredLocus = await locusFromUrl(opened);
-    const restored = regionFromUrl();
-    if (restored === undefined) return;
     locus.value = restoredLocus;
     assignCommand(restoredLocus?.displayName ?? formatRegion(restored));
     await navigate(restored, "none", true);

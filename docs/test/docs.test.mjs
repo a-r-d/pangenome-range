@@ -1,6 +1,11 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
+import {
+  DEFAULT_DEMO_1000G_ARCHIVE_URL,
+  DEFAULT_DEMO_ARCHIVE_URL,
+  docsDevEnvironment,
+} from "../../scripts/docs-dev.mjs";
 
 const browserUrl = new URL(
   "../components/browser/PangenomeBrowser.vue",
@@ -14,6 +19,7 @@ const pagesWorkflowUrl = new URL(
   import.meta.url,
 );
 const readmeUrl = new URL("../../README.md", import.meta.url);
+const packageUrl = new URL("../../package.json", import.meta.url);
 
 test("the demo is a single browser shell using public reader and viewer exports", async () => {
   const [shell, browser] = await Promise.all([
@@ -75,4 +81,31 @@ test("README demo links identify archive, locus or coordinates, and viewport", a
   assert.match(source, /archive=1000g&sample=NA19239&contig=1/);
   assert.match(source, /zoom=[^&]+&center=[^&]+&vscale=/);
   assert.match(source, /Local file selections cannot be restored/);
+});
+
+test("npm docs:dev injects both public archives while preserving overrides", async () => {
+  const packageJson = JSON.parse(await readFile(packageUrl, "utf8"));
+  assert.equal(packageJson.scripts["docs:dev"], "node scripts/docs-dev.mjs");
+  const defaults = docsDevEnvironment({ PATH: "/example" });
+  assert.equal(
+    defaults.VITE_PANGENOME_RANGE_DEMO_ARCHIVE_URL,
+    DEFAULT_DEMO_ARCHIVE_URL,
+  );
+  assert.equal(
+    defaults.VITE_PANGENOME_RANGE_DEMO_1000G_ARCHIVE_URL,
+    DEFAULT_DEMO_1000G_ARCHIVE_URL,
+  );
+  const overridden = docsDevEnvironment({
+    VITE_PANGENOME_RANGE_DEMO_ARCHIVE_URL: "https://example.test/custom.pngr",
+    VITE_PANGENOME_RANGE_DEMO_1000G_ARCHIVE_URL:
+      "https://example.test/custom-1000g.pngr",
+  });
+  assert.equal(
+    overridden.VITE_PANGENOME_RANGE_DEMO_ARCHIVE_URL,
+    "https://example.test/custom.pngr",
+  );
+  assert.equal(
+    overridden.VITE_PANGENOME_RANGE_DEMO_1000G_ARCHIVE_URL,
+    "https://example.test/custom-1000g.pngr",
+  );
 });
