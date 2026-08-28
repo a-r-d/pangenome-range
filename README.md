@@ -16,6 +16,22 @@ It is inspired by tiled GeoTIFF systems: convert a huge GBZ pangenome into one t
 
 [Format specification](docs/FILE_FORMAT_V1.md) · [Live demo](https://a-r-d.github.io/pangenome-range/demo) · [Viewer requirements](docs/VIEWER_PRODUCT_REQUIREMENTS.md) · [Hosting requirements](docs/HOSTING.md)
 
+### Curated demo views
+
+The HPRC archive includes GENCODE v50 named-locus search:
+
+- [HLA-B — dense MHC variation](https://a-r-d.github.io/pangenome-range/demo?archive=hprc&locus=HLA-B&zoom=0.32&center=0.5&vscale=1.3)
+- [MICB — MHC class I-related variation](https://a-r-d.github.io/pangenome-range/demo?archive=hprc&locus=MICB&zoom=0.38&center=0.5&vscale=1.2)
+- [KIR3DL1 — structurally complex immune locus](https://a-r-d.github.io/pangenome-range/demo?archive=hprc&locus=KIR3DL1&zoom=0.3&center=0.5&vscale=1.25)
+- [CHAD — compact alternate paths and node labels](https://a-r-d.github.io/pangenome-range/demo?archive=hprc&locus=CHAD&zoom=0.45&center=0.5&vscale=1.2)
+- [CRISP1 — dense graph and display-budget controls](https://a-r-d.github.io/pangenome-range/demo?archive=hprc&locus=CRISP1&zoom=0.25&center=0.5&vscale=1)
+
+The second archive exposes real NA19239 haplotype-0 population-path coordinates, not GRCh38 coordinates, and does not contain named-gene annotations:
+
+- [1000 Genomes NA19239 haplotype 0 — chromosome 1 opening window](https://a-r-d.github.io/pangenome-range/demo?archive=1000g&sample=NA19239&contig=1&start=0&end=32768&zoom=0.35&center=0.5&vscale=1)
+
+Demo URLs can select `archive=hprc`, `archive=1000g`, or `archive=fixture`; select a named `locus` or an exact `sample`/`contig`/`start`/`end` interval; and restore horizontal `zoom`, normalized `center`, and vertical `vscale`. Local file selections cannot be restored from a link because browsers do not grant URLs access to local files.
+
 ## Encoder
 
 ```bash

@@ -4,7 +4,11 @@ import {
   decideGraphRegion,
   recommendedGraphRegion,
 } from "../src/viewer/browser-policy.js";
-import { layoutTubeMap, nodeWidth } from "../src/viewer/tube-map-layout.js";
+import {
+  fitTubeMapVerticalScale,
+  layoutTubeMap,
+  nodeWidth,
+} from "../src/viewer/tube-map-layout.js";
 import {
   buildTubeMapModel,
   patternThickness,
@@ -77,8 +81,21 @@ describe("tube-map model", () => {
       maxDisplayedTopologyEdges: 1,
     });
     expect(model.withinDisplayLimits).toBe(false);
-    expect(model.displayLimitMessage).toMatch(/Zoom in/);
+    expect(model.displayLimitMessage).toMatch(/linear chains expanded/);
+    expect(model.displayLimitMessage).toMatch(/graph data is intact/);
     expect(model.nodes.length).toBeGreaterThan(2);
+  });
+
+  it("describes a simplified display-budget refusal accurately", () => {
+    const model = buildTubeMapModel([makeTile(100)], query, {
+      simplifyLinearChains: true,
+      maxDisplayedNodeGroups: 1,
+      maxDisplayedTopologyEdges: 1,
+    });
+    expect(model.withinDisplayLimits).toBe(false);
+    expect(model.displayLimitMessage).toMatch(
+      /after linear-chain simplification/,
+    );
   });
 
   it("bounds width and logarithmic pattern thickness", () => {
@@ -144,6 +161,158 @@ describe("tube-map layout", () => {
     );
     expect(collapsed).toBeDefined();
     expect(collapsed?.showLabel).toBe(false);
+  });
+
+  it("uses smaller abbreviated identifiers on narrow alternate nodes", () => {
+    const model = buildTubeMapModel([makeTile(100, 0n, 84_698_800n)], query, {
+      maxPatterns: 4,
+      simplifyLinearChains: false,
+    });
+    const layout = layoutTubeMap(model, {
+      width: 900,
+      height: 500,
+      zoom: 1,
+    });
+    const alternate = layout.nodes.find(
+      (node) => !node.reference && node.showLabel,
+    );
+    expect(alternate).toBeDefined();
+    expect(alternate?.labelMode).toBe("abbreviated");
+    expect(alternate?.label).toMatch(/^…\d{2,5}$/);
+    expect(alternate?.labelFontSize).toBeLessThanOrEqual(8);
+    expect(alternate?.ariaLabel).toBe(alternate?.id.toString());
+  });
+
+  it("routes colored patterns into bounded ports inside their visited nodes", () => {
+    const model = buildTubeMapModel([makeTile(100)], query, {
+      maxPatterns: 4,
+      simplifyLinearChains: false,
+    });
+    const layout = layoutTubeMap(model, { width: 900, height: 500, zoom: 2 });
+    for (const pattern of layout.patterns) {
+      const firstKey = pattern.nodeKeys[0];
+      const lastKey = pattern.nodeKeys.at(-1);
+      const first = layout.nodes.find((node) => node.key === firstKey);
+      const last = layout.nodes.find((node) => node.key === lastKey);
+      expect(first).toBeDefined();
+      expect(last).toBeDefined();
+      if (first === undefined || last === undefined) continue;
+      const coordinates = (pattern.path.match(/-?\d+(?:\.\d+)?/g) ?? []).map(
+        Number,
+      );
+      expect(coordinates[0]).toBeCloseTo(first.x + first.width / 2, 1);
+      expect(coordinates[1]).toBeCloseTo(first.y + pattern.portOffset, 1);
+      expect(coordinates.at(-2)).toBeCloseTo(last.x + last.width / 2, 1);
+      expect(coordinates.at(-1)).toBeCloseTo(last.y + pattern.portOffset, 1);
+      expect(Math.abs(pattern.portOffset)).toBeLessThanOrEqual(10);
+      expect(pattern.portThickness).toBeLessThan(pattern.thickness);
+      if (pattern.nodeKeys.length > 1) {
+        expect(pattern.portPath).toMatch(/^M /);
+        expect(pattern.path).toContain(" C ");
+      }
+    }
+  });
+
+  it("reduces pattern weight at overview zoom and in denser selections", () => {
+    const tiles = [makeTile(100), makeTile(200, 1_000n, 900n)];
+    const sparseModel = buildTubeMapModel(tiles, query, {
+      maxPatterns: 4,
+      simplifyLinearChains: false,
+    });
+    const denseModel = buildTubeMapModel(tiles, query, {
+      maxPatterns: 8,
+      simplifyLinearChains: false,
+    });
+    const sparse = layoutTubeMap(sparseModel, {
+      width: 900,
+      height: 500,
+      zoom: 1,
+    });
+    const dense = layoutTubeMap(denseModel, {
+      width: 900,
+      height: 500,
+      zoom: 1,
+    });
+    const overview = layoutTubeMap(denseModel, {
+      width: 900,
+      height: 500,
+      zoom: 0.2,
+    });
+    const detail = layoutTubeMap(denseModel, {
+      width: 900,
+      height: 500,
+      zoom: 2,
+    });
+    expect(dense.patterns[0]?.thickness).toBeLessThan(
+      sparse.patterns[0]?.thickness ?? 0,
+    );
+    expect(overview.patterns[0]?.thickness).toBeLessThan(
+      detail.patterns[0]?.thickness ?? 0,
+    );
+    expect(maxPortInset(overview.patterns[0]?.portPath ?? "")).toBeLessThan(
+      maxPortInset(detail.patterns[0]?.portPath ?? ""),
+    );
+  });
+
+  it("expands alternate lanes without changing reference coordinates", () => {
+    const model = buildTubeMapModel([makeTile(100)], query, {
+      maxPatterns: 4,
+      simplifyLinearChains: false,
+    });
+    const compact = layoutTubeMap(model, {
+      width: 900,
+      height: 500,
+      verticalScale: 0.75,
+    });
+    const expanded = layoutTubeMap(model, {
+      width: 900,
+      height: 500,
+      verticalScale: 1.45,
+    });
+    expect(maximumAlternateDistance(expanded)).toBeGreaterThan(
+      maximumAlternateDistance(compact),
+    );
+    expect(
+      expanded.nodes
+        .filter((node) => node.reference)
+        .map(({ key, x, y }) => ({ key, x, y })),
+    ).toEqual(
+      compact.nodes
+        .filter((node) => node.reference)
+        .map(({ key, x, y }) => ({ key, x, y })),
+    );
+  });
+
+  it("fits the largest vertical scale supported by the current viewport", () => {
+    const model = buildTubeMapModel([makeTile(100)], query, {
+      maxPatterns: 4,
+      simplifyLinearChains: false,
+    });
+    const fittedScale = fitTubeMapVerticalScale(model, {
+      width: 900,
+      height: 500,
+      zoom: 1,
+      minimumScale: 0.75,
+      maximumScale: 1.45,
+      verticalPadding: 20,
+    });
+    const compact = layoutTubeMap(model, {
+      width: 900,
+      height: 500,
+      zoom: 1,
+      verticalScale: 0.75,
+    });
+    const fitted = layoutTubeMap(model, {
+      width: 900,
+      height: 500,
+      zoom: 1,
+      verticalScale: fittedScale,
+    });
+    expect(fittedScale).toBeGreaterThan(0.75);
+    expect(fittedScale).toBeLessThanOrEqual(1.45);
+    expect(maximumAlternateDistance(fitted)).toBeGreaterThan(
+      maximumAlternateDistance(compact),
+    );
   });
 });
 
@@ -233,6 +402,29 @@ function makeTile(
     coreStart,
     archiveOffset,
   });
+}
+
+function maxPortInset(path: string): number {
+  const values = (path.match(/-?\d+(?:\.\d+)?/g) ?? []).map(Number);
+  let maximum = 0;
+  for (let index = 0; index + 3 < values.length; index += 4) {
+    const fromX = values[index];
+    const toX = values[index + 2];
+    if (fromX === undefined || toX === undefined) continue;
+    maximum = Math.max(maximum, Math.abs(toX - fromX));
+  }
+  return maximum;
+}
+
+function maximumAlternateDistance(
+  layout: ReturnType<typeof layoutTubeMap>,
+): number {
+  return Math.max(
+    0,
+    ...layout.nodes
+      .filter((node) => !node.reference)
+      .map((node) => Math.abs(node.y - layout.referenceY)),
+  );
 }
 
 function makeLongChainTile(): RegionTile {

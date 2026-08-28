@@ -82,33 +82,47 @@ export function renderTubeMapSvg(
   });
   for (const [index, pattern] of layout.patterns.entries()) {
     const selected = options.selectedPatternId === pattern.id;
-    const path = svgElement("path", {
+    const muted = options.selectedPatternId !== undefined && !selected;
+    const selectedThickness = emphasizedThickness(pattern.thickness);
+    const color = PATTERN_COLORS[index % PATTERN_COLORS.length] ?? "#a855f7";
+    const hitPath = svgElement("path", {
       d: pattern.path,
-      class: `pngr-pattern${selected ? " is-selected" : ""}`,
-      stroke: PATTERN_COLORS[index % PATTERN_COLORS.length] ?? "#a855f7",
-      "stroke-width": selected ? pattern.thickness + 3 : pattern.thickness,
+      class: "pngr-pattern-hit",
+      stroke: "transparent",
+      "stroke-width": Math.max(12, selectedThickness + 6),
       tabindex: 0,
       role: "button",
       "aria-label": `${pattern.id}, anonymous tile-local pattern, weight ${pattern.weight.toString()}`,
       "data-pattern-id": pattern.id,
     });
-    const select = (): void => options.onPatternSelect?.(pattern.id);
-    path.addEventListener("click", select);
-    path.addEventListener("keydown", (event) => {
-      if (event.key === "Enter" || event.key === " ") select();
+    const path = svgElement("path", {
+      d: pattern.path,
+      class: `pngr-pattern${selected ? " is-selected" : ""}${muted ? " is-muted" : ""}`,
+      stroke: color,
+      "stroke-width": selected ? selectedThickness : pattern.thickness,
+      "aria-hidden": "true",
     });
-    listeners.push(() => path.removeEventListener("click", select));
-    patterns.append(path);
+    const select = (): void => options.onPatternSelect?.(pattern.id);
+    const selectWithKeyboard = (event: KeyboardEvent): void => {
+      if (event.key === "Enter" || event.key === " ") select();
+    };
+    hitPath.addEventListener("click", select);
+    hitPath.addEventListener("keydown", selectWithKeyboard);
+    listeners.push(() => {
+      hitPath.removeEventListener("click", select);
+      hitPath.removeEventListener("keydown", selectWithKeyboard);
+    });
+    patterns.append(hitPath, path);
     const label = svgText(
       pattern.labelX,
       pattern.labelY,
       `${pattern.id} × ${pattern.weight.toString()}`,
     );
-    label.setAttribute("class", "pngr-pattern-label");
     label.setAttribute(
-      "fill",
-      PATTERN_COLORS[index % PATTERN_COLORS.length] ?? "#a855f7",
+      "class",
+      `pngr-pattern-label${selected ? " is-selected" : ""}${muted ? " is-muted" : ""}`,
     );
+    label.setAttribute("fill", color);
     patterns.append(label);
   }
   root.append(patterns);
@@ -139,6 +153,12 @@ export function renderTubeMapSvg(
       );
       label.setAttribute("class", "pngr-node-label");
       label.setAttribute("text-anchor", "middle");
+      label.setAttribute("font-size", String(node.labelFontSize));
+      label.setAttribute(
+        "stroke-width",
+        String(node.labelFontSize >= 9 ? 2.5 : 1.5),
+      );
+      label.setAttribute("data-label-mode", node.labelMode);
       group.append(label);
     }
     const select = (): void => {
@@ -153,6 +173,26 @@ export function renderTubeMapSvg(
   }
   root.append(nodes);
 
+  const patternPorts = svgElement("g", {
+    class: "pngr-pattern-ports",
+    "aria-hidden": "true",
+  });
+  for (const [index, pattern] of layout.patterns.entries()) {
+    const selected = options.selectedPatternId === pattern.id;
+    const muted = options.selectedPatternId !== undefined && !selected;
+    const selectedThickness = emphasizedThickness(pattern.portThickness);
+    patternPorts.append(
+      svgElement("path", {
+        d: pattern.portPath,
+        class: `pngr-pattern-port${selected ? " is-selected" : ""}${muted ? " is-muted" : ""}`,
+        stroke: PATTERN_COLORS[index % PATTERN_COLORS.length] ?? "#a855f7",
+        "stroke-width": selected ? selectedThickness : pattern.portThickness,
+        "data-pattern-port-id": pattern.id,
+      }),
+    );
+  }
+  root.append(patternPorts);
+
   const referenceLabel = svgText(18, layout.referenceY + 4, "reference");
   referenceLabel.setAttribute("class", "pngr-reference-label");
   root.append(referenceLabel);
@@ -163,6 +203,10 @@ export function renderTubeMapSvg(
       svg.replaceChildren();
     },
   };
+}
+
+function emphasizedThickness(thickness: number): number {
+  return thickness + Math.max(1.1, thickness * 0.4);
 }
 
 function svgElement<K extends keyof SVGElementTagNameMap>(

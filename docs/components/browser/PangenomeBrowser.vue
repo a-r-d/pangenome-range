@@ -15,6 +15,7 @@ import {
 import {
   buildTubeMapModel,
   decideGraphRegion,
+  EXTENDED_TUBE_MAP_DISPLAY_LIMITS,
   formatGenomicCoordinate,
   parseGenomicCommand,
   recommendedGraphRegion,
@@ -35,6 +36,7 @@ import BrowserToolbar from "./BrowserToolbar.vue";
 import LinearReferenceTrack from "./LinearReferenceTrack.vue";
 import NodeInspector from "./NodeInspector.vue";
 import PatternInspector from "./PatternInspector.vue";
+import ShareDialog from "./ShareDialog.vue";
 // biome-ignore lint/style/useImportType: the Vue template needs the runtime component.
 import TubeMapView from "./TubeMapView.vue";
 import type {
@@ -42,13 +44,21 @@ import type {
   BrowserMetrics,
   BrowserPhase,
   BrowserSelection,
+  DemoArchiveId,
   GraphOptions,
+  GraphViewport,
 } from "./types";
 import "./browser.css";
 
 const configuredArchiveUrl =
   (
     import.meta.env.VITE_PANGENOME_RANGE_DEMO_ARCHIVE_URL as string | undefined
+  )?.trim() ?? "";
+const populationArchiveUrl =
+  (
+    import.meta.env.VITE_PANGENOME_RANGE_DEMO_1000G_ARCHIVE_URL as
+      | string
+      | undefined
   )?.trim() ?? "";
 const configuredDefaultLocus =
   (
@@ -93,8 +103,15 @@ const searching = ref(false);
 const searchMessage = ref("");
 const selection = shallowRef<BrowserSelection>();
 const sourceOpen = ref(false);
+const shareOpen = ref(false);
+const shareUrl = ref("");
 const activeSourceLabel = ref("Configured HPRC archive");
+const activeSourceId = ref<DemoArchiveId>("hprc");
+const activeSourceKey = ref("");
+const activeCustomUrl = ref("");
 const expandedGroups = ref<readonly string[]>([]);
+const extendedDisplayBudget = ref(false);
+const viewport = shallowRef<GraphViewport>();
 const options = ref<GraphOptions>({
   patternCount: 8,
   simplifyLinearChains: true,
@@ -109,6 +126,41 @@ let regionController: AbortController | undefined;
 let searchController: AbortController | undefined;
 let searchTimer: ReturnType<typeof setTimeout> | undefined;
 let suppressedCommand: string | undefined;
+let viewportUrlFrame: number | undefined;
+
+const configuredLabel = "HPRC v2.1 + GENCODE v50 (GRCh38 / CHM13)";
+const populationLabel = "1000 Genomes hs38d1 (NA19239 haplotype 0)";
+const demoSources = computed<readonly ArchiveSourceSelection[]>(() => {
+  const sources: ArchiveSourceSelection[] = [];
+  if (configuredArchiveUrl.length > 0) {
+    sources.push({
+      id: "hprc",
+      source: configuredArchiveUrl,
+      label: configuredLabel,
+      key: `url:${configuredArchiveUrl}`,
+      description:
+        "Whole HPRC v2.1 graph with GRCh38 and CHM13 references plus GENCODE v50 named-gene search.",
+    });
+  }
+  if (populationArchiveUrl.length > 0) {
+    sources.push({
+      id: "1000g",
+      source: populationArchiveUrl,
+      label: populationLabel,
+      key: `url:${populationArchiveUrl}`,
+      description:
+        "NA19239 haplotype-0 population-path coordinates. This archive has no named-gene annotations and is not GRCh38.",
+    });
+  }
+  sources.push({
+    id: "fixture",
+    source: fixtureUrl,
+    label: "Bundled deterministic fixture",
+    key: `url:${fixtureUrl}`,
+    description: "Tiny offline fixture for deterministic reader testing.",
+  });
+  return sources;
+});
 
 const decision = computed(() => {
   const currentRegion = region.value;
@@ -123,27 +175,24 @@ const oversizedMessage = computed(() => {
     return undefined;
   return `${currentPlan.selectedChunks.toLocaleString()} graph tiles · ${formatBytes(currentPlan.compressedBytes)} planned. Zoom in or open the recommended window.`;
 });
-const configuredLabel = "Configured HPRC v2.1 + GENCODE v50";
-
+const canOpenAnyway = computed(() => {
+  const current = model.value;
+  return (
+    !extendedDisplayBudget.value &&
+    current !== undefined &&
+    !current.withinDisplayLimits &&
+    current.counts.displayedNodeGroups <=
+      EXTENDED_TUBE_MAP_DISPLAY_LIMITS.maxDisplayedNodeGroups &&
+    current.counts.displayedTopologyEdges <=
+      EXTENDED_TUBE_MAP_DISPLAY_LIMITS.maxDisplayedTopologyEdges
+  );
+});
 onMounted(() => {
   document.body.classList.add("pangenome-browser-active");
   window.addEventListener("popstate", onPopState);
   window.addEventListener("keydown", onGlobalKeydown, { capture: true });
-  const fixtureRequested =
-    new URLSearchParams(window.location.search).get("archive") === "fixture";
-  const initialSource: ArchiveSourceSelection =
-    configuredArchiveUrl.length > 0 && !fixtureRequested
-      ? {
-          source: configuredArchiveUrl,
-          label: configuredLabel,
-          key: `url:${configuredArchiveUrl}`,
-        }
-      : {
-          source: fixtureUrl,
-          label: "Bundled deterministic fixture",
-          key: `url:${fixtureUrl}`,
-        };
-  void openSource(initialSource);
+  viewport.value = viewportFromUrl();
+  void openSource(sourceFromUrl(), true);
 });
 
 onBeforeUnmount(() => {
@@ -153,6 +202,7 @@ onBeforeUnmount(() => {
   regionController?.abort();
   searchController?.abort();
   if (searchTimer !== undefined) clearTimeout(searchTimer);
+  if (viewportUrlFrame !== undefined) cancelAnimationFrame(viewportUrlFrame);
   void archive.value?.close();
   window.removeEventListener("popstate", onPopState);
   window.removeEventListener("keydown", onGlobalKeydown, { capture: true });
@@ -168,7 +218,10 @@ watch(
   { deep: true },
 );
 
-async function openSource(source: ArchiveSourceSelection): Promise<void> {
+async function openSource(
+  source: ArchiveSourceSelection,
+  restoreUrl = false,
+): Promise<void> {
   const operation = ++sourceOperation;
   sourceController?.abort();
   sourceController = new AbortController();
@@ -195,21 +248,39 @@ async function openSource(source: ArchiveSourceSelection): Promise<void> {
     info.value = openedInfo;
     references.value = opened.references();
     activeSourceLabel.value = source.label;
+    activeSourceId.value = source.id;
+    activeSourceKey.value = source.key;
+    activeCustomUrl.value =
+      source.id === "custom" && typeof source.source === "string"
+        ? source.source
+        : "";
     metrics.value = { openMs: performance.now() - started };
-    const restored = previous === undefined ? regionFromUrl() : undefined;
+    const restoredLocus = restoreUrl
+      ? await locusFromUrl(opened, sourceController.signal)
+      : undefined;
+    const restored = restoreUrl ? regionFromUrl() : undefined;
     if (restored !== undefined) {
-      locus.value = undefined;
+      locus.value = restoredLocus;
       assignCommand(
-        formatGenomicCoordinate(
-          restored.sample,
-          restored.contig,
-          restored.start,
-          restored.end,
-        ),
+        restoredLocus?.displayName ??
+          formatGenomicCoordinate(
+            restored.sample,
+            restored.contig,
+            restored.start,
+            restored.end,
+          ),
       );
-      await navigate(restored, "replace");
+      await navigate(restored, "replace", true);
       return;
     }
+    if (restoredLocus !== undefined) {
+      locus.value = restoredLocus;
+      assignCommand(restoredLocus.displayName);
+      await navigate(paddedLocus(restoredLocus), "replace", true);
+      return;
+    }
+    locus.value = undefined;
+    viewport.value = undefined;
     const initial = await initialRegion(opened);
     assignCommand(locus.value?.displayName ?? formatRegion(initial));
     await navigate(initial, "replace");
@@ -256,7 +327,9 @@ async function initialRegion(opened: PangenomeArchive): Promise<RegionQuery> {
 async function navigate(
   nextRegion: RegionQuery,
   historyMode: "push" | "replace" | "none" = "push",
+  preserveViewport = false,
 ): Promise<void> {
+  if (!preserveViewport) viewport.value = undefined;
   const bounded = clampRegion(nextRegion);
   region.value = bounded;
   if (historyMode !== "none") updateUrl(historyMode, bounded);
@@ -271,6 +344,7 @@ async function loadRegion(nextRegion: RegionQuery): Promise<void> {
   regionController = new AbortController();
   const signal = regionController.signal;
   phase.value = "planning";
+  extendedDisplayBudget.value = false;
   message.value = `Planning exact ranges for ${formatShortRegion(nextRegion)}`;
   plan.value = undefined;
   trace.value = undefined;
@@ -356,6 +430,7 @@ function rebuildModel(): void {
     maxPatterns: options.value.patternCount,
     simplifyLinearChains: options.value.simplifyLinearChains,
     expandedNodeGroups: expandedGroups.value,
+    ...(extendedDisplayBudget.value ? EXTENDED_TUBE_MAP_DISPLAY_LIMITS : {}),
   });
   model.value = next;
   const selected = selection.value;
@@ -497,6 +572,11 @@ function openRecommended(): void {
   void navigate(recommendedGraphRegion(current, reference, locus.value));
 }
 
+function openAnyway(): void {
+  extendedDisplayBudget.value = true;
+  rebuildModel();
+}
+
 function expandGroup(key: string): void {
   if (!expandedGroups.value.includes(key))
     expandedGroups.value = [...expandedGroups.value, key];
@@ -509,7 +589,19 @@ function updateMetrics(next: { layoutMs: number; svgElements: number }): void {
 }
 
 function updateOptions(next: GraphOptions): void {
+  if (next.simplifyLinearChains !== options.value.simplifyLinearChains)
+    extendedDisplayBudget.value = false;
   options.value = next;
+}
+
+function updateViewport(next: GraphViewport): void {
+  viewport.value = next;
+  if (viewportUrlFrame !== undefined) return;
+  viewportUrlFrame = requestAnimationFrame(() => {
+    viewportUrlFrame = undefined;
+    const current = region.value;
+    if (current !== undefined) updateUrl("replace", current);
+  });
 }
 
 function closeSearch(): void {
@@ -526,12 +618,22 @@ function goForward(): void {
 }
 
 function onPopState(): void {
-  const restored = regionFromUrl();
-  if (restored !== undefined) {
-    locus.value = undefined;
-    assignCommand(formatRegion(restored));
-    void navigate(restored, "none");
+  const source = sourceFromUrl();
+  viewport.value = viewportFromUrl();
+  if (source.key !== activeSourceKey.value) {
+    void openSource(source, true);
+    return;
   }
+  const opened = archive.value;
+  if (opened === undefined) return;
+  void (async () => {
+    const restoredLocus = await locusFromUrl(opened);
+    const restored = regionFromUrl();
+    if (restored === undefined) return;
+    locus.value = restoredLocus;
+    assignCommand(restoredLocus?.displayName ?? formatRegion(restored));
+    await navigate(restored, "none", true);
+  })();
 }
 
 function onGlobalKeydown(event: KeyboardEvent): void {
@@ -539,6 +641,7 @@ function onGlobalKeydown(event: KeyboardEvent): void {
   if (event.key === "Escape") {
     selection.value = undefined;
     sourceOpen.value = false;
+    shareOpen.value = false;
     closeSearch();
   } else if (
     event.key === "Home" &&
@@ -575,13 +678,10 @@ function focusLocationSearch(): void {
   });
 }
 
-async function share(): Promise<void> {
-  try {
-    await navigator.clipboard.writeText(window.location.href);
-    message.value = "Shareable region URL copied";
-  } catch {
-    message.value = "Copy the current URL to share this exact region";
-  }
+function share(): void {
+  sourceOpen.value = false;
+  shareUrl.value = window.location.href;
+  shareOpen.value = true;
 }
 
 async function copy(value: string): Promise<void> {
@@ -595,10 +695,17 @@ async function copy(value: string): Promise<void> {
 
 function updateUrl(mode: "push" | "replace", nextRegion: RegionQuery): void {
   const url = new URL(window.location.href);
+  url.searchParams.set("archive", activeSourceId.value);
+  if (activeSourceId.value === "custom" && activeCustomUrl.value.length > 0)
+    url.searchParams.set("url", activeCustomUrl.value);
+  else url.searchParams.delete("url");
   url.searchParams.set("sample", nextRegion.sample);
   url.searchParams.set("contig", nextRegion.contig);
   url.searchParams.set("start", String(nextRegion.start));
   url.searchParams.set("end", String(nextRegion.end));
+  if (locus.value === undefined) url.searchParams.delete("locus");
+  else url.searchParams.set("locus", locus.value.displayName);
+  writeViewport(url, viewport.value);
   window.history[mode === "push" ? "pushState" : "replaceState"](null, "", url);
 }
 
@@ -616,7 +723,99 @@ function regionFromUrl(): RegionQuery | undefined {
     end <= start
   )
     return undefined;
-  return clampRegion({ sample, contig, start, end, context: 100 });
+  const candidate = { sample, contig, start, end, context: 100 };
+  return referenceFor(candidate) === undefined
+    ? undefined
+    : clampRegion(candidate);
+}
+
+function sourceFromUrl(): ArchiveSourceSelection {
+  const parameters = new URLSearchParams(window.location.search);
+  const requested = parameters.get("archive");
+  const canonicalId =
+    requested === "population"
+      ? "1000g"
+      : requested === "configured"
+        ? "hprc"
+        : requested;
+  const preset = demoSources.value.find((source) => source.id === canonicalId);
+  if (preset !== undefined) return preset;
+  if (canonicalId === "custom") {
+    const custom = parameters.get("url")?.trim() ?? "";
+    if (custom.length > 0) {
+      const absolute = new URL(custom, window.location.href).href;
+      return {
+        id: "custom",
+        source: absolute,
+        label: "Custom remote archive",
+        key: `url:${absolute}`,
+      };
+    }
+  }
+  const fallback =
+    demoSources.value.find((source) => source.id === "hprc") ??
+    demoSources.value.find((source) => source.id === "1000g") ??
+    demoSources.value[0];
+  if (fallback === undefined)
+    throw new Error("No demo archive source is available.");
+  return fallback;
+}
+
+async function locusFromUrl(
+  opened: PangenomeArchive,
+  signal?: AbortSignal,
+): Promise<LocusHit | undefined> {
+  const name = new URLSearchParams(window.location.search).get("locus")?.trim();
+  if (!name || !opened.capabilities().namedLoci) return undefined;
+  try {
+    const result = await opened.searchLoci({
+      name,
+      mode: "exact",
+      sample:
+        new URLSearchParams(window.location.search).get("sample") ?? undefined,
+      limit: 1,
+      signal,
+    });
+    return result.hits[0];
+  } catch {
+    return undefined;
+  }
+}
+
+function viewportFromUrl(): GraphViewport | undefined {
+  const parameters = new URLSearchParams(window.location.search);
+  const zoom = Number(parameters.get("zoom"));
+  const center = Number(parameters.get("center"));
+  const verticalScale = Number(parameters.get("vscale"));
+  if (
+    !Number.isFinite(zoom) ||
+    zoom < 0.2 ||
+    zoom > 5 ||
+    !Number.isFinite(center) ||
+    center < -1 ||
+    center > 2 ||
+    !Number.isFinite(verticalScale) ||
+    verticalScale < 0.75 ||
+    verticalScale > 1.45
+  )
+    return undefined;
+  return { zoom, center, verticalScale };
+}
+
+function writeViewport(url: URL, value: GraphViewport | undefined): void {
+  if (value === undefined) {
+    url.searchParams.delete("zoom");
+    url.searchParams.delete("center");
+    url.searchParams.delete("vscale");
+    return;
+  }
+  url.searchParams.set("zoom", formatViewportNumber(value.zoom, 4));
+  url.searchParams.set("center", formatViewportNumber(value.center, 6));
+  url.searchParams.set("vscale", formatViewportNumber(value.verticalScale, 4));
+}
+
+function formatViewportNumber(value: number, digits: number): string {
+  return value.toFixed(digits).replace(/(?:\.0+|(\.\d*?)0+)$/, "$1");
 }
 
 function clampRegion(candidate: RegionQuery): RegionQuery {
@@ -693,7 +892,9 @@ function fail(cause: unknown, prefix: string): void {
       @zoom-out="tubeMap?.zoomOut()"
       @zoom-in="tubeMap?.zoomIn()"
       @fit="tubeMap?.fit()"
-      @archive="sourceOpen = !sourceOpen"
+      @vertical-out="tubeMap?.decreaseVerticalSpacing()"
+      @vertical-in="tubeMap?.increaseVerticalSpacing()"
+      @archive="shareOpen = false; sourceOpen = !sourceOpen"
       @share="share"
     />
     <LinearReferenceTrack :region="region" :locus="locus" :plan="plan" :bins="bins" />
@@ -704,18 +905,22 @@ function fail(cause: unknown, prefix: string): void {
         :phase="phase"
         :message="message"
         :oversized-message="oversizedMessage"
+        :can-open-anyway="canOpenAnyway"
         :options="options"
         :selection="selection"
+        :viewport="viewport"
         @select="selection = $event"
         @metrics="updateMetrics"
         @recommended="openRecommended"
+        @open="openAnyway"
+        @viewport="updateViewport"
       />
       <NodeInspector v-if="selection?.kind === 'node'" :node="selection.node" :model="model" @close="selection = undefined" @copy="copy" @expand="expandGroup" />
       <PatternInspector v-else-if="selection?.kind === 'pattern'" :pattern="selection.pattern" @close="selection = undefined" />
       <ArchiveSourceMenu
         :open="sourceOpen"
-        :configured-url="configuredArchiveUrl"
-        :configured-label="configuredLabel"
+        :presets="demoSources"
+        :active-id="activeSourceId"
         :active-label="activeSourceLabel"
         :info="info"
         @close="sourceOpen = false"
@@ -731,5 +936,6 @@ function fail(cause: unknown, prefix: string): void {
       :model="model"
       :metrics="metrics"
     />
+    <ShareDialog :open="shareOpen" :url="shareUrl" @close="shareOpen = false" />
   </div>
 </template>

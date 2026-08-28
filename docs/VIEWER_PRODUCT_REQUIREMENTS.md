@@ -27,6 +27,14 @@ The location field accepts archive-native locus names and canonical
 coordinates. Prefix suggestions come only from `archive.searchLoci()`.
 Arrow keys, Enter, Escape, `Ctrl/Cmd+K`, and `/` work without a second command
 palette. Browser history and the query string preserve exact regions.
+Toolbar controls expose concise hover titles. The three graph options also
+provide keyboard-focusable explanations of chain collapse, sequence-letter
+display, and source-tile boundaries. **Source** opens the configured archive,
+a remote `.pngr` URL, or a local file. **Share** opens a modal containing the
+exact current region URL, a copy action, and visible success or fallback
+feedback; it never relies on a transient status-row message alone.
+The linear reference context keeps coordinate labels below the selected-locus
+highlight boundary so its border never crosses readable coordinate text.
 
 Every region first calls `archive.planRegion()`. A detailed query is allowed
 only when all three limits hold:
@@ -64,16 +72,41 @@ dominant, alternate components use deterministic lanes above and below it,
 skip edges arc across the backbone, and reverse nodes use a reversed notch.
 Widths encode sequence length only approximately; the ruler is the exact
 coordinate source. Fit, pointer-anchored wheel/pinch zoom, double-click zoom,
-Home reset, and drag pan are local SVG transforms and do not issue archive
-requests. Wheel deltas use a continuous bounded scale instead of treating each
-trackpad event as a fixed zoom step, and repaints are coalesced to animation
-frames.
+Home reset, drag pan, and independent vertical-lane compression/expansion are
+local SVG transforms and do not issue archive requests. Vertical spacing does
+not change genomic scale or reference coordinates. Fit resets horizontal pan,
+fits the reference between the side margins, and selects the largest vertical
+lane scale that keeps the current nodes, topology, patterns, and labels inside
+the viewport padding. Wheel deltas use a continuous bounded scale instead of
+treating each trackpad event as a fixed zoom step, and repaints are coalesced to
+animation frames.
 
-Default post-collapse refusal limits are 400 displayed node groups and 800
-topology edges. The renderer does not silently truncate beyond those limits.
+The ordinary desktop display budget is 2,500 node groups and 5,000 topology
+edges. These are renderer-responsiveness limits, not archive, query, or data
+integrity limits. The renderer does not silently truncate beyond them. A
+refused view explains whether linear chains are collapsed, offers the existing
+40 kb recommendation, and permits an explicit **Open anyway** override up to a
+finite 10,000 node-group / 20,000-edge safety ceiling. The override is scoped
+to the current region and resets on navigation or when chain simplification is
+changed.
+
 At locus-fit scale labels are suppressed or shortened when their shapes are too
-narrow; they return in full as the user zooms. Pattern labels sit outside their
-lanes with enough deterministic vertical separation to avoid label collisions.
+narrow; they return in full as the user zooms. Node labels use deterministic
+10/9/8/7/6.5-pixel tiers. A narrow collapsed node may show a count such as
+`3×`; a long node ID may show an ellipsis plus its distinguishing suffix. The
+full exact ID remains in the accessibility label and inspector, and even the
+short form is hidden when it cannot fit inside the node. Pattern labels sit
+outside their lanes with enough deterministic vertical separation to avoid
+label collisions.
+Colored traversal lanes fan out only between nodes, then converge into bounded
+ports inside each visited node. Connectors render behind opaque nodes; only a
+short, lower-opacity, reduced-width port stub renders over a node edge. Visible
+stroke width decreases at overview zoom and as the selected pattern count grows,
+while a transparent 12-pixel hit path preserves pointer and keyboard usability.
+One compound SVG port path per pattern keeps the attachment visible without
+creating an element per visit or obscuring the center label. Selecting one
+pattern emphasizes its complete connector/port route and mutes the other local
+evidence.
 
 ## Inspection and sources
 
@@ -85,9 +118,21 @@ IDs in the model. Clicking a pattern opens its exact integer weight, oriented
 visit count, source tile, and the semantic warning above. Escape or an empty
 graph click closes a drawer.
 
-The archive menu supports the configured URL, another range-capable URL, and a
-local `.pngr` file. Local files stay in the browser. The normal reader and
-viewer exports contain no Vue, VitePress, Node built-ins, or native launcher.
+The Source menu presents the configured HPRC and 1000 Genomes archives as named
+presets in a dropdown, plus the bundled fixture, another range-capable URL, and
+a local `.pngr` file. It identifies the 1000 Genomes source as NA19239
+haplotype-0 population-path coordinates rather than GRCh38 and makes the lack
+of named-locus annotations explicit. Local files stay in the browser. The
+normal reader and viewer exports contain no Vue, VitePress, Node built-ins, or
+native launcher.
+
+The URL contract restores the source (`archive`), either a named `locus` or an
+exact `sample`/`contig`/`start`/`end` region, horizontal `zoom`, normalized
+horizontal `center`, and vertical `vscale`. Normalized center is independent of
+the recipient's viewport width. Legacy `configured` and `population` source
+values remain accepted as aliases. Custom remote URLs may be linked explicitly;
+local file handles cannot be restored by a URL because browser security requires
+the user to choose the file again.
 
 ## Evidence requirements
 
@@ -103,8 +148,11 @@ navigation, history, pan/zoom controls, node and pattern inspection, custom URL,
 local-file isolation, the golden route, no desktop overflow, and Chromium,
 Firefox, and WebKit. Public-archive validation also checks bounded
 pointer-anchored wheel zoom, label collisions, inspection without implicit
-expansion, and explicit chain expansion. It remains conditional on the
-configured URL and retains HLA-B plus a lower-complexity locus screenshot.
+expansion, vertical-lane controls, zoom/density-responsive pattern weight, and
+explicit chain expansion. The configured-archive gate also checks that all
+narrow alternate nodes in CHAD receive non-colliding adaptive labels with 16
+patterns visible. It remains conditional on the configured URL and retains
+HLA-B plus lower-complexity and dense-label locus screenshots.
 
 Outstanding scientific and performance constraints remain in
 [Viewer format gaps](VIEWER_FORMAT_GAPS.md) and

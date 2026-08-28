@@ -13,6 +13,7 @@ const pagesWorkflowUrl = new URL(
   "../../.github/workflows/pages.yml",
   import.meta.url,
 );
+const readmeUrl = new URL("../../README.md", import.meta.url);
 
 test("the demo is a single browser shell using public reader and viewer exports", async () => {
   const [shell, browser] = await Promise.all([
@@ -27,6 +28,10 @@ test("the demo is a single browser shell using public reader and viewer exports"
   assert.match(browser, /from "pangenome-range\/reader"/);
   assert.match(browser, /from "pangenome-range\/viewer"/);
   assert.match(browser, /VITE_PANGENOME_RANGE_DEMO_ARCHIVE_URL/);
+  assert.match(browser, /VITE_PANGENOME_RANGE_DEMO_1000G_ARCHIVE_URL/);
+  assert.match(browser, /archive=hprc|"hprc"/);
+  assert.match(browser, /"1000g"/);
+  assert.match(browser, /viewportFromUrl/);
   assert.match(browser, /opened\.searchLoci/);
   assert.match(browser, /opened\.planRegion/);
   assert.match(browser, /opened\.summary/);
@@ -56,4 +61,18 @@ test("Pages defaults to the content-addressed whole-genome demo archive", async 
     /sha256\/ecf5ae4fa8c784a80307507f58bed894311b8560724b57de0fcc35237c324b63\/hprc-v1-gencode-v50-disk-t8\.pngr/,
   );
   assert.match(source, /vars\.PANGENOME_RANGE_DEMO_ARCHIVE_URL/);
+  assert.match(
+    source,
+    /sha256\/71730fab7aad0dbbef81cf7c74b4fa8dbacbb3aad5bab0a797349120b18f6afb\/1000gplons-hs38d1-na19239-h0-v1-t8-zstd3\.pngr/,
+  );
+  assert.match(source, /vars\.PANGENOME_RANGE_DEMO_1000G_ARCHIVE_URL/);
+});
+
+test("README demo links identify archive, locus or coordinates, and viewport", async () => {
+  const source = await readFile(readmeUrl, "utf8");
+  assert.match(source, /archive=hprc&locus=HLA-B/);
+  assert.match(source, /archive=hprc&locus=KIR3DL1/);
+  assert.match(source, /archive=1000g&sample=NA19239&contig=1/);
+  assert.match(source, /zoom=[^&]+&center=[^&]+&vscale=/);
+  assert.match(source, /Local file selections cannot be restored/);
 });

@@ -19,8 +19,13 @@ export type {
   TubeMapLayoutNode,
   TubeMapLayoutOptions,
   TubeMapLayoutPattern,
+  TubeMapVerticalFitOptions,
 } from "./tube-map-layout.js";
-export { layoutTubeMap, nodeWidth } from "./tube-map-layout.js";
+export {
+  fitTubeMapVerticalScale,
+  layoutTubeMap,
+  nodeWidth,
+} from "./tube-map-layout.js";
 export type {
   LocalPattern,
   OrientedNodeRef,
@@ -35,6 +40,7 @@ export type {
 export {
   buildTubeMapModel,
   DEFAULT_TUBE_MAP_BUILD_OPTIONS,
+  EXTENDED_TUBE_MAP_DISPLAY_LIMITS,
   patternThickness,
 } from "./tube-map-model.js";
 export type {

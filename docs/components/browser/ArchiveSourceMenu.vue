@@ -1,13 +1,13 @@
 <script setup lang="ts">
 // biome-ignore-all lint/correctness/noUnusedVariables: Vue template bindings are consumed outside the script AST.
 import type { ArchiveInfo } from "pangenome-range/reader";
-import { ref } from "vue";
+import { ref, watch } from "vue";
 import type { ArchiveSourceSelection } from "./types";
 
 const props = defineProps<{
   open: boolean;
-  configuredUrl: string;
-  configuredLabel: string;
+  presets: readonly ArchiveSourceSelection[];
+  activeId: ArchiveSourceSelection["id"];
   activeLabel: string;
   info?: ArchiveInfo;
 }>();
@@ -17,20 +17,32 @@ const emit = defineEmits<{
 }>();
 const customUrl = ref("");
 const fileInput = ref<HTMLInputElement>();
+const selectedPreset = ref("");
 
-function openConfigured(): void {
-  if (props.configuredUrl.length === 0) return;
-  emit("select", {
-    source: props.configuredUrl,
-    label: props.configuredLabel,
-    key: `url:${props.configuredUrl}`,
-  });
+watch(
+  () => [props.open, props.activeId, props.presets] as const,
+  () => {
+    if (!props.open) return;
+    selectedPreset.value =
+      props.presets.find((source) => source.id === props.activeId)?.id ??
+      props.presets[0]?.id ??
+      "";
+  },
+  { immediate: true },
+);
+
+function openPreset(): void {
+  const preset = props.presets.find(
+    (source) => source.id === selectedPreset.value,
+  );
+  if (preset !== undefined) emit("select", preset);
 }
 
 function openCustom(): void {
   const value = customUrl.value.trim();
   if (value.length === 0) return;
   emit("select", {
+    id: "custom",
     source: value,
     label: "Custom remote archive",
     key: `url:${value}`,
@@ -41,6 +53,7 @@ function chooseFile(event: Event): void {
   const file = (event.target as HTMLInputElement).files?.[0];
   if (file === undefined) return;
   emit("select", {
+    id: "local",
     source: file,
     label: file.name,
     key: `file:${file.name}:${file.size}`,
@@ -52,7 +65,9 @@ function chooseFile(event: Event): void {
   <div v-if="open" class="archive-menu" role="dialog" aria-label="Archive source">
     <header><div><span>Archive source</span><h2>Static .pngr object</h2></div><button type="button" aria-label="Close archive source" @click="emit('close')">×</button></header>
     <div class="archive-menu__active"><strong>{{ activeLabel }}</strong><span>{{ info ? `${Number(info.archiveBytes / 1024n / 1024n).toLocaleString()} MiB · format v${info.formatVersion}` : 'Opening…' }}</span></div>
-    <button type="button" :disabled="configuredUrl.length === 0" @click="openConfigured">Open configured archive</button>
+    <label><span>Demo archive</span><select v-model="selectedPreset" aria-label="Demo archive"><option v-for="preset in presets" :key="preset.id" :value="preset.id">{{ preset.label }}</option></select></label>
+    <p v-if="presets.find((source) => source.id === selectedPreset)?.description" class="archive-menu__note">{{ presets.find((source) => source.id === selectedPreset)?.description }}</p>
+    <button type="button" :disabled="selectedPreset.length === 0 || selectedPreset === activeId" @click="openPreset">{{ selectedPreset === activeId ? 'Currently open' : 'Open selected demo' }}</button>
     <label><span>Remote .pngr URL</span><input v-model="customUrl" type="url" placeholder="https://…/archive.pngr" /></label>
     <button type="button" @click="openCustom">Open remote URL</button>
     <button type="button" @click="fileInput?.click()">Open local file</button>

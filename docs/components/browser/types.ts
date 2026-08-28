@@ -25,6 +25,15 @@ export interface GraphOptions {
   showTileBoundaries: boolean;
 }
 
+export interface GraphViewport {
+  readonly zoom: number;
+  /** Normalized horizontal position placed at the viewport center. */
+  readonly center: number;
+  readonly verticalScale: number;
+}
+
+export type DemoArchiveId = "hprc" | "1000g" | "fixture" | "custom" | "local";
+
 export type BrowserSelection =
   | { readonly kind: "node"; readonly node: TubeMapNode }
   | { readonly kind: "pattern"; readonly pattern: LocalPattern };
@@ -49,7 +58,9 @@ export interface BrowserStateSnapshot {
 }
 
 export interface ArchiveSourceSelection {
+  readonly id: DemoArchiveId;
   readonly source: string | File;
   readonly label: string;
   readonly key: string;
+  readonly description?: string;
 }

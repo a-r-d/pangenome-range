@@ -27,6 +27,8 @@ const etag = `"sha256-${createHash("sha256").update(fixture).digest("hex")}"`;
 const requests = [];
 const configuredArchiveUrl =
   process.env.VITE_PANGENOME_RANGE_DEMO_ARCHIVE_URL ?? "";
+const populationArchiveUrl =
+  process.env.VITE_PANGENOME_RANGE_DEMO_1000G_ARCHIVE_URL ?? "";
 const screenshotBase =
   process.env.PANGENOME_RANGE_DEMO_SCREENSHOT ??
   "/tmp/pangenome-range-demo.png";
@@ -132,6 +134,45 @@ try {
   await page.getByRole("button", { name: "Zoom in" }).click();
   await page.getByRole("button", { name: "Zoom out" }).click();
   await page.getByRole("button", { name: "Fit" }).click();
+  assert.equal(
+    await page
+      .getByRole("button", { name: "Decrease vertical spacing" })
+      .count(),
+    1,
+  );
+  assert.equal(
+    await page
+      .getByRole("button", { name: "Increase vertical spacing" })
+      .count(),
+    1,
+  );
+  const verticalBorder = await page
+    .locator(".toolbar-vertical")
+    .evaluate((group) => {
+      const groupRect = group.getBoundingClientRect();
+      const buttonRect = group.querySelector("button").getBoundingClientRect();
+      const style = getComputedStyle(group);
+      return {
+        top: style.borderTopWidth,
+        bottom: style.borderBottomWidth,
+        topInset: buttonRect.top - groupRect.top,
+        bottomInset: groupRect.bottom - buttonRect.bottom,
+      };
+    });
+  assert.deepEqual(verticalBorder, {
+    top: "1px",
+    bottom: "1px",
+    topInset: 1,
+    bottomInset: 1,
+  });
+  await page.getByText("Options", { exact: true }).click();
+  assert.equal(await page.locator(".help-tooltip").count(), 3);
+  await page.locator(".help-tooltip").first().focus();
+  assert.equal(
+    await page.locator(".help-tooltip__content").first().isVisible(),
+    true,
+  );
+  await page.getByText("Options", { exact: true }).click();
   await page.keyboard.press(
     process.platform === "darwin" ? "Meta+k" : "Control+k",
   );
@@ -152,7 +193,22 @@ try {
     await page.getByRole("button", { name: "Close inspector" }).click();
   }
 
-  await page.getByRole("button", { name: "Archive" }).click();
+  await page.getByRole("button", { name: "Share" }).click();
+  const shareDialog = page.getByRole("dialog", {
+    name: "Copy exact region link",
+  });
+  await shareDialog.waitFor();
+  assert.equal(
+    await shareDialog.getByLabel("Shareable region link").inputValue(),
+    page.url(),
+  );
+  assert.equal(
+    await shareDialog.getByRole("button", { name: "Copy link" }).count(),
+    1,
+  );
+  await shareDialog.getByRole("button", { name: "Close share dialog" }).click();
+
+  await page.getByRole("button", { name: "Source" }).click();
   await page
     .getByPlaceholder("https://…/archive.pngr")
     .fill(`${baseUrl}/record.pngr`);
@@ -166,17 +222,28 @@ try {
   assert.match(await search.inputValue(), /PNGRTEST/);
   const pattern = page.locator("[data-pattern-id]").first();
   if ((await pattern.count()) > 0) {
+    const patternId = await pattern.getAttribute("data-pattern-id");
     await pattern.focus();
     await pattern.press("Enter");
     await page
       .getByRole("complementary", { name: "Pattern inspector" })
       .getByText(/not a named person/i)
       .waitFor();
+    assert.equal(
+      await page
+        .locator(".pngr-pattern-port.is-selected")
+        .getAttribute("data-pattern-port-id"),
+      patternId,
+    );
+    assert.equal(
+      await page.locator(".pngr-pattern-port.is-muted").count(),
+      Math.max(0, (await page.locator("[data-pattern-id]").count()) - 1),
+    );
     await page.getByRole("button", { name: "Close inspector" }).click();
   }
 
   const requestCountBeforeLocal = requests.length;
-  await page.getByRole("button", { name: "Archive" }).click();
+  await page.getByRole("button", { name: "Source" }).click();
   await page.locator('input[type="file"]').setInputFiles(fixturePath);
   await waitForReady(page, "local file");
   assert.equal(requests.length, requestCountBeforeLocal);
@@ -218,6 +285,10 @@ try {
   if (configuredArchiveUrl.length > 0) {
     configuredArchive = await exerciseConfiguredArchive(browser, baseUrl);
   }
+  let populationArchive;
+  if (populationArchiveUrl.length > 0) {
+    populationArchive = await exercisePopulationArchive(browser, baseUrl);
+  }
   assert.deepEqual(pageErrors, []);
   console.log(
     JSON.stringify(
@@ -232,6 +303,7 @@ try {
         patternInspectorPassed: true,
         browserMatrix,
         configuredArchive,
+        populationArchive,
         fixtureScreenshot: screenshotPath("fixture"),
         goldenScreenshot: screenshotPath("golden"),
         searchScreenshot: screenshotPath("search"),
@@ -254,11 +326,29 @@ async function exerciseConfiguredArchive(browser, baseUrl) {
   const errors = [];
   page.on("pageerror", (error) => errors.push(error.message));
   try {
-    await page.goto(`${baseUrl}/demo`);
+    await page.goto(
+      `${baseUrl}/demo?archive=hprc&locus=HLA-B&zoom=0.32&center=0.5&vscale=1.3`,
+    );
     await waitForReady(page, "configured HLA-B", 45_000);
-    await page
-      .getByRole("textbox", { name: "Search gene or coordinate" })
-      .waitFor();
+    const search = page.getByRole("textbox", {
+      name: "Search gene or coordinate",
+    });
+    await search.waitFor();
+    assert.match(await search.inputValue(), /HLA-B/);
+    await assertViewportState(page, { zoom: 0.32, center: 0.5, vscale: 1.3 });
+    await page.getByRole("button", { name: "Source" }).click();
+    const sourceDialog = page.getByRole("dialog", { name: "Archive source" });
+    assert.equal(
+      await sourceDialog.getByLabel("Demo archive").inputValue(),
+      "hprc",
+    );
+    assert.equal(
+      await sourceDialog.getByRole("option", { name: /1000 Genomes/ }).count(),
+      populationArchiveUrl.length > 0 ? 1 : 0,
+    );
+    await sourceDialog
+      .getByRole("button", { name: "Close archive source" })
+      .click();
     assert.match(
       await page.locator(".reference-track__heading").innerText(),
       /GRCh38.*chr6/,
@@ -274,12 +364,18 @@ async function exerciseConfiguredArchive(browser, baseUrl) {
     assert(counts.nodes > 0 && counts.nodes <= 400);
     assert(counts.edges <= 800);
     assert.equal(counts.patterns, 8);
+    assert.equal(
+      await page.locator("[data-pattern-port-id]").count(),
+      counts.patterns,
+    );
+    assert.equal(await patternPortMismatchCount(page), 0);
     assert.equal(await visibleLabelCollisionCount(page), 0);
     await page.screenshot({ path: screenshotPath("hla-b"), fullPage: true });
     const interactions = await exerciseGraphControls(page);
-    const search = page.getByRole("textbox", {
-      name: "Search gene or coordinate",
-    });
+    const linkedViewport = new URL(page.url()).searchParams;
+    assert(linkedViewport.has("zoom"));
+    assert(linkedViewport.has("center"));
+    assert(linkedViewport.has("vscale"));
     await search.fill("MICB");
     await page
       .getByRole("option", { name: /^MICB / })
@@ -295,16 +391,160 @@ async function exerciseConfiguredArchive(browser, baseUrl) {
       metrics: { ...document.querySelector(".browser-status")?.dataset },
     }));
     await page.screenshot({ path: screenshotPath("micb"), fullPage: true });
+    await search.fill("CHAD");
+    await page
+      .getByRole("option", { name: /^CHAD / })
+      .waitFor({ timeout: 15_000 });
+    await search.press("Enter");
+    await waitForReady(page, "configured CHAD", 45_000);
+    await page.getByLabel("Local-pattern count").selectOption("16");
+    const chad = await page.evaluate(() => ({
+      nodes: document.querySelectorAll("[data-node-key]").length,
+      alternateNodes: document.querySelectorAll(".pngr-node--alternate").length,
+      alternateLabels: document.querySelectorAll(
+        ".pngr-node--alternate .pngr-node-label",
+      ).length,
+      abbreviatedLabels: document.querySelectorAll(
+        '.pngr-node-label[data-label-mode="abbreviated"]',
+      ).length,
+      minimumLabelFontSize: Math.min(
+        ...[...document.querySelectorAll(".pngr-node-label")].map((label) =>
+          Number(label.getAttribute("font-size")),
+        ),
+      ),
+      patterns: document.querySelectorAll("[data-pattern-id]").length,
+      svgElements: document.querySelectorAll(".pngr-tube-map-svg *").length,
+    }));
+    assert(chad.alternateNodes > 0);
+    assert(chad.alternateLabels > 0);
+    assert(chad.abbreviatedLabels > 0);
+    assert.equal(chad.patterns, 16);
+    assert.equal(await visibleLabelCollisionCount(page), 0);
+    assert.equal(await referenceLabelOverlapCount(page), 0);
+    await page.screenshot({ path: screenshotPath("chad"), fullPage: true });
+
+    await page.getByText("Options", { exact: true }).click();
+    await page.getByLabel("Simplify linear chains").uncheck();
+    await search.fill("CRISP1");
+    await page
+      .getByRole("option", { name: /^CRISP1 / })
+      .waitFor({ timeout: 15_000 });
+    await search.press("Enter");
+    await waitForReady(page, "configured CRISP1", 45_000);
+    const crisp = await page.evaluate(() => ({
+      nodes: document.querySelectorAll("[data-node-key]").length,
+      edges: document.querySelectorAll("[data-edge-key]").length,
+      svgElements: document.querySelectorAll(".pngr-tube-map-svg *").length,
+      metrics: { ...document.querySelector(".browser-status")?.dataset },
+    }));
+    assert(crisp.nodes > 400 && crisp.nodes <= 2_500);
+    assert(crisp.edges > 800 && crisp.edges <= 5_000);
+    assert.equal(await page.locator(".graph-state--oversized").count(), 0);
+    await page.screenshot({ path: screenshotPath("crisp1"), fullPage: true });
+
+    await search.fill("GRCh38#chr6:49,815,000-49,895,000");
+    await search.press("Enter");
+    await waitForReady(page, "configured dense CRISP1", 45_000);
+    const warning = page.locator(".graph-state--oversized");
+    await warning.waitFor();
+    assert.match(await warning.innerText(), /graph data is intact/i);
+    await page.getByRole("button", { name: "Open anyway" }).click();
+    await page.waitForFunction(
+      () =>
+        document.querySelector(".graph-state--oversized") === null &&
+        document.querySelectorAll("[data-node-key]").length > 2_500,
+      undefined,
+      { timeout: 30_000 },
+    );
+    const crispOpenAnyway = await page.evaluate(() => ({
+      nodes: document.querySelectorAll("[data-node-key]").length,
+      edges: document.querySelectorAll("[data-edge-key]").length,
+      svgElements: document.querySelectorAll(".pngr-tube-map-svg *").length,
+      metrics: { ...document.querySelector(".browser-status")?.dataset },
+    }));
+    assert(crispOpenAnyway.nodes <= 10_000);
+    assert(crispOpenAnyway.edges <= 20_000);
+    await page.screenshot({
+      path: screenshotPath("crisp1-open-anyway"),
+      fullPage: true,
+    });
     assert.deepEqual(errors, []);
     return {
       hla: { ...counts, ...interactions },
       hlaScreenshot: screenshotPath("hla-b"),
       micb,
       micbScreenshot: screenshotPath("micb"),
+      chad,
+      chadScreenshot: screenshotPath("chad"),
+      crisp,
+      crispScreenshot: screenshotPath("crisp1"),
+      crispOpenAnyway,
+      crispOpenAnywayScreenshot: screenshotPath("crisp1-open-anyway"),
     };
   } finally {
     await page.close();
   }
+}
+
+async function exercisePopulationArchive(browser, baseUrl) {
+  const page = await browser.newPage({
+    viewport: { width: 1600, height: 1000 },
+  });
+  const errors = [];
+  page.on("pageerror", (error) => errors.push(error.message));
+  try {
+    await page.goto(
+      `${baseUrl}/demo?archive=1000g&sample=NA19239&contig=1&start=0&end=32768&zoom=0.35&center=0.5&vscale=1`,
+    );
+    await waitForReady(page, "1000 Genomes coordinate view", 45_000);
+    assert.match(
+      await page
+        .getByRole("textbox", { name: "Search gene or coordinate" })
+        .inputValue(),
+      /NA19239.*1/,
+    );
+    await assertViewportState(page, { zoom: 0.35, center: 0.5, vscale: 1 });
+    await page.getByRole("button", { name: "Source" }).click();
+    const sourceDialog = page.getByRole("dialog", { name: "Archive source" });
+    assert.equal(
+      await sourceDialog.getByLabel("Demo archive").inputValue(),
+      "1000g",
+    );
+    assert.match(
+      await sourceDialog.innerText(),
+      /population-path coordinates/i,
+    );
+    await page.screenshot({
+      path: screenshotPath("1000g"),
+      fullPage: true,
+    });
+    assert.deepEqual(errors, []);
+    return {
+      source: "1000g",
+      nodes: await page.locator("[data-node-key]").count(),
+      screenshot: screenshotPath("1000g"),
+    };
+  } finally {
+    await page.close();
+  }
+}
+
+async function assertViewportState(page, expected) {
+  const graph = page.locator(".tube-map-view");
+  const actual = {
+    zoom: Number(await graph.getAttribute("data-zoom")),
+    center: Number(await graph.getAttribute("data-center")),
+    vscale: Number(await graph.getAttribute("data-vertical-scale")),
+  };
+  assert(Math.abs(actual.zoom - expected.zoom) < 0.001, JSON.stringify(actual));
+  assert(
+    Math.abs(actual.center - expected.center) < 0.001,
+    JSON.stringify(actual),
+  );
+  assert(
+    Math.abs(actual.vscale - expected.vscale) < 0.001,
+    JSON.stringify(actual),
+  );
 }
 
 async function exerciseGraphControls(page) {
@@ -341,6 +581,33 @@ async function exerciseGraphControls(page) {
   );
   await page.getByRole("button", { name: "Fit" }).click();
 
+  const fittedVerticalSpread = await graphVerticalSpread(page);
+  for (let step = 0; step < 3; step += 1)
+    await page
+      .getByRole("button", { name: "Decrease vertical spacing" })
+      .click();
+  await page.waitForFunction((fitted) => {
+    const centers = [...document.querySelectorAll(".pngr-node")].map(
+      (element) => {
+        const rect = element.getBoundingClientRect();
+        return rect.top + rect.height / 2;
+      },
+    );
+    return Math.max(...centers) - Math.min(...centers) < fitted * 0.98;
+  }, fittedVerticalSpread);
+  const compactVerticalSpread = await graphVerticalSpread(page);
+  await page.getByRole("button", { name: "Fit" }).click();
+  await page.waitForFunction((fitted) => {
+    const centers = [...document.querySelectorAll(".pngr-node")].map(
+      (element) => {
+        const rect = element.getBoundingClientRect();
+        return rect.top + rect.height / 2;
+      },
+    );
+    const spread = Math.max(...centers) - Math.min(...centers);
+    return Math.abs(spread - fitted) < 0.75;
+  }, fittedVerticalSpread);
+
   let singleClickPreservedCollapse = true;
   let expandedNodeCount;
   const collapsed = page.locator('[data-node-key^="c:"]').first();
@@ -368,9 +635,21 @@ async function exerciseGraphControls(page) {
   return {
     wheelZoomRatio,
     wheelAnchorShift,
+    fittedVerticalSpread,
+    compactVerticalSpread,
     singleClickPreservedCollapse,
     expandedNodeCount,
   };
+}
+
+async function graphVerticalSpread(page) {
+  return page.locator("svg.pngr-tube-map-svg").evaluate((svg) => {
+    const centers = [...svg.querySelectorAll(".pngr-node")].map((element) => {
+      const rect = element.getBoundingClientRect();
+      return rect.top + rect.height / 2;
+    });
+    return Math.max(...centers) - Math.min(...centers);
+  });
 }
 
 async function visibleLabelCollisionCount(page) {
@@ -398,6 +677,60 @@ async function visibleLabelCollisionCount(page) {
   });
 }
 
+async function referenceLabelOverlapCount(page) {
+  return page.evaluate(() => {
+    const locus = document
+      .querySelector(".reference-ruler__locus")
+      ?.getBoundingClientRect();
+    if (locus === undefined) return 0;
+    return [
+      ...document.querySelectorAll(".reference-ruler__tick small"),
+    ].filter((element) => {
+      const label = element.getBoundingClientRect();
+      const overlapX =
+        Math.min(label.right, locus.right) - Math.max(label.left, locus.left);
+      const overlapY =
+        Math.min(label.bottom, locus.bottom) - Math.max(label.top, locus.top);
+      return overlapX > 0.5 && overlapY > 0.5;
+    }).length;
+  });
+}
+
+async function patternPortMismatchCount(page) {
+  return page.locator("svg.pngr-tube-map-svg").evaluate((svg) => {
+    const numbers = (value) =>
+      (value.match(/-?\d+(?:\.\d+)?/g) ?? []).map(Number);
+    const nodes = [...svg.querySelectorAll(".pngr-node")].map((group) => {
+      const [left, top] = numbers(group.getAttribute("transform") ?? "");
+      const shape = group.querySelector(".pngr-node-shape");
+      const path = shape?.getAttribute("d") ?? "";
+      const reverse = path.match(/^M 7 0 H (-?\d+(?:\.\d+)?) V/);
+      const forward = path.match(
+        /^M 0 0 H -?\d+(?:\.\d+)? L (-?\d+(?:\.\d+)?) /,
+      );
+      const width = Number(reverse?.[1] ?? forward?.[1]);
+      return { left, right: left + width, top, bottom: top + 34 };
+    });
+    let mismatches = 0;
+    for (const path of svg.querySelectorAll("[data-pattern-port-id]")) {
+      const values = numbers(path.getAttribute("d") ?? "");
+      for (let index = 0; index + 3 < values.length; index += 4) {
+        const x = values[index];
+        const y = values[index + 1];
+        const attached = nodes.some(
+          (node) =>
+            (Math.abs(node.left - x) < 0.11 ||
+              Math.abs(node.right - x) < 0.11) &&
+            y >= node.top &&
+            y <= node.bottom,
+        );
+        if (!attached) mismatches += 1;
+      }
+    }
+    return mismatches;
+  });
+}
+
 async function assertHealthyBrowser(page) {
   await page.getByRole("img", { name: /Tube map for GRCh38 chr1/ }).waitFor();
   assert.equal(await page.locator(".pangenome-browser").count(), 1);
@@ -405,7 +738,7 @@ async function assertHealthyBrowser(page) {
     await page.locator(".showcase-stage, .overview-stage, .tool-rail").count(),
     0,
   );
-  assert.equal(await page.getByRole("button", { name: "Archive" }).count(), 1);
+  assert.equal(await page.getByRole("button", { name: "Source" }).count(), 1);
   assert.equal(await page.getByRole("button", { name: "Share" }).count(), 1);
   assert.match(
     await page.locator(".browser-status").innerText(),

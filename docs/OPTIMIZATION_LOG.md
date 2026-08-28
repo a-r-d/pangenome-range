@@ -897,3 +897,164 @@ from three to zero. Node inspection no longer expands a collapsed chain or
 dumps every member ID into the drawer; expansion is explicit and member IDs
 remain in the model. The built Chromium gate measures 0.05 px wheel-anchor
 drift and zero HLA-B label collisions.
+
+## 2026-08-27: explicit traversal-to-node ports accepted
+
+Zoomed Brave inspection showed that the weighted traversal data remained
+horizontally anchored to every visited displayed node, but the prior fixed
+vertical offsets left endpoints 24-60 SVG pixels from node centers. That was a
+misleading visual encoding even though it was not a zoom-transform or archive
+correctness failure.
+
+Pattern connectors now retain separated outer lanes only between nodes and
+converge to distinct ports within the 34-pixel node body. Seven-pixel colored
+edge stubs are overlaid after node shapes, while all stubs for one traversal
+remain one compound SVG path. Eight visible patterns therefore add eight SVG
+elements rather than one element per visit. Selecting a traversal mutes the
+other seven connector and port paths.
+
+The live HLA-B audit checked 664 rendered port attachments with zero endpoints
+outside a node boundary. The public viewer entry is 40,857 raw bytes and 10,541
+gzip bytes after this repair, remaining below its 90 KiB raw / 24 KiB gzip
+budget. The built configured-archive check retained 141 node groups, 240 edges,
+and eight patterns in 557 SVG descendants; it passed Chromium, Firefox, and
+WebKit with strict ranges and SHA-256 verification.
+
+Validation commands were:
+
+```bash
+pnpm check
+pnpm check:rust
+pnpm build
+VITE_PANGENOME_RANGE_DEMO_ARCHIVE_URL=https://archives.ard.ninja/pangenome-range/sha256/ecf5ae4fa8c784a80307507f58bed894311b8560724b57de0fcc35237c324b63/hprc-v1-gencode-v50-disk-t8.pngr \
+  PANGENOME_RANGE_DEMO_SCREENSHOT=/tmp/pangenome-range-pattern-ports.png \
+  pnpm test:pages
+```
+
+## 2026-08-27: zoom- and density-aware traversal styling accepted
+
+The fixed traversal weight remained too dominant at locus-fit scale and in the
+eight-pattern HLA-B clump. Port stubs were also as thick as connectors and
+painted seven pixels over opaque node bodies. That made valid port attachment
+look like misalignment and obscured the sequence-node boundary.
+
+Visible connector width now combines the integer-weight encoding with bounded
+horizontal-zoom and selected-pattern-count factors. HLA-B at fit scale renders
+the eight connectors at 1.71-2.05 pixels and their short node-entry stubs at
+1.00-1.19 pixels. Port inset is now zoom-aware and capped at five pixels;
+connectors render behind nodes, while the overlaid stubs use 0.54 opacity.
+Selected traversal emphasis is proportional rather than a fixed three-pixel
+addition. A separate transparent 12-pixel path retains a usable hit target
+without changing visible weight.
+
+A compact vertical-spacing control changes lane geometry independently of
+horizontal/genomic zoom. One expansion step increased the live HLA-B node
+spread from 325.6 to 374.4 CSS pixels and the matching decrement restored the
+baseline. The built 1600x1000 Chromium gate measured 544.0 to 625.6 pixels.
+Reference positions and genomic coordinates do not move. The extra hit paths
+raise the live HLA-B SVG descendant count from 557 to 565, still far below the
+node/edge refusal budgets. The public viewer entry is 42,603 raw bytes and
+10,947 gzip bytes, within its 90 KiB raw / 24 KiB gzip budget. `pnpm check`,
+`pnpm check:rust`, `pnpm build`, and the configured three-browser Pages run all
+pass.
+
+## 2026-08-27: adaptive narrow-node labels accepted
+
+The original fixed 10-pixel label estimate hid every white alternate-node label
+in the CHAD fit view: 36 of 36 alternate nodes were blank. Lowering the global
+font size would have made large reference labels needlessly weak, so the layout
+now chooses the largest fitting tier per node from 10, 9, 8, 7, and 6.5 pixels.
+
+Full labels remain preferred. Narrow collapsed groups fall back to an explicit
+count such as `3×`; long individual node IDs fall back to an ellipsis plus the
+longest suffix that fits, such as `…802`. The exact ID is unchanged in the
+accessible name, model, and inspector. Labels are still omitted rather than
+overflowed when even the shortest truthful form cannot fit.
+
+Direct Brave inspection of CHAD with 16 patterns showed labels on all 36 white
+alternate nodes, compared with zero before the change. The built 1600x1000
+Chromium gate likewise found 36 of 36 labeled, 34 abbreviated, a 7-pixel
+minimum font, and zero measured label collisions. The configured Pages run
+continued to pass Chromium, Firefox, and WebKit. The public viewer entry is
+43,857 raw bytes and 11,276 gzip bytes after this change, within its 90 KiB raw
+/ 24 KiB gzip budget.
+
+The same CHAD inspection found the 25-pixel locus highlight overlapping the
+coordinate-label row by four pixels. Increasing tick-label separation by five
+pixels reduced the measured vertical intersection from four pixels to zero
+without changing ruler or locus coordinates.
+
+## 2026-08-27: two-axis viewport fit accepted
+
+The Fit control previously reset only horizontal zoom and pan, leaving whatever
+manual vertical scale happened to be active. The accepted fit computes the
+normal reference-width zoom first, then binary-searches for the largest
+vertical lane scale whose current node bodies, topology paths, weighted
+patterns, and pattern labels remain inside a 20-pixel viewport inset.
+
+In direct Brave manipulation of CHAD with 16 patterns, three vertical-minus
+steps reduced node spread to 298.5 pixels. Fit restored it to 435.9 pixels,
+placed rendered content from 24.1 to 493.9 in the 517-pixel graph viewport, and
+kept the reference endpoints at the existing 72-pixel horizontal margins. A
+second Fit produced the same bounds. Manual vertical +/- remains available
+after fitting. The public viewer entry is 46,072 raw bytes and 11,854 gzip
+bytes, within its 90 KiB raw / 24 KiB gzip budget.
+
+## 2026-08-27: explicit dense-graph display override accepted
+
+The original 400-node-group / 800-edge refusal was a conservative interactive
+SVG guard, not a storage or correctness boundary. It also always claimed the
+view was over budget "after chain collapse," even when simplification was
+disabled. In the configured CRISP1 interval, disabling simplification produces
+1,923 node groups and 2,022 topology edges. Direct Brave verification rendered
+that ordinary desktop case as 5,748 SVG descendants, so the normal budget is
+now 2,500 groups / 5,000 edges.
+
+Dense views above the normal budget now keep all decoded data and present both
+the 40 kb recommendation and an **Open anyway** action. The override is bounded
+at 10,000 groups / 20,000 edges because the current renderer is interactive
+SVG, and it resets on navigation or a chain-simplification change. An 80 kb
+CRISP1 window exercised the path with 2,897 groups and 8,811 SVG descendants;
+the measured layout-and-render pass was 176 ms in Brave. The warning now says
+whether chains are simplified and explicitly distinguishes a rendering pause
+from data loss. Interactive buttons are excluded from the graph's pointer-pan
+capture so both warning actions remain clickable.
+
+## 2026-08-27: toolbar explanations and explicit sharing accepted
+
+The Options panel previously exposed three scientific display choices without
+explaining their semantic or rendering effects. Keyboard-focusable help
+tooltips now explain linear-chain collapse, automatic/on/off base display, and
+source-tile boundaries. Concise native hover titles cover navigation,
+horizontal zoom, two-axis Fit, vertical spacing, pattern count, source choice,
+and sharing. Tooltips open to the left of the menu so they do not cover the
+remaining settings.
+
+The former **Archive** label was ambiguous because the panel supports a
+configured remote object, a custom URL, and a local file. It is now **Source**.
+The former Share action attempted a silent clipboard write, making both success
+and browser denial appear inert. Share now opens a modal with the exact current
+URL, selected text, a bounded clipboard attempt, a synchronous copy fallback,
+and visible result text. Live Brave inspection verified the modal URL and
+`Copied` feedback. The adjacent vertical-spacing controls now sit one pixel
+inside their bordered 30-pixel group, preserving visible top and bottom borders
+around both buttons.
+
+## 2026-08-28: multi-archive and viewport deep links accepted
+
+The rebuilt browser shell had retained only the primary HPRC environment
+variable even though commit `5b5353249d985e44e151de8bcc44ef2104113b39` had
+already added a second content-addressed 1000 Genomes archive to the Pages
+build. The Source panel now exposes both configured objects and the bundled
+fixture in a preset dropdown. Its copy distinguishes the HPRC archive's GRCh38
+and CHM13 references plus GENCODE search from the second archive's real
+NA19239 haplotype-0 population-path coordinates and absent named-locus index.
+
+Deep links now restore the archive, named locus or exact coordinate interval,
+horizontal zoom, normalized horizontal center, and vertical lane scale. Center
+is stored as a fraction of the rendered reference width so a link remains
+meaningful across browser sizes; raw pixel pan is deliberately not serialized.
+The older `configured` and `population` source values remain readable. Local
+files remain intentionally non-linkable because restoring a file handle would
+bypass the browser's user-selection security boundary. README links exercise
+important HPRC loci and a coordinate-only 1000 Genomes view.

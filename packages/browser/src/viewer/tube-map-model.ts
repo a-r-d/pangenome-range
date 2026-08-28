@@ -96,8 +96,17 @@ export interface TubeMapBuildOptions {
 export const DEFAULT_TUBE_MAP_BUILD_OPTIONS = {
   maxPatterns: 8,
   simplifyLinearChains: true,
-  maxDisplayedNodeGroups: 400,
-  maxDisplayedTopologyEdges: 800,
+  maxDisplayedNodeGroups: 2_500,
+  maxDisplayedTopologyEdges: 5_000,
+} as const;
+
+/**
+ * Explicit opt-in ceiling for unusually dense desktop views. The ceiling stays
+ * finite because the current renderer creates an interactive SVG scene.
+ */
+export const EXTENDED_TUBE_MAP_DISPLAY_LIMITS = {
+  maxDisplayedNodeGroups: 10_000,
+  maxDisplayedTopologyEdges: 20_000,
 } as const;
 
 interface RawNode {
@@ -370,9 +379,9 @@ export function buildTubeMapModel(
     ...(violations.length === 0
       ? {}
       : {
-          displayLimitMessage: `This interval remains too complex after chain collapse: ${violations.join(
+          displayLimitMessage: `This interval contains ${violations.join(
             ", ",
-          )}. Zoom in to inspect it without truncation.`,
+          )} ${simplify ? "after linear-chain simplification" : "with linear chains expanded"}. Rendering is paused to protect browser responsiveness; the graph data is intact.`,
         }),
   };
 }
