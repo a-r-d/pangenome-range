@@ -60,6 +60,12 @@ const populationArchiveUrl =
       | string
       | undefined
   )?.trim() ?? "";
+const riceArchiveUrl =
+  (
+    import.meta.env.VITE_PANGENOME_RANGE_DEMO_RICE_ARCHIVE_URL as
+      | string
+      | undefined
+  )?.trim() ?? "";
 const configuredDefaultLocus =
   (
     import.meta.env.VITE_PANGENOME_RANGE_DEMO_DEFAULT_LOCUS as
@@ -130,6 +136,7 @@ let viewportUrlFrame: number | undefined;
 
 const configuredLabel = "HPRC v2.1 + GENCODE v50 (GRCh38 / CHM13)";
 const populationLabel = "1000 Genomes hs38d1 (NA19239 haplotype 0)";
+const riceLabel = "PPanG rice chromosome 6 (NATELBORO / Xa7)";
 const demoSources = computed<readonly ArchiveSourceSelection[]>(() => {
   const sources: ArchiveSourceSelection[] = [];
   if (configuredArchiveUrl.length > 0) {
@@ -150,6 +157,16 @@ const demoSources = computed<readonly ArchiveSourceSelection[]>(() => {
       key: `url:${populationArchiveUrl}`,
       description:
         "NA19239 haplotype-0 population-path coordinates. This archive has no named-gene annotations and is not GRCh38.",
+    });
+  }
+  if (riceArchiveUrl.length > 0) {
+    sources.push({
+      id: "rice",
+      source: riceArchiveUrl,
+      label: riceLabel,
+      key: `url:${riceArchiveUrl}`,
+      description:
+        "PPanG Minigraph-Cactus chromosome 6 anchored on NATELBORO, with curated Xa7 search. Traversals are anonymous weighted tile-local patterns, not named accessions.",
     });
   }
   sources.push({
@@ -757,6 +774,7 @@ function sourceFromUrl(): ArchiveSourceSelection {
   const fallback =
     demoSources.value.find((source) => source.id === "hprc") ??
     demoSources.value.find((source) => source.id === "1000g") ??
+    demoSources.value.find((source) => source.id === "rice") ??
     demoSources.value[0];
   if (fallback === undefined)
     throw new Error("No demo archive source is available.");

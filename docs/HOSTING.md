@@ -69,7 +69,7 @@ archive.example.org`, then probe the final HTTPS URL with the command above.
 Disable any Cloudflare rule that transforms or compresses `.pngr` responses;
 retain the origin's `Content-Range`, CORS, ETag, and `no-transform` headers.
 
-## Canonical whole-genome demo archive
+## Canonical demo archives
 
 The Pages workflow defaults to the content-addressed HPRC v2.1 / GENCODE v50
 archive at:
@@ -95,15 +95,30 @@ release-hardening measurement archive carrying the new provenance extension.
 The content-addressed path prevents the demo object from being mistaken for
 those later bytes.
 
+The source menu also includes the content-addressed PPanG rice chromosome 6
+archive:
+
+```text
+https://archives.ard.ninja/pangenome-range/sha256/c91768e6e98d32ff6467732a26e32def5058f4c15d247a0ac6a252a4403e134c/rice-chr06-mc-xa7-anonymous.pngr
+```
+
+It is 325,664,519 bytes with SHA-256
+`c91768e6e98d32ff6467732a26e32def5058f4c15d247a0ac6a252a4403e134c`.
+The workflow maps an optional `PANGENOME_RANGE_DEMO_RICE_ARCHIVE_URL`
+repository variable to `VITE_PANGENOME_RANGE_DEMO_RICE_ARCHIVE_URL`.
+
 ## Connect the deployed demo
 
-The checked-in Pages workflow supplies the canonical URL above. A repository
-variable named `PANGENOME_RANGE_DEMO_ARCHIVE_URL` may replace it with another
-immutable HTTPS `.pngr` URL without a code change. The workflow maps either
-value to:
+The checked-in Pages workflow supplies the canonical HPRC, 1000 Genomes, and
+rice URLs. Repository variables named `PANGENOME_RANGE_DEMO_ARCHIVE_URL`,
+`PANGENOME_RANGE_DEMO_1000G_ARCHIVE_URL`, and
+`PANGENOME_RANGE_DEMO_RICE_ARCHIVE_URL` may replace them with other immutable
+HTTPS `.pngr` URLs without a code change. The workflow maps them to:
 
 ```text
 VITE_PANGENOME_RANGE_DEMO_ARCHIVE_URL
+VITE_PANGENOME_RANGE_DEMO_1000G_ARCHIVE_URL
+VITE_PANGENOME_RANGE_DEMO_RICE_ARCHIVE_URL
 ```
 
 The deployed demo selects **Configured external archive** by default while

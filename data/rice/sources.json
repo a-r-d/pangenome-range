@@ -1,0 +1,76 @@
+{
+  "schemaVersion": 1,
+  "updatedAt": "2026-08-28T12:52:59Z",
+  "graph": {
+    "name": "chr06_mc.xg",
+    "description": "Official PPanG chromosome 6 Minigraph-Cactus graph",
+    "pageUrl": "https://cgm.sjtu.edu.cn/PPanG/",
+    "discoveryTarget": "chr06_mc.xg",
+    "finalUrl": "https://cgm.sjtu.edu.cn/PPanG/data/pangenome-graph/chr06_mc.xg",
+    "bytes": 8378505934,
+    "sha256": "466744e1f7da8f30b34f13f773302d55464fc51ccfe1a53c74d3709228476dae",
+    "downloadStarted": "2026-08-28T09:57:56Z",
+    "downloadFinished": "2026-08-28T11:28:50Z",
+    "checksumRecordedAt": "2026-08-28T11:31:13Z",
+    "downloadTransportHistory": [
+      "resumable wget initial transfer",
+      "resumable aria2 16-connection completion after relocation to scratch drive"
+    ],
+    "httpStatus": 206,
+    "httpResponses": [
+      {
+        "status": 206,
+        "location": null
+      }
+    ],
+    "etag": "\"1f365dace-601ed535e1fd4\"",
+    "lastModified": "Wed, 02 Aug 2023 09:31:17 GMT",
+    "acceptRanges": "bytes"
+  },
+  "ppangRepository": {
+    "url": "https://github.com/SJTU-CGM/PPanG",
+    "commit": "64f092fb94ef5bf0e16faf131537fac93163c2c8",
+    "files": [
+      {
+        "path": "src/config.json",
+        "bytes": 4884,
+        "sha256": "20c199be678cbfe78926495f61e5fbc321f9c6ce2c1e7ac300651306c78664ec"
+      },
+      {
+        "path": "src/builtin_genes.json",
+        "bytes": 9673,
+        "sha256": "570c2337e014e3f3662354edf69ad929cd3aa8db1574d8e62ce088280cf7694d"
+      },
+      {
+        "path": "src/reference_genes.json",
+        "bytes": 6057166,
+        "sha256": "3e43f1a251211af1d5b84ed90e2c45cd4e4cc67e43eba36e56c7d70854e3d13e"
+      },
+      {
+        "path": "riceData/chr06_mc.bed",
+        "bytes": 523,
+        "sha256": "2a7b657792f1003d3c3aff7b712bb93722022d4fd7a8c6a0469b00544cf40dab"
+      },
+      {
+        "path": "README.md",
+        "bytes": 15558,
+        "sha256": "1529aeb65773d64cc3a5de560fccef504a3bf726b4ff9d2cd1a619b5e32f9c66"
+      },
+      {
+        "path": "LICENSE.txt",
+        "bytes": 1068,
+        "sha256": "c8d4f8afac8f0270a84db5979efa1604f7ffd3e7ae7e9e41656c423905e88d54"
+      }
+    ]
+  },
+  "paper": {
+    "doi": "10.1186/s12864-024-10302-5"
+  },
+  "vg": {
+    "version": "v1.76.1",
+    "url": "https://github.com/vgteam/vg/releases/download/v1.76.1/vg",
+    "bytes": 55374080,
+    "sha256": "87b457fdda6801c9580f79a53c3c0aa502261420abf222920c7222a703fd856b"
+  },
+  "reuseStatus": "PUBLIC_DERIVED_REDISTRIBUTION_CONFIRMED"
+}

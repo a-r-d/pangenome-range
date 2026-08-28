@@ -118,13 +118,14 @@ IDs in the model. Clicking a pattern opens its exact integer weight, oriented
 visit count, source tile, and the semantic warning above. Escape or an empty
 graph click closes a drawer.
 
-The Source menu presents the configured HPRC and 1000 Genomes archives as named
-presets in a dropdown, plus the bundled fixture, another range-capable URL, and
-a local `.pngr` file. It identifies the 1000 Genomes source as NA19239
-haplotype-0 population-path coordinates rather than GRCh38 and makes the lack
-of named-locus annotations explicit. Local files stay in the browser. The
-normal reader and viewer exports contain no Vue, VitePress, Node built-ins, or
-native launcher.
+The Source menu presents the configured HPRC, 1000 Genomes, and PPanG rice
+archives as named presets in a dropdown, plus the bundled fixture, another
+range-capable URL, and a local `.pngr` file. It identifies the 1000 Genomes
+source as NA19239 haplotype-0 population-path coordinates rather than GRCh38
+and makes the lack of named-locus annotations explicit. It identifies the rice
+source as NATELBORO chromosome 6 with anonymous weighted tile-local traversals,
+not named accessions. Local files stay in the browser. The normal reader and
+viewer exports contain no Vue, VitePress, Node built-ins, or native launcher.
 
 The URL contract restores the source (`archive`), either a named `locus` or an
 exact `sample`/`contig`/`start`/`end` region, horizontal `zoom`, normalized

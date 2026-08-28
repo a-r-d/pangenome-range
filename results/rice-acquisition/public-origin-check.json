@@ -1,0 +1,119 @@
+{
+  "schemaVersion": 1,
+  "url": "https://archives.ard.ninja/pangenome-range/sha256/c91768e6e98d32ff6467732a26e32def5058f4c15d247a0ac6a252a4403e134c/rice-chr06-mc-xa7-anonymous.pngr",
+  "passed": true,
+  "size": "325664519",
+  "etag": "\"6a918031-13693f07\"",
+  "expectedSha256": "c91768e6e98d32ff6467732a26e32def5058f4c15d247a0ac6a252a4403e134c",
+  "ranges": [
+    {
+      "start": "0",
+      "end": "15",
+      "status": 206,
+      "bytes": 16,
+      "elapsedMs": 185.869909,
+      "matchedLocal": true
+    },
+    {
+      "start": "8",
+      "end": "23",
+      "status": 206,
+      "bytes": 16,
+      "elapsedMs": 23.233809000000065,
+      "matchedLocal": true
+    },
+    {
+      "start": "24",
+      "end": "39",
+      "status": 206,
+      "bytes": 16,
+      "elapsedMs": 14.664029000000028,
+      "matchedLocal": true
+    },
+    {
+      "start": "325664487",
+      "end": "325664518",
+      "status": 206,
+      "bytes": 32,
+      "elapsedMs": 17.32842400000004,
+      "matchedLocal": true
+    }
+  ],
+  "checks": [
+    {
+      "name": "HEAD",
+      "passed": true,
+      "detail": "HTTP 200 in 111.587 ms"
+    },
+    {
+      "name": "Content-Length",
+      "passed": true,
+      "detail": "325664519"
+    },
+    {
+      "name": "Accept-Ranges",
+      "passed": true,
+      "detail": "bytes"
+    },
+    {
+      "name": "ETag",
+      "passed": true,
+      "detail": "\"6a918031-13693f07\""
+    },
+    {
+      "name": "identity encoding",
+      "passed": true,
+      "detail": "implicit identity"
+    },
+    {
+      "name": "no-transform",
+      "passed": true,
+      "detail": "public, max-age=31536000, immutable, no-transform"
+    },
+    {
+      "name": "CORS",
+      "passed": true,
+      "detail": "* (requested https://a-r-d.github.io)"
+    },
+    {
+      "name": "exposed range headers",
+      "passed": true,
+      "detail": "accept-ranges, content-range, content-length, etag"
+    },
+    {
+      "name": "CORS preflight",
+      "passed": true,
+      "detail": "HTTP 204, origin *, methods GET,HEAD,OPTIONS, headers range,if-range"
+    },
+    {
+      "name": "local size",
+      "passed": true,
+      "detail": "local 325664519, remote 325664519"
+    },
+    {
+      "name": "local SHA-256",
+      "passed": true,
+      "detail": "c91768e6e98d32ff6467732a26e32def5058f4c15d247a0ac6a252a4403e134c"
+    },
+    {
+      "name": "range 0-15",
+      "passed": true,
+      "detail": "HTTP 206, 16 bytes, Content-Range bytes 0-15/325664519, ETag \"6a918031-13693f07\", local match true"
+    },
+    {
+      "name": "range 8-23",
+      "passed": true,
+      "detail": "HTTP 206, 16 bytes, Content-Range bytes 8-23/325664519, ETag \"6a918031-13693f07\", local match true"
+    },
+    {
+      "name": "range 24-39",
+      "passed": true,
+      "detail": "HTTP 206, 16 bytes, Content-Range bytes 24-39/325664519, ETag \"6a918031-13693f07\", local match true"
+    },
+    {
+      "name": "range 325664487-325664518",
+      "passed": true,
+      "detail": "HTTP 206, 32 bytes, Content-Range bytes 325664487-325664518/325664519, ETag \"6a918031-13693f07\", local match true"
+    }
+  ]
+}

@@ -1,0 +1,114 @@
+{
+  "schemaVersion": 1,
+  "archivePath": "/media/ard/eba76579-d702-4ff0-b5dd-eb503a726a4d/pangenome-range-data/runs/2026-08-28-ppang-rice-chr06/rice-chr06-mc-xa7-anonymous.pngr",
+  "archiveSha256": "c91768e6e98d32ff6467732a26e32def5058f4c15d247a0ac6a252a4403e134c",
+  "locusSearch": {
+    "query": "Xa7",
+    "normalizedQuery": "xa7",
+    "mode": "exact",
+    "annotationName": "rice-xa7-natelboro.gff3",
+    "annotationSha256": "46a6cad8eb9bf879ac08b6e38b3e5de4b28c79a7b54e48d2e13add8d22fb72d0",
+    "totalIndexedRecords": "1",
+    "hits": [
+      {
+        "matchedName": "Xa7",
+        "displayName": "Xa7",
+        "stableId": "Xa7",
+        "featureType": "gene",
+        "reference": {
+          "sample": "NATELBORO",
+          "contig": "chr06",
+          "start": 28873553,
+          "end": 28874897,
+          "orientation": "forward"
+        },
+        "strand": "unknown"
+      }
+    ],
+    "truncated": false,
+    "trace": {
+      "dependencyRounds": 2,
+      "requestRanges": [
+        {
+          "offset": "325662250",
+          "length": 165,
+          "layer": "extension-descriptor"
+        },
+        {
+          "offset": "325662163",
+          "length": 87,
+          "layer": "extension-page"
+        }
+      ],
+      "totalBytes": 252,
+      "cacheHits": 0,
+      "integrityMs": 0.7944010000000006,
+      "decompressionMs": 0.5305540000000022,
+      "decompressionTaskMs": 0.5305540000000022,
+      "decodeMs": 0.5059380000000004,
+      "pagesAvoidedByLimit": 0
+    }
+  },
+  "query": {
+    "id": "xa7-natelboro",
+    "class": "fixed-biological-xa7",
+    "sample": "NATELBORO",
+    "contig": "chr06",
+    "start": 28873554,
+    "end": 28874897,
+    "context": 100
+  },
+  "queryResult": {
+    "reference": {
+      "sample": "NATELBORO",
+      "contig": "chr06",
+      "start": 28873554,
+      "end": 28874897,
+      "fragment": 28873554,
+      "orientation": "forward"
+    },
+    "tiles": 1,
+    "nodes": 61,
+    "edges": 93,
+    "trace": {
+      "dependencyRounds": 3,
+      "requestRanges": [
+        {
+          "offset": "0",
+          "length": 16384,
+          "layer": "bootstrap"
+        },
+        {
+          "offset": "225678",
+          "length": 4096,
+          "layer": "directory"
+        },
+        {
+          "offset": "301677656",
+          "length": 125384,
+          "layer": "payload"
+        }
+      ],
+      "totalBytes": 145864,
+      "uniqueBytes": 145864,
+      "duplicateBytes": 0,
+      "bootstrapBytes": 16384,
+      "directoryBytes": 4096,
+      "payloadBytes": 125384,
+      "cacheHits": {
+        "bootstrap": 1,
+        "directory": 0,
+        "payload": 0
+      },
+      "decompressionMs": 24.582263999999995,
+      "decompressionTaskMs": 24.582263999999995,
+      "integrityMs": 6.961325000000002,
+      "decodeMs": 64.30288900000001,
+      "mergeMs": 13.352682999999985,
+      "selectedChunks": 1,
+      "selectedNodes": 61,
+      "selectedTraversals": 51,
+      "canonicalHash": "2165bc15eaf7e237c50a0fce92c2d4ba7453a7461fa46bf32d78757695b712f1"
+    }
+  }
+}

@@ -30,7 +30,11 @@ The second archive exposes real NA19239 haplotype-0 population-path coordinates,
 
 - [1000 Genomes NA19239 haplotype 0 — chromosome 1 opening window](https://a-r-d.github.io/pangenome-range/demo?archive=1000g&sample=NA19239&contig=1&start=0&end=32768&zoom=0.35&center=0.5&vscale=1)
 
-Demo URLs can select `archive=hprc`, `archive=1000g`, or `archive=fixture`; select a named `locus` or an exact `sample`/`contig`/`start`/`end` interval; and restore horizontal `zoom`, normalized `center`, and vertical `vscale`. Local file selections cannot be restored from a link because browsers do not grant URLs access to local files.
+The rice demo explores chromosome 6 from the PPanG rice pangenome, using NATELBORO as the reference. The paths show local patterns of variation across the graph, not individual named rice accessions:
+
+- [Rice Xa7 — bacterial-blight-resistance locus](https://a-r-d.github.io/pangenome-range/demo?archive=rice&locus=Xa7&zoom=2.856&center=0.600576&vscale=1.45)
+
+Demo URLs can select `archive=hprc`, `archive=1000g`, `archive=rice`, or `archive=fixture`; select a named `locus` or an exact `sample`/`contig`/`start`/`end` interval; and restore horizontal `zoom`, normalized `center`, and vertical `vscale`. Local file selections cannot be restored from a link because browsers do not grant URLs access to local files.
 
 ## Encoder
 
@@ -139,3 +143,14 @@ Measured August 27, 2026 over the public network; latency will vary by location 
 ## License
 
 [MIT](LICENSE)
+
+## Thank you and data attribution
+
+This project is possible because research groups made large pangenome resources openly available. Thank you to:
+
+- The [Human Pangenome Reference Consortium](https://github.com/human-pangenomics/hpp_pangenome_resources) for the HPRC Release 2 Minigraph-Cactus v2.1 graph used by the main human demo. The HPRC Data Use Protocol applies to that source data.
+- The [GENCODE project](https://www.gencodegenes.org/) for the Human Release 50 gene annotations that power named-locus search in the HPRC demo ([exact GFF3 source](https://ftp.ebi.ac.uk/pub/databases/gencode/Gencode_human/release_50/gencode.v50.annotation.gff3.gz)).
+- The [1000 Genomes Project](https://www.internationalgenome.org/) and the [UCSC Computational Genomics Lab](https://cgl.gi.ucsc.edu/data/giraffe/mapping/graphs/for-NA19239/1000gplons/hs38d1/) for the 1000GPlons `hs38d1` graph used by the NA19239 demo.
+- The [PPanG team at SJTU-CGM](https://cgm.sjtu.edu.cn/PPanG/) for the rice Minigraph-Cactus graphs and Xa7 locus context ([source repository](https://github.com/SJTU-CGM/PPanG), [paper](https://doi.org/10.1186/s12864-024-10302-5)).
+
+The demo archives are derived, range-addressable representations. Please credit and follow the terms of the original data providers when using them; the repository's MIT license covers the `pangenome-range` software, not a replacement license for every upstream dataset.

@@ -1,0 +1,13 @@
+{
+  "schemaVersion": 1,
+  "status": "aborted_before_host_memory_exhaustion",
+  "reason": "vg default insertion batch caused a steep RSS increase while host swap was already full",
+  "vgReportedInsertionBatchNodes": 175650560,
+  "observedAtElapsedSeconds": 499,
+  "observedProcessRssBytes": 20615139328,
+  "observedOsAvailableMemory": "17 GiB from free -h",
+  "observedSwap": "8.0 GiB of 8.0 GiB used",
+  "partialOutputBytes": 0,
+  "measurementQualification": "manual observation; run-measured was interrupted before it could write its normal JSON",
+  "retryBufferSizeMillionsOfNodes": 20
+}

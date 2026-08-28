@@ -1,0 +1,7 @@
+# Keep reproducible metadata and curated inputs, ignore fetched and derived data.
+*
+!.gitignore
+!README.md
+!LICENSE_REVIEW.md
+!sources.json
+!rice-xa7-natelboro.gff3

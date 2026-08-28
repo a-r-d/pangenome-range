@@ -1,0 +1,17 @@
+{
+  "schemaVersion": 1,
+  "archiveSha256": "c91768e6e98d32ff6467732a26e32def5058f4c15d247a0ac6a252a4403e134c",
+  "seed": "xa7-curated",
+  "queries": [
+    {
+      "id": "xa7-natelboro",
+      "class": "fixed-biological-xa7",
+      "sample": "NATELBORO",
+      "contig": "chr06",
+      "start": 28873554,
+      "end": 28874897,
+      "context": 100,
+      "expectedCanonicalHash": "2165bc15eaf7e237c50a0fce92c2d4ba7453a7461fa46bf32d78757695b712f1"
+    }
+  ]
+}

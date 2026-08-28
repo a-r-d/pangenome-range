@@ -32,7 +32,13 @@ export interface GraphViewport {
   readonly verticalScale: number;
 }
 
-export type DemoArchiveId = "hprc" | "1000g" | "fixture" | "custom" | "local";
+export type DemoArchiveId =
+  | "hprc"
+  | "1000g"
+  | "rice"
+  | "fixture"
+  | "custom"
+  | "local";
 
 export type BrowserSelection =
   | { readonly kind: "node"; readonly node: TubeMapNode }

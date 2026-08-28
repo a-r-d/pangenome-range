@@ -29,6 +29,8 @@ const configuredArchiveUrl =
   process.env.VITE_PANGENOME_RANGE_DEMO_ARCHIVE_URL ?? "";
 const populationArchiveUrl =
   process.env.VITE_PANGENOME_RANGE_DEMO_1000G_ARCHIVE_URL ?? "";
+const riceArchiveUrl =
+  process.env.VITE_PANGENOME_RANGE_DEMO_RICE_ARCHIVE_URL ?? "";
 const screenshotBase =
   process.env.PANGENOME_RANGE_DEMO_SCREENSHOT ??
   "/tmp/pangenome-range-demo.png";
@@ -291,6 +293,10 @@ try {
   if (populationArchiveUrl.length > 0) {
     populationArchive = await exercisePopulationArchive(browser, baseUrl);
   }
+  let riceArchive;
+  if (riceArchiveUrl.length > 0) {
+    riceArchive = await exerciseRiceArchive(browser, baseUrl);
+  }
   assert.deepEqual(pageErrors, []);
   console.log(
     JSON.stringify(
@@ -306,6 +312,7 @@ try {
         browserMatrix,
         configuredArchive,
         populationArchive,
+        riceArchive,
         fixtureScreenshot: screenshotPath("fixture"),
         goldenScreenshot: screenshotPath("golden"),
         searchScreenshot: screenshotPath("search"),
@@ -347,6 +354,10 @@ async function exerciseConfiguredArchive(browser, baseUrl) {
     assert.equal(
       await sourceDialog.getByRole("option", { name: /1000 Genomes/ }).count(),
       populationArchiveUrl.length > 0 ? 1 : 0,
+    );
+    assert.equal(
+      await sourceDialog.getByRole("option", { name: /PPanG rice/ }).count(),
+      riceArchiveUrl.length > 0 ? 1 : 0,
     );
     await sourceDialog
       .getByRole("button", { name: "Close archive source" })
@@ -525,6 +536,58 @@ async function exercisePopulationArchive(browser, baseUrl) {
       source: "1000g",
       nodes: await page.locator("[data-node-key]").count(),
       screenshot: screenshotPath("1000g"),
+    };
+  } finally {
+    await page.close();
+  }
+}
+
+async function exerciseRiceArchive(browser, baseUrl) {
+  const page = await browser.newPage({
+    viewport: { width: 1600, height: 1000 },
+  });
+  const errors = [];
+  page.on("pageerror", (error) => errors.push(error.message));
+  try {
+    await page.goto(
+      `${baseUrl}/demo?archive=rice&locus=Xa7&zoom=2.856&center=0.600576&vscale=1.45`,
+    );
+    await waitForReady(page, "PPanG rice Xa7 view", 45_000);
+    assert.equal(
+      await page
+        .getByRole("textbox", { name: "Search gene or coordinate" })
+        .inputValue(),
+      "Xa7",
+    );
+    await assertViewportState(page, {
+      zoom: 2.856,
+      center: 0.600576,
+      vscale: 1.45,
+    });
+    assert.match(
+      await page.locator(".reference-track__heading").innerText(),
+      /NATELBORO.*chr06/,
+    );
+    await page.getByRole("button", { name: "Source" }).click();
+    const sourceDialog = page.getByRole("dialog", { name: "Archive source" });
+    assert.equal(
+      await sourceDialog.getByLabel("Demo archive").inputValue(),
+      "rice",
+    );
+    assert.match(
+      await sourceDialog.innerText(),
+      /anonymous weighted tile-local/i,
+    );
+    await page.screenshot({
+      path: screenshotPath("rice-xa7"),
+      fullPage: true,
+    });
+    assert.deepEqual(errors, []);
+    return {
+      source: "rice",
+      locus: "Xa7",
+      nodes: await page.locator("[data-node-key]").count(),
+      screenshot: screenshotPath("rice-xa7"),
     };
   } finally {
     await page.close();
