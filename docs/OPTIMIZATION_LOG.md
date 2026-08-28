@@ -862,3 +862,38 @@ The hermetic browser run passed Chromium, Firefox, and WebKit, made 12 strict
 in one Chromium loopback run. This validates the phase plumbing and layout,
 not public multi-gigabyte latency. Evidence is retained in
 `results/2026-08-27-explorer-redesign-v1/`.
+
+## 2026-08-27: single-screen SVG tube map accepted
+
+The showcase, overview mode, permanent tool rail, loading modal, and evidence
+drawer were removed from the production demo. `/demo` now opens the configured
+archive and HLA-B directly into a 52/112/flex/30-pixel browser shell. Exact
+`planRegion()` limits gate every payload query; `summary()` is optional thin
+context rather than another application mode.
+
+A SequenceTubeMap extraction was rejected after inspection because its
+5,000-line mutable D3 core is coupled to React-era track, read, and application
+state. The accepted local implementation uses a deterministic public adapter,
+reference-anchored layout, and caller-owned SVG. It copies no SequenceTubeMap
+source. Reference and pattern structural segments retain complete member IDs
+and source-tile provenance; anonymous patterns remain bounded, weighted, and
+tile-local.
+
+The retained real HLA-B query uses two payload tiles. With eight local patterns,
+post-collapse rendering contains 141 node groups, 240 topology edges, and 548
+SVG descendants, below the 400/800 refusal limits. The viewer entry changed
+from 64,461 raw bytes and 16,240 gzip bytes before this tranche to 37,546 raw
+bytes and 9,859 gzip
+bytes after removing the old controller from the public entry. Final browser
+and query measurements are retained in
+`results/2026-08-27-simple-browser-v1/`.
+
+Direct Brave manipulation then exposed a fixed-step wheel bug: one synthetic
+trackpad gesture enlarged a CHAD node by 1.5625x because each emitted wheel
+event applied another 1.25x step. The accepted continuous bounded transform
+measured 1.0661x for the same gesture and retained the pointer anchor. Pattern
+lane spacing and outward label placement reduced measured CHAD text collisions
+from three to zero. Node inspection no longer expands a collapsed chain or
+dumps every member ID into the drawer; expansion is explicit and member IDs
+remain in the model. The built Chromium gate measures 0.05 px wheel-anchor
+drift and zero HLA-B label collisions.

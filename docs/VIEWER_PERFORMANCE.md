@@ -1,5 +1,24 @@
 # Viewer performance
 
+## Current production browser
+
+The production `/demo` route now uses the deterministic, anchored SVG tube-map
+renderer described in [ADR 0003](adr/0003-tube-map-renderer.md). Its current
+built-browser evidence, bundle comparison, screenshots, and configured-archive
+measurements are retained in
+`results/2026-08-27-simple-browser-v1/REPORT.md`.
+
+In the retained Chromium observation, HLA-B completed in 1,431.9 ms after
+opening the configured 8.2 GiB immutable archive, with the first tile visible
+at 1,254.6 ms. The renderer laid out 141 node groups, 240 topology edges, and
+eight weighted tile-local patterns in 6.5 ms. MICB completed in 664.1 ms on the
+already-open archive with 82 groups, 153 edges, and eight patterns. These are
+single public-network observations, not latency distributions.
+
+The remainder of this page preserves the earlier Canvas-explorer measurements
+because they remain useful reader/decode evidence. They are not measurements of
+the current production UI.
+
 ## Measurement model
 
 Elapsed wall time and aggregate task work are different quantities. Reader
@@ -13,7 +32,7 @@ may exceed wall time for an asynchronous/parallel decompressor. The benchmark
 wrapper preserves synchronous decoder returns; this prevents time waiting for
 unrelated decode continuations from being attributed to decompression.
 
-The explorer adds object-open, first-summary-paint, first-tile-paint,
+The retired explorer added object-open, first-summary-paint, first-tile-paint,
 query-complete, viewer-model, layout, paint, and rolling frame-p95 evidence.
 The range waterfall retains exact offsets, lengths, and logical layers. Browser
 origin logs remain authoritative for actual request counts and bytes; reader

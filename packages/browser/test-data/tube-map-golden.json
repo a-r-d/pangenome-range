@@ -1,0 +1,215 @@
+{
+  "query": {
+    "sample": "GRCh38",
+    "contig": "chr6",
+    "start": 31324000,
+    "end": 31336000
+  },
+  "nodes": [
+    {
+      "key": "n:101",
+      "id": "101",
+      "sequence": "ACGT",
+      "sequenceLength": 4,
+      "reverse": false,
+      "reference": true,
+      "sourceTile": "T1"
+    },
+    {
+      "key": "c:102,103,104,105,106,107",
+      "id": "102",
+      "sequence": "GATTACA",
+      "sequenceLength": 3200,
+      "reverse": false,
+      "reference": true,
+      "sourceTile": "T1",
+      "collapsedMembers": ["102", "103", "104", "105", "106", "107"],
+      "collapsedBaseLength": 3200
+    },
+    {
+      "key": "n:108",
+      "id": "108",
+      "sequence": "TTGCA",
+      "sequenceLength": 5,
+      "reverse": false,
+      "reference": true,
+      "sourceTile": "T2"
+    },
+    {
+      "key": "n:109",
+      "id": "109",
+      "sequence": "CCA",
+      "sequenceLength": 3,
+      "reverse": false,
+      "reference": true,
+      "sourceTile": "T2"
+    },
+    {
+      "key": "n:201",
+      "id": "201",
+      "sequence": "TTAACCGG",
+      "sequenceLength": 8,
+      "reverse": false,
+      "reference": false,
+      "sourceTile": "T1"
+    },
+    {
+      "key": "n:202",
+      "id": "202",
+      "sequence": "GGCTA",
+      "sequenceLength": 5,
+      "reverse": false,
+      "reference": false,
+      "sourceTile": "T1"
+    },
+    {
+      "key": "n:301",
+      "id": "301",
+      "sequence": "CATG",
+      "sequenceLength": 4,
+      "reverse": true,
+      "reference": false,
+      "sourceTile": "T2"
+    }
+  ],
+  "edges": [
+    {
+      "key": "ref-1",
+      "from": "n:101",
+      "to": "c:102,103,104,105,106,107",
+      "fromReverse": false,
+      "toReverse": false,
+      "reference": true,
+      "classification": "reference"
+    },
+    {
+      "key": "ref-2",
+      "from": "c:102,103,104,105,106,107",
+      "to": "n:108",
+      "fromReverse": false,
+      "toReverse": false,
+      "reference": true,
+      "classification": "reference"
+    },
+    {
+      "key": "ref-3",
+      "from": "n:108",
+      "to": "n:109",
+      "fromReverse": false,
+      "toReverse": false,
+      "reference": true,
+      "classification": "reference"
+    },
+    {
+      "key": "ins-1",
+      "from": "n:101",
+      "to": "n:201",
+      "fromReverse": false,
+      "toReverse": false,
+      "reference": false,
+      "classification": "alternate"
+    },
+    {
+      "key": "ins-2",
+      "from": "n:201",
+      "to": "n:202",
+      "fromReverse": false,
+      "toReverse": false,
+      "reference": false,
+      "classification": "alternate"
+    },
+    {
+      "key": "ins-3",
+      "from": "n:202",
+      "to": "c:102,103,104,105,106,107",
+      "fromReverse": false,
+      "toReverse": false,
+      "reference": false,
+      "classification": "alternate"
+    },
+    {
+      "key": "skip",
+      "from": "n:101",
+      "to": "n:109",
+      "fromReverse": false,
+      "toReverse": false,
+      "reference": false,
+      "classification": "deletion"
+    },
+    {
+      "key": "inv-1",
+      "from": "n:108",
+      "to": "n:301",
+      "fromReverse": false,
+      "toReverse": true,
+      "reference": false,
+      "classification": "inversion"
+    },
+    {
+      "key": "inv-2",
+      "from": "n:301",
+      "to": "n:109",
+      "fromReverse": true,
+      "toReverse": false,
+      "reference": false,
+      "classification": "inversion"
+    }
+  ],
+  "reference": ["n:101", "c:102,103,104,105,106,107", "n:108", "n:109"],
+  "patterns": [
+    {
+      "id": "T1-P1",
+      "tileKey": "T1",
+      "tileStart": 31324000,
+      "tileEnd": 31330000,
+      "weight": "412",
+      "orientedNodes": ["202", "402", "404", "204"],
+      "nodeKeys": ["n:101", "n:201", "n:202", "c:102,103,104,105,106,107"]
+    },
+    {
+      "id": "T1-P2",
+      "tileKey": "T1",
+      "tileStart": 31324000,
+      "tileEnd": 31330000,
+      "weight": "67",
+      "orientedNodes": ["202", "204"],
+      "nodeKeys": ["n:101", "c:102,103,104,105,106,107"]
+    },
+    {
+      "id": "T2-P1",
+      "tileKey": "T2",
+      "tileStart": 31330000,
+      "tileEnd": 31336000,
+      "weight": "233",
+      "orientedNodes": ["216", "603", "218"],
+      "nodeKeys": ["n:108", "n:301", "n:109"]
+    },
+    {
+      "id": "T2-P2",
+      "tileKey": "T2",
+      "tileStart": 31330000,
+      "tileEnd": 31336000,
+      "weight": "31",
+      "orientedNodes": ["216", "218"],
+      "nodeKeys": ["n:108", "n:109"]
+    }
+  ],
+  "tileBoundaries": [
+    { "tileKey": "T1", "start": 31324000, "end": 31330000 },
+    { "tileKey": "T2", "start": 31330000, "end": 31336000 }
+  ],
+  "counts": {
+    "tiles": 2,
+    "decodedNodes": 13,
+    "decodedEdges": 15,
+    "decodedPatterns": 6,
+    "displayedNodeGroups": 7,
+    "displayedTopologyEdges": 9,
+    "displayedPatterns": 4,
+    "collapsedNodes": 5,
+    "omittedTopologyNodes": 0,
+    "omittedTopologyEdges": 0
+  },
+  "semantics": "anonymous-distinct-weighted-tile-paths",
+  "withinDisplayLimits": true
+}

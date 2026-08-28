@@ -24,7 +24,8 @@ npx pangenome-range encode input.gbz output.pngr
 ```
 
 The root and `/reader` entries contain no DOM, Node built-ins, launcher code, or
-native code. `/viewer` owns DOM/canvas behavior; `/node` owns Node file I/O; the
+native code. `/viewer` owns the framework-neutral tube-map model, layout, and
+SVG behavior; `/node` owns Node file I/O; the
 executable shim lives only under `bin/`. Bundle-size checks also reject native
 launcher markers in reader and viewer output.
 

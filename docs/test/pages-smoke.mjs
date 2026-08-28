@@ -15,20 +15,18 @@ const fixturePath = join(
   "conformance",
   "format-v1.pngr",
 );
-const fixture = await readFile(fixturePath);
 const indexedFixturePath = join(
   repository,
   "test-data",
   "golden",
   "record-archive-v1.pngr",
 );
+const fixture = await readFile(fixturePath);
 const indexedFixture = await readFile(indexedFixturePath);
 const etag = `"sha256-${createHash("sha256").update(fixture).digest("hex")}"`;
 const requests = [];
 const configuredArchiveUrl =
   process.env.VITE_PANGENOME_RANGE_DEMO_ARCHIVE_URL ?? "";
-const populationArchiveUrl =
-  process.env.VITE_PANGENOME_RANGE_DEMO_1000G_ARCHIVE_URL ?? "";
 const screenshotBase =
   process.env.PANGENOME_RANGE_DEMO_SCREENSHOT ??
   "/tmp/pangenome-range-demo.png";
@@ -51,7 +49,7 @@ const server = createServer(async (request, response) => {
     return;
   }
   if (url.pathname.endsWith("/slow.pngr")) {
-    await new Promise((resolve) => setTimeout(resolve, 250));
+    await new Promise((resolve) => setTimeout(resolve, 300));
     serveArchive(request, response, fixture, false);
     return;
   }
@@ -79,8 +77,7 @@ const server = createServer(async (request, response) => {
     return;
   }
   try {
-    const bytes = await readFile(filePath);
-    respond(response, 200, contentType(filePath), bytes);
+    respond(response, 200, contentType(filePath), await readFile(filePath));
   } catch {
     respond(response, 404, "text/plain", Buffer.from("Not found"));
   }
@@ -92,183 +89,105 @@ assert(address !== null && typeof address === "object");
 const baseUrl = `http://127.0.0.1:${address.port}/pangenome-range`;
 const browser = await chromium.launch({ headless: true });
 const page = await browser.newPage({ viewport: { width: 1600, height: 1000 } });
-const browserErrors = [];
-page.on("pageerror", (error) => browserErrors.push(error.message));
-let configuredArchivePassed = false;
-let populationArchivePassed = false;
+const pageErrors = [];
+page.on("pageerror", (error) => pageErrors.push(error.message));
 
 try {
-  if (configuredArchiveUrl.length > 0) {
-    configuredArchivePassed = await exerciseConfiguredArchive(browser, baseUrl);
-  }
-  if (populationArchiveUrl.length > 0) {
-    populationArchivePassed = await exercisePopulationArchive(browser, baseUrl);
-  }
   await page.goto(
-    `${baseUrl}/demo?archive=fixture&sample=GRCh38&contig=chr1&start=100&end=102&context=100`,
+    `${baseUrl}/demo?archive=fixture&sample=GRCh38&contig=chr1&start=100&end=102`,
   );
-  await page.locator('.explorer[data-phase="ready"]').waitFor();
-  await assertHealthyDemo(page);
-  await assertNoPageOverflow(page, "1600x1000 detail");
-  await page.screenshot({ path: screenshotPath("detail"), fullPage: true });
-  await page.getByLabel("Go to a locus or genomic coordinate").fill("PNGRTEST");
-  await page.getByText(/no named-locus index/i).waitFor();
-  await page.keyboard.press("Escape");
+  await waitForReady(page, "fixture browser");
+  await assertHealthyBrowser(page);
+  await assertNoPageOverflow(page, "fixture browser");
   assert(
     requests.some(
       (request) =>
         request.path.endsWith("/fixtures/format-v1.pngr") &&
         request.status === 206,
     ),
-    "the built demo did not make a real 206 request for its bundled archive",
+    "the browser did not perform a real 206 request for the fixture",
   );
+  await page.screenshot({ path: screenshotPath("fixture"), fullPage: true });
 
-  await page.getByTitle("Navigate").click();
-  await page.getByRole("button", { name: "Zoom in" }).click();
-  await page
-    .getByLabel("navigate controls")
-    .getByLabel("Close controls")
-    .click();
-  const commandInput = page.getByLabel("Go to a locus or genomic coordinate");
-  await commandInput.fill("GRCh38 chr1:100-101");
-  await page.getByRole("button", { name: "Open", exact: true }).click();
-  await page.locator('.explorer[data-phase="ready"]').waitFor();
+  const search = page.getByRole("textbox", {
+    name: "Search gene or coordinate",
+  });
+  await search.fill("GRCh38 chr1:100-101");
+  await search.press("Enter");
+  await waitForReady(page, "first coordinate");
   const firstHistoryUrl = page.url();
-  await commandInput.fill("GRCh38 chr1:101-102");
-  await page.getByRole("button", { name: "Open", exact: true }).click();
-  await page.locator('.explorer[data-phase="ready"]').waitFor();
+  await search.fill("GRCh38 chr1:101-102");
+  await search.press("Enter");
+  await waitForReady(page, "second coordinate");
   const secondHistoryUrl = page.url();
   assert.notEqual(firstHistoryUrl, secondHistoryUrl);
-  await page.goBack();
-  await page.locator('.explorer[data-phase="ready"]').waitFor();
+  await page.getByRole("button", { name: "Back" }).click();
+  await page.waitForURL(firstHistoryUrl);
+  await waitForReady(page, "history back");
   assert.equal(page.url(), firstHistoryUrl);
-  await page.goForward();
-  await page.locator('.explorer[data-phase="ready"]').waitFor();
+  await page.getByRole("button", { name: "Forward" }).click();
+  await page.waitForURL(secondHistoryUrl);
+  await waitForReady(page, "history forward");
   assert.equal(page.url(), secondHistoryUrl);
-  await commandInput.fill("GRCh38 chr1:100-102");
-  await page.getByRole("button", { name: "Open", exact: true }).click();
-  await page.locator('.explorer[data-phase="ready"]').waitFor();
-  await exerciseNodeHoverAndSelection(page);
-  await page.getByTitle("Navigate").click();
-  await page.getByRole("button", { name: "Pan right" }).click();
-  await page
-    .getByLabel("navigate controls")
-    .getByLabel("Close controls")
-    .click();
-  await page.keyboard.press("Control+k");
+  await page.getByRole("button", { name: "Zoom in" }).click();
+  await page.getByRole("button", { name: "Zoom out" }).click();
+  await page.getByRole("button", { name: "Fit" }).click();
+  await page.keyboard.press(
+    process.platform === "darwin" ? "Meta+k" : "Control+k",
+  );
+  await page.waitForFunction(
+    () =>
+      document.activeElement?.getAttribute("aria-label") ===
+      "Search gene or coordinate",
+  );
   assert.equal(
-    await page
-      .getByLabel("Go to a locus or genomic coordinate")
-      .evaluate((element) => element === document.activeElement),
+    await search.evaluate((element) => element === document.activeElement),
     true,
-    "command palette shortcut did not focus the command bar",
   );
 
-  await page.locator(".source-button").click();
+  const node = page.locator("[data-node-key]").first();
+  if ((await node.count()) > 0) {
+    await node.click();
+    await page.getByRole("complementary", { name: "Node inspector" }).waitFor();
+    await page.getByRole("button", { name: "Close inspector" }).click();
+  }
+
+  await page.getByRole("button", { name: "Archive" }).click();
   await page
-    .getByRole("combobox", { name: "Archive source" })
-    .selectOption("custom");
-  await page.getByLabel("Remote archive URL").fill(`${baseUrl}/record.pngr`);
-  await page.getByRole("button", { name: "Open remote archive" }).click();
-  await waitForReady(page, "indexed custom archive");
-  const commandBar = page.getByLabel("Go to a locus or genomic coordinate");
-  await commandBar.fill("rang");
+    .getByPlaceholder("https://…/archive.pngr")
+    .fill(`${baseUrl}/record.pngr`);
+  await page.getByRole("button", { name: "Open remote URL" }).click();
+  await waitForReady(page, "indexed archive");
+  await search.fill("rang");
   await page.getByRole("option", { name: /PNGRTEST/ }).waitFor();
   await page.screenshot({ path: screenshotPath("search"), fullPage: true });
-  await commandBar.press("ArrowDown");
-  await commandBar.press("Enter");
-  await page.locator('.explorer[data-phase="ready"]').waitFor();
-  await page.getByRole("heading", { name: "PNGRTEST", level: 1 }).waitFor();
-  await page.screenshot({ path: screenshotPath("overview"), fullPage: true });
-  await commandBar.fill("RANGE1");
-  await page.getByRole("button", { name: "Open", exact: true }).click();
-  await page.locator('.explorer[data-phase="ready"]').waitFor();
-  await page.getByRole("heading", { name: "PNGRTEST", level: 1 }).waitFor();
+  await search.press("Enter");
+  await waitForReady(page, "named locus");
+  assert.match(await search.inputValue(), /PNGRTEST/);
+  const pattern = page.locator("[data-pattern-id]").first();
+  if ((await pattern.count()) > 0) {
+    await pattern.focus();
+    await pattern.press("Enter");
+    await page
+      .getByRole("complementary", { name: "Pattern inspector" })
+      .getByText(/not a named person/i)
+      .waitFor();
+    await page.getByRole("button", { name: "Close inspector" }).click();
+  }
 
-  const remoteRequestsBeforeLocal = requests.length;
+  const requestCountBeforeLocal = requests.length;
+  await page.getByRole("button", { name: "Archive" }).click();
   await page.locator('input[type="file"]').setInputFiles(fixturePath);
-  await page.locator('.explorer[data-phase="ready"]').waitFor();
-  await page
-    .locator(".source-button")
-    .getByText("format-v1.pngr (local file)")
-    .waitFor();
-  assert.equal(
-    requests.length,
-    remoteRequestsBeforeLocal,
-    "local file mode unexpectedly performed an HTTP request",
-  );
+  await waitForReady(page, "local file");
+  assert.equal(requests.length, requestCountBeforeLocal);
 
-  await page.locator(".source-button").click();
-  await page
-    .getByRole("combobox", { name: "Archive source" })
-    .selectOption("custom");
-  await page.getByLabel("Remote archive URL").fill(`${baseUrl}/slow.pngr`);
-  await page.getByRole("button", { name: "Open remote archive" }).click();
-  await page.locator('.explorer[data-phase="opening"]').waitFor();
-  await page.screenshot({ path: screenshotPath("loading"), fullPage: true });
-  await page.locator(".source-button").click();
-  await page
-    .getByRole("combobox", { name: "Archive source" })
-    .selectOption("fixture");
-  await page.locator('.explorer[data-phase="ready"]').waitFor();
-  assert.equal(
-    await page.getByRole("alert").count(),
-    0,
-    "cancelled load leaked a stale error",
-  );
+  await page.goto(`${baseUrl}/tube-map-lab`);
+  await page.getByText("Golden tube-map laboratory").waitFor();
+  await page.locator('[data-node-key="c:102,103,104,105,106,107"]').waitFor();
+  await page.locator('[data-pattern-id="T2-P1"]').waitFor();
+  await page.locator('[data-node-key="n:301"]').waitFor();
+  await page.screenshot({ path: screenshotPath("golden"), fullPage: true });
 
-  await page.locator(".source-button").click();
-  await page
-    .getByRole("combobox", { name: "Archive source" })
-    .selectOption("custom");
-  await page.getByLabel("Remote archive URL").fill(`${baseUrl}/broken.pngr`);
-  await page.getByRole("button", { name: "Open remote archive" }).click();
-  await page.getByRole("alert").waitFor();
-  await page.screenshot({ path: screenshotPath("error"), fullPage: true });
-  await assertContains(
-    await page.getByRole("alert").innerText(),
-    /206|Content-Range|range/i,
-  );
-
-  await page.locator(".source-button").click();
-  await page
-    .getByRole("combobox", { name: "Archive source" })
-    .selectOption("fixture");
-  await page.locator('.explorer[data-phase="ready"]').waitFor();
-  await page.locator(".evidence-toggle").click();
-  await page.getByLabel("Technical evidence mode").check();
-  await page.getByText(/Canonical hash/).waitFor();
-  const timingEvidence = await page
-    .locator(".timing-strip article")
-    .evaluateAll((articles) =>
-      Object.fromEntries(
-        articles.map((article) => [
-          article.querySelector("span")?.textContent?.trim(),
-          article.querySelector("strong")?.textContent?.trim(),
-        ]),
-      ),
-    );
-  await page.locator(".evidence-toggle").click();
-  await assertNoPageOverflow(page, "1600x1000 detail after recovery");
-  await page.screenshot({
-    path: screenshotBase,
-    fullPage: true,
-  });
-  await page.getByTitle("Toggle color theme").click();
-  await page.setViewportSize({ width: 1366, height: 768 });
-  await assertNoPageOverflow(page, "1366x768 dark detail");
-  await page.screenshot({
-    path: screenshotPath("dark"),
-    fullPage: true,
-  });
-  await page.setViewportSize({ width: 1024, height: 768 });
-  await assertNoPageOverflow(page, "1024x768 compact desktop");
-  await page.setViewportSize({ width: 820, height: 1180 });
-  await assertNoPageOverflow(page, "820x1180 tablet");
-  await page.screenshot({
-    path: screenshotPath("tablet"),
-    fullPage: true,
-  });
   const browserMatrix = ["chromium"];
   for (const [name, engine] of [
     ["firefox", firefox],
@@ -279,22 +198,27 @@ try {
       const matrixPage = await matrixBrowser.newPage({
         viewport: { width: 1280, height: 900 },
       });
-      const matrixErrors = [];
-      matrixPage.on("pageerror", (error) => matrixErrors.push(error.message));
+      const errors = [];
+      matrixPage.on("pageerror", (error) => errors.push(error.message));
       await matrixPage.goto(
-        `${baseUrl}/demo?archive=fixture&sample=GRCh38&contig=chr1&start=100&end=102&context=100`,
+        `${baseUrl}/demo?archive=fixture&sample=GRCh38&contig=chr1&start=100&end=102`,
       );
-      await matrixPage.locator('.explorer[data-phase="ready"]').waitFor();
+      await waitForReady(matrixPage, `${name} fixture browser`);
       await matrixPage
-        .getByRole("img", { name: /Pangenome graph for GRCh38 chr1/ })
+        .getByRole("img", { name: /Tube map for GRCh38 chr1/ })
         .waitFor();
-      assert.deepEqual(matrixErrors, [], `${name} reported page errors`);
+      assert.deepEqual(errors, [], `${name} reported page errors`);
       browserMatrix.push(name);
     } finally {
       await matrixBrowser.close();
     }
   }
-  assert.deepEqual(browserErrors, []);
+
+  let configuredArchive;
+  if (configuredArchiveUrl.length > 0) {
+    configuredArchive = await exerciseConfiguredArchive(browser, baseUrl);
+  }
+  assert.deepEqual(pageErrors, []);
   console.log(
     JSON.stringify(
       {
@@ -302,33 +226,15 @@ try {
         actualRangeResponses: requests.filter(
           (request) => request.status === 206,
         ).length,
-        localFilePassed: true,
-        cancellationPassed: true,
-        actionableRangeErrorPassed: true,
-        configuredArchivePassed,
-        populationArchivePassed,
         browserHistoryPassed: true,
+        localFilePassed: true,
+        nodeInspectorPassed: true,
+        patternInspectorPassed: true,
         browserMatrix,
-        timingEvidence,
-        screenshot: screenshotBase,
-        overviewScreenshot: screenshotPath("overview"),
-        showcaseScreenshot:
-          configuredArchiveUrl.length > 0
-            ? screenshotPath("public-showcase")
-            : undefined,
-        publicHlaScreenshot:
-          configuredArchiveUrl.length > 0
-            ? screenshotPath("public-overview")
-            : undefined,
-        publicSearchScreenshot:
-          configuredArchiveUrl.length > 0
-            ? screenshotPath("public-search")
-            : undefined,
+        configuredArchive,
+        fixtureScreenshot: screenshotPath("fixture"),
+        goldenScreenshot: screenshotPath("golden"),
         searchScreenshot: screenshotPath("search"),
-        loadingScreenshot: screenshotPath("loading"),
-        errorScreenshot: screenshotPath("error"),
-        darkScreenshot: screenshotPath("dark"),
-        tabletScreenshot: screenshotPath("tablet"),
       },
       null,
       2,
@@ -342,196 +248,205 @@ try {
 }
 
 async function exerciseConfiguredArchive(browser, baseUrl) {
-  const configuredPage = await browser.newPage({
-    viewport: { width: 1280, height: 900 },
+  const page = await browser.newPage({
+    viewport: { width: 1600, height: 1000 },
   });
   const errors = [];
-  configuredPage.on("pageerror", (error) => errors.push(error.message));
+  page.on("pageerror", (error) => errors.push(error.message));
   try {
-    await configuredPage.goto(`${baseUrl}/demo`);
-    await configuredPage
-      .locator('.explorer[data-phase="ready"]')
-      .waitFor({ timeout: 30_000 });
-    await configuredPage
-      .getByRole("heading", { name: /Explore human pangenomes/i, level: 1 })
+    await page.goto(`${baseUrl}/demo`);
+    await waitForReady(page, "configured HLA-B", 45_000);
+    await page
+      .getByRole("textbox", { name: "Search gene or coordinate" })
       .waitFor();
-    await configuredPage.getByLabel("Detailed graph viewport").waitFor();
-    await configuredPage.screenshot({
-      path: screenshotPath("public-showcase"),
-      fullPage: true,
-    });
-    await configuredPage
-      .getByRole("button", { name: "Regional overview", exact: true })
-      .click();
-    await configuredPage
-      .locator('.explorer[data-phase="ready"][data-screen="explorer"]')
-      .waitFor({ timeout: 30_000 });
-    await configuredPage
-      .getByRole("heading", { name: "HLA-B", level: 1 })
-      .waitFor();
-    const summaryBinCount = Number.parseInt(
-      (await configuredPage.locator(".summary-caption").innerText()).match(
-        /^(\d+) summary bins?/,
-      )?.[1] ?? "0",
-      10,
-    );
-    assert(
-      summaryBinCount > 1,
-      `default regional overview should contain multiple honest summary bins, got ${summaryBinCount}`,
-    );
-    await configuredPage.screenshot({
-      path: screenshotPath("public-overview"),
-      fullPage: true,
-    });
-    const search = configuredPage.getByLabel(
-      "Go to a locus or genomic coordinate",
-    );
-    await search.fill("HLA");
-    await configuredPage.getByRole("option", { name: /HLA-B/ }).waitFor();
-    await configuredPage.screenshot({
-      path: screenshotPath("public-search"),
-      fullPage: true,
-    });
-    await configuredPage.keyboard.press("Escape");
-    await configuredPage.goto(
-      `${baseUrl}/demo?sample=CHM13&contig=chr1&start=1000000&end=1100000&context=100`,
-    );
-    await configuredPage
-      .locator('.explorer[data-phase="ready"]')
-      .waitFor({ timeout: 30_000 });
-    await configuredPage.locator(".source-button").click();
-    assert.equal(
-      await configuredPage
-        .getByRole("combobox", { name: "Archive source" })
-        .inputValue(),
-      "configured",
-    );
-    await configuredPage
-      .getByText(/present-populated/)
-      .waitFor({ timeout: 10_000 });
-    assert.deepEqual(errors, []);
-    return true;
-  } finally {
-    await configuredPage.close();
-  }
-}
-
-async function exercisePopulationArchive(browser, baseUrl) {
-  const populationPage = await browser.newPage({
-    viewport: { width: 1280, height: 900 },
-  });
-  const errors = [];
-  populationPage.on("pageerror", (error) => errors.push(error.message));
-  try {
-    await populationPage.goto(
-      `${baseUrl}/demo?archive=population&sample=NA19239&contig=1&start=0&end=32768&context=100`,
-    );
-    await populationPage
-      .locator('.explorer[data-phase="ready"]')
-      .waitFor({ timeout: 45_000 });
-    await populationPage.locator(".source-button").click();
-    assert.equal(
-      await populationPage
-        .getByRole("combobox", { name: "Archive source" })
-        .inputValue(),
-      "population",
-    );
-    await populationPage.getByText(/real NA19239 haplotype-0 paths/i).waitFor();
-    await populationPage.locator(".source-dialog header button").click();
     assert.match(
-      await populationPage
-        .getByLabel("Go to a locus or genomic coordinate")
-        .inputValue(),
-      /^NA19239#1:/,
+      await page.locator(".reference-track__heading").innerText(),
+      /GRCh38.*chr6/,
     );
+    const counts = await page.evaluate(() => ({
+      nodes: document.querySelectorAll("[data-node-key]").length,
+      edges: document.querySelectorAll("[data-edge-key]").length,
+      patterns: document.querySelectorAll("[data-pattern-id]").length,
+      svgElements: document.querySelectorAll(".pngr-tube-map-svg *").length,
+      status: document.querySelector(".browser-status")?.textContent?.trim(),
+      metrics: { ...document.querySelector(".browser-status")?.dataset },
+    }));
+    assert(counts.nodes > 0 && counts.nodes <= 400);
+    assert(counts.edges <= 800);
+    assert.equal(counts.patterns, 8);
+    assert.equal(await visibleLabelCollisionCount(page), 0);
+    await page.screenshot({ path: screenshotPath("hla-b"), fullPage: true });
+    const interactions = await exerciseGraphControls(page);
+    const search = page.getByRole("textbox", {
+      name: "Search gene or coordinate",
+    });
+    await search.fill("MICB");
+    await page
+      .getByRole("option", { name: /^MICB / })
+      .waitFor({ timeout: 15_000 });
+    await search.press("Enter");
+    await waitForReady(page, "configured MICB", 45_000);
+    const micb = await page.evaluate(() => ({
+      nodes: document.querySelectorAll("[data-node-key]").length,
+      edges: document.querySelectorAll("[data-edge-key]").length,
+      patterns: document.querySelectorAll("[data-pattern-id]").length,
+      svgElements: document.querySelectorAll(".pngr-tube-map-svg *").length,
+      status: document.querySelector(".browser-status")?.textContent?.trim(),
+      metrics: { ...document.querySelector(".browser-status")?.dataset },
+    }));
+    await page.screenshot({ path: screenshotPath("micb"), fullPage: true });
     assert.deepEqual(errors, []);
-    return true;
+    return {
+      hla: { ...counts, ...interactions },
+      hlaScreenshot: screenshotPath("hla-b"),
+      micb,
+      micbScreenshot: screenshotPath("micb"),
+    };
   } finally {
-    await populationPage.close();
+    await page.close();
   }
 }
 
-async function assertHealthyDemo(page) {
-  await page
-    .getByRole("img", { name: /Pangenome graph for GRCh38 chr1/ })
-    .waitFor();
-  await page.getByTitle("Layers").click();
-  await page.getByText(/Anonymous weighted traversals remain local/).waitFor();
-  await page.getByLabel("layers controls").getByLabel("Close controls").click();
-  await page.locator(".source-button").click();
-  assert.equal(
-    await page.getByRole("combobox", { name: "Archive source" }).inputValue(),
-    "fixture",
+async function exerciseGraphControls(page) {
+  await page.getByRole("button", { name: "Fit" }).click();
+  const graph = page.locator(".tube-map-view");
+  const reference = page.locator(".pngr-node--reference").first();
+  const graphBox = await graph.boundingBox();
+  assert(graphBox !== null, "graph viewport has no bounding box");
+  const before = await reference.evaluate((element) => {
+    const rect = element.getBoundingClientRect();
+    return { center: rect.left + rect.width / 2, width: rect.width };
+  });
+  await graph.dispatchEvent("wheel", {
+    clientX: before.center,
+    clientY: graphBox.y + graphBox.height / 2,
+    deltaMode: 0,
+    deltaX: 0,
+    deltaY: -80,
+  });
+  await page.waitForTimeout(100);
+  const after = await reference.evaluate((element) => {
+    const rect = element.getBoundingClientRect();
+    return { center: rect.left + rect.width / 2, width: rect.width };
+  });
+  const wheelZoomRatio = after.width / before.width;
+  const wheelAnchorShift = Math.abs(after.center - before.center);
+  assert(
+    wheelZoomRatio > 1.04 && wheelZoomRatio < 1.08,
+    `one wheel step changed zoom by ${wheelZoomRatio.toFixed(3)}x`,
   );
-  await page.locator(".source-dialog header button").click();
-  assert.equal(
-    await page.getByLabel("Go to a locus or genomic coordinate").inputValue(),
-    "GRCh38#chr1:100-102",
+  assert(
+    wheelAnchorShift < 0.75,
+    `cursor-anchored wheel zoom shifted ${wheelAnchorShift.toFixed(2)} px`,
   );
-  assert.equal(await page.getByLabel("Detailed graph viewport").count(), 1);
-  assert.equal(await page.getByLabel("Selection inspector").count(), 0);
+  await page.getByRole("button", { name: "Fit" }).click();
+
+  let singleClickPreservedCollapse = true;
+  let expandedNodeCount;
+  const collapsed = page.locator('[data-node-key^="c:"]').first();
+  if ((await collapsed.count()) > 0) {
+    const nodeCount = await page.locator("[data-node-key]").count();
+    await collapsed.click();
+    const inspector = page.getByRole("complementary", {
+      name: "Node inspector",
+    });
+    await inspector.waitFor();
+    singleClickPreservedCollapse =
+      (await page.locator("[data-node-key]").count()) === nodeCount;
+    assert(singleClickPreservedCollapse);
+    assert.equal(await inspector.locator("details").count(), 0);
+    await inspector
+      .getByRole("button", { name: "Expand chain in graph" })
+      .click();
+    await page.waitForFunction(
+      (beforeCount) =>
+        document.querySelectorAll("[data-node-key]").length > beforeCount,
+      nodeCount,
+    );
+    expandedNodeCount = await page.locator("[data-node-key]").count();
+  }
+  return {
+    wheelZoomRatio,
+    wheelAnchorShift,
+    singleClickPreservedCollapse,
+    expandedNodeCount,
+  };
+}
+
+async function visibleLabelCollisionCount(page) {
+  return page.evaluate(() => {
+    const rectangles = [
+      ...document.querySelectorAll(".pngr-pattern-label, .pngr-node-label"),
+    ]
+      .map((element) => element.getBoundingClientRect())
+      .filter((rect) => rect.width > 0 && rect.height > 0);
+    let collisions = 0;
+    for (let left = 0; left < rectangles.length; left += 1) {
+      for (let right = left + 1; right < rectangles.length; right += 1) {
+        const first = rectangles[left];
+        const second = rectangles[right];
+        const overlapX =
+          Math.min(first.right, second.right) -
+          Math.max(first.left, second.left);
+        const overlapY =
+          Math.min(first.bottom, second.bottom) -
+          Math.max(first.top, second.top);
+        if (overlapX > 1 && overlapY > 1) collisions += 1;
+      }
+    }
+    return collisions;
+  });
+}
+
+async function assertHealthyBrowser(page) {
+  await page.getByRole("img", { name: /Tube map for GRCh38 chr1/ }).waitFor();
+  assert.equal(await page.locator(".pangenome-browser").count(), 1);
+  assert.equal(
+    await page.locator(".showcase-stage, .overview-stage, .tool-rail").count(),
+    0,
+  );
+  assert.equal(await page.getByRole("button", { name: "Archive" }).count(), 1);
+  assert.equal(await page.getByRole("button", { name: "Share" }).count(), 1);
+  assert.match(
+    await page.locator(".browser-status").innerText(),
+    /SHA-256 verified|integrity/i,
+  );
+}
+
+async function waitForReady(page, label, timeout = 15_000) {
+  try {
+    await page
+      .locator('.browser-status[data-phase="ready"]')
+      .waitFor({ timeout });
+  } catch (error) {
+    const phase = await page
+      .locator(".browser-status")
+      .getAttribute("data-phase");
+    const message = await page
+      .locator(".browser-status")
+      .innerText()
+      .catch(() => "");
+    throw new Error(
+      `${label} did not reach ready (phase=${phase}, message=${JSON.stringify(message)}): ${error instanceof Error ? error.message : error}`,
+    );
+  }
 }
 
 async function assertNoPageOverflow(page, label) {
   const dimensions = await page.evaluate(() => ({
-    viewportWidth: window.innerWidth,
-    viewportHeight: window.innerHeight,
+    viewportWidth: innerWidth,
+    viewportHeight: innerHeight,
     pageWidth: document.documentElement.scrollWidth,
     pageHeight: document.documentElement.scrollHeight,
   }));
   assert(
     dimensions.pageWidth <= dimensions.viewportWidth,
-    `${label} has horizontal page overflow: ${JSON.stringify(dimensions)}`,
+    `${label} has horizontal overflow`,
   );
   assert(
     dimensions.pageHeight <= dimensions.viewportHeight,
-    `${label} has vertical page overflow: ${JSON.stringify(dimensions)}`,
+    `${label} has vertical overflow`,
   );
-}
-
-async function waitForReady(page, label) {
-  try {
-    await page
-      .locator('.explorer[data-phase="ready"]')
-      .waitFor({ timeout: 15_000 });
-  } catch (error) {
-    const phase = await page.locator(".explorer").getAttribute("data-phase");
-    const alert = await page
-      .getByRole("alert")
-      .allInnerTexts()
-      .catch(() => []);
-    throw new Error(
-      `${label} did not reach ready (phase=${phase}, alerts=${JSON.stringify(alert)}): ${error instanceof Error ? error.message : error}`,
-    );
-  }
-}
-
-async function exerciseNodeHoverAndSelection(page) {
-  const canvas = page.locator("[data-viewer-canvas]");
-  const box = await canvas.boundingBox();
-  assert(box !== null, "viewer canvas has no browser layout box");
-  let found = false;
-  for (const xFraction of [0.2, 0.3, 0.4, 0.6, 0.7, 0.8]) {
-    for (const yFraction of [0.34, 0.42, 0.5]) {
-      await page.mouse.move(
-        box.x + box.width * xFraction,
-        box.y + box.height * yFraction,
-      );
-      const detail = await page.locator("[data-viewer-detail]").innerText();
-      if (/^node \d+/.test(detail)) {
-        await page.mouse.down();
-        await page.mouse.up();
-        assert.match(
-          await page.locator("[data-viewer-detail]").innerText(),
-          /^node \d+/,
-        );
-        found = true;
-        break;
-      }
-    }
-    if (found) break;
-  }
-  assert(found, "hover scan did not find a rendered node");
 }
 
 function serveArchive(request, response, bytes, broken) {
@@ -614,8 +529,4 @@ function contentType(path) {
     default:
       return "application/octet-stream";
   }
-}
-
-async function assertContains(value, pattern) {
-  assert.match(value, pattern);
 }

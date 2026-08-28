@@ -401,3 +401,12 @@ summary paint, 1.2 ms first graph-tile paint, 1.9 ms query completion, and 0.3
 ms canvas paint in one Chromium loopback run. These values validate UI phase
 instrumentation only; they do not replace the retained multi-gigabyte public
 archive measurements above.
+
+## Single-screen tube-map browser (2026-08-27)
+
+`results/2026-08-27-simple-browser-v1/` supersedes the production demo UI with
+a single-screen reference-anchored SVG tube map. It retains the before/after
+component and bundle inventory, deterministic golden screenshot, public HLA-B
+and lower-complexity screenshots, exact byte-range/query status, and the
+Chromium/Firefox/WebKit result. Older explorer reports remain historical
+evidence and are not the current product contract.

@@ -223,43 +223,43 @@ The `/viewer` entry is a one-way consumer of the reader API:
 
 ```text
 PangenomeArchive.queryTiles()
-  -> bounded incremental view model
-  -> deterministic layout snapshot
-  -> Canvas 2D renderer
-  -> interaction/lifecycle controller
+  -> deterministic tube-map adapter
+  -> reference-anchored layout snapshot
+  -> caller-owned SVG renderer
 ```
 
 The viewer never opens URLs, reads byte ranges, parses archive bytes, or owns an
-archive. Its controller cancels the previous `queryTiles()` iterator whenever a
-new region is selected. Reference nodes are retained before alternatives when a
-budget is reached; node, edge, and traversal caps are applied before layout so a
-large decoded region cannot create an unbounded render corpus. The current
-bounded main-thread layout did not justify worker-transfer complexity; a worker
-is reserved for a measured interaction failure rather than assumed to help.
+archive. `buildTubeMapModel()` receives decoded tiles from its caller, sorts them
+independently of arrival order, selects a deterministic top-N set of anonymous
+local patterns, and collapses bounded reference and alternate structural
+segments. It refuses models above 400 displayed groups or 800 topology edges
+instead of truncating them. The bounded main-thread layout did not justify
+worker-transfer complexity.
 
 Reference topology can merge by node identity. Weighted anonymous traversals
-remain attached to their source tile, are ranked by local multiplicity for the
-limited frequency lanes, and are never stitched across tile boundaries. The
-canvas shows reference coordinate ticks, orientation, alternate branches,
-curved topology edges, tile boundaries, local weights, and explicit summarized
-counts. Mouse, pointer, and keyboard controls share one transform; `destroy()`
-aborts work, removes listeners and observers, and releases all DOM owned by the
-viewer.
+remain attached to their source tile, are ranked by exact integer weight, and
+are never stitched across tile boundaries. The SVG shows orientation,
+reference-anchored alternate branches, curved topology, tile dividers, and
+local weights. Narrow labels disappear at locus-fit scale and return on zoom.
+`renderTubeMapSvg()` returns explicit cleanup for its listeners and DOM.
 
-The VitePress demo is an application shell over that public boundary. It owns
-archive selection, native locus search, multiscale summaries, the settled
-genomic viewport, browser history, cancellation, and the inspector. Wide views
-call only `summary()`; a deterministic byte/record budget decides when to
-stream `queryTiles()`. Immediate canvas transforms remain local while a
-debounced settled viewport changes the genomic request, so pointer movement
-does not create a request storm. Old visual content stays visible until the
-first replacement tile arrives.
+The VitePress demo is a one-screen application shell over that public boundary.
+It owns archive selection, native locus search, optional thin summaries, exact
+`planRegion()` limits, browser history, cancellation, URL state, and overlay
+inspectors. SVG pan and zoom stay local and do not create a request storm. Old
+visual content stays visible until the first replacement tile arrives.
 
-The public viewer exposes the application-used controls and events:
-`setViewport`, `setDisplayMode`, `setLayers`, `setTheme`,
-`getPerformanceSnapshot`, and `on` for viewport, selection, and LOD changes.
-It remains framework-neutral and cannot import Vue, VitePress, benchmark code,
-archive transport, or Node built-ins.
+The application normalizes wheel delta modes into a bounded continuous zoom,
+keeps the pointer's graph coordinate fixed, and coalesces SVG repaints to one
+animation frame. Pattern-label lanes use deterministic collision-free spacing;
+node labels are width-gated. Selecting a collapsed node opens the bounded
+inspector without changing topology, while expansion is a separate explicit
+action.
+
+The public viewer exports the adapter, layout, SVG renderer, location parser,
+and region-policy helpers used by the application. It remains framework-neutral
+and cannot import Vue, VitePress, benchmark code, archive transport, or Node
+built-ins.
 
 ## Cost simulation
 

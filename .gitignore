@@ -106,6 +106,7 @@ dist
 
 # Generated documentation fixtures (copied from checked conformance artifacts)
 /docs/public/fixtures/*.pngr
+/docs/public/fixtures/tube-map-golden.json
 
 # Docusaurus cache and generated files
 .docusaurus

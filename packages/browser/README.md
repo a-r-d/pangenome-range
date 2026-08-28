@@ -1,7 +1,7 @@
 # pangenome-range
 
 `pangenome-range` provides a browser-safe TypeScript reader, a framework-neutral
-Canvas viewer, a Node file source, and a launcher for the native Rust encoder
+SVG tube-map viewer, a Node file source, and a launcher for the native Rust encoder
 CLI.
 
 ```bash
@@ -11,8 +11,16 @@ npx pangenome-range encode input.gbz output.pngr
 
 ```ts
 import { openPangenome } from "pangenome-range";
-import { createPangenomeViewer } from "pangenome-range/viewer";
+import {
+  buildTubeMapModel,
+  layoutTubeMap,
+  renderTubeMapSvg,
+} from "pangenome-range/viewer";
 ```
+
+The viewer adapter performs deterministic local-pattern selection and structural
+collapse. The layout is reference-anchored, and the renderer draws into a
+caller-owned SVG. It never opens an archive or issues range requests itself.
 
 The native executable is supplied by an exact-version optional package selected
 for the current operating system, CPU, and Linux libc. Installing with

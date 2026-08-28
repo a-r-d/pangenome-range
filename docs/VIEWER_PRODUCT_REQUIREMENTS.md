@@ -2,124 +2,110 @@
 
 ## Product contract
 
-The explorer is a browser-only scientific application over an immutable
-`.pngr` object. It composes the public reader and framework-neutral viewer; it
-does not parse archive bytes, upload local filenames, or require a query
-backend. The configured archive is selected by
-`VITE_PANGENOME_RANGE_DEMO_ARCHIVE_URL`; the bundled fixture remains the
-fallback.
+`/demo` is a browser-native scientific viewer over one immutable `.pngr`
+object. It opens the configured archive and `HLA-B` directly; there is no
+showcase, dashboard, query backend, or separate overview application. The
+bundled deterministic archive remains the offline fallback.
 
-The application preserves the format's declared semantics:
+The four-row desktop shell owns the viewport:
 
-- the reference traversal has real sample, contig, coordinate, orientation,
-  and fragment identity;
-- `anonymous-distinct-weighted-tile-paths` are integer-weighted local evidence,
-  not named individuals or globally stitchable haplotypes;
-- summary values are exact tile-record totals, not unique variants, alleles,
-  frequencies, or people.
+```text
+52 px    search and navigation toolbar
+112 px   linear reference context
+flex     reference-anchored SVG tube map
+30 px    range and integrity status
+```
 
-## Research workflow
+Anonymous traversals retain the serialized
+`anonymous-distinct-weighted-tile-paths` semantics. They are distinct,
+integer-weighted evidence local to one source tile. They are not named people,
+allele frequencies, or globally stitchable haplotypes.
 
-The full-viewport `/demo` route uses a 64-pixel command header, a 56-pixel
-tool rail, one canvas-first workspace, contextual overlay inspectors, and a
-compact bottom evidence drawer. Controls are icon-first with text labels in
-tooltips or open popovers; raw timing and range data stays collapsed by
-default. The configured archive and default locus open immediately into a
-showcase that pairs the product promise with a live, budgeted graph preview.
-This makes the first screen useful while keeping overview, search, and focused
-detail one action away. A researcher can:
+## Navigation and loading
 
-1. open the configured object, fixture, arbitrary compatible remote URL, or a
-   local file;
-2. navigate with canonical coordinates or the archive-native named-locus
-   index, including prefix suggestions, aliases, recent searches, and keyboard
-   selection;
-3. open an orientation-first composite overview through `archive.summary()`
-   and `archive.planRegion()` without fetching graph payloads; for a locus
-   narrower than one base summary bin, the overview expands to a bounded
-   multi-bin context instead of pretending sub-bin values exist;
-4. load or progressively stream a detailed region through
-   `archive.queryTiles()` when deterministic byte and record budgets allow it;
-5. pan, pinch, wheel, or use the keyboard while settled genomic requests are
-   debounced and stale work is cancelled;
-6. inspect loci, all eight summary counters, nodes, edges, local weighted
-   traversals, archive provenance, request ranges, and canonical hashes;
-7. copy a canonical coordinate or shareable remote URL and use browser history
-   to revisit genomic viewports.
+The location field accepts archive-native locus names and canonical
+coordinates. Prefix suggestions come only from `archive.searchLoci()`.
+Arrow keys, Enter, Escape, `Ctrl/Cmd+K`, and `/` work without a second command
+palette. Browser history and the query string preserve exact regions.
 
-Local transforms keep pointer interaction immediate. The application tracks
-the visual viewport, settled requested interval, loaded interval, and a
-predicted adjacent interval separately. Adjacent data is not fetched until a
-controlled benchmark establishes a benefit; the evidence panel labels this
-state explicitly.
+Every region first calls `archive.planRegion()`. A detailed query is allowed
+only when all three limits hold:
 
-## Levels of detail
+- span at most 100 kb;
+- exact compressed payload bytes at most 4 MiB;
+- at most eight physical payloads.
 
-`selectLevelOfDetail()` is deterministic and summary-driven. It chooses a
-summary level targeting approximately one bin per four horizontal pixels, then
-tests encoded bytes, decoded bytes, node records, edge records, and occurrence
-records against explicit render/query budgets. Span alone never authorizes a
-detailed query. Directory planning supplies exact selected chunks and transfer
-bytes before payload fetch. Because summary counters cover whole underlying
-bins, partial edge bins are coverage-prorated for policy and labeled as
-estimates; they are never presented as exact clipped-interval counts.
+An oversized request retains the ruler and exact plan, performs no regional
+payload read, and offers a deterministic 40 kb recommendation. Optional
+`summary()` bins appear only as a thin context strip when at least four bins
+are visible. They never replace exact directory-derived planning values.
 
-Short named-locus results advertise and open bounded detail directly. Larger
-features advertise "overview first" and retain an explicit recommended detail
-action. The showcase starts the configured default locus in detail because it
-is both the product demonstration and a bounded real query; its overview CTA
-still exposes the wider summary landscape without graph payloads.
+Allowed queries stream through `archive.queryTiles()`. A newer source, search,
+or history navigation aborts stale work. The preceding graph remains visible
+until the first replacement tile is decoded. The status row reports archive
+size, completed tiles, bytes, byte-range count, wall time, and integrity state.
 
-- **Overview:** summary tracks only.
-- **Regional:** summary context plus an explicit decision to load detail.
-- **Detailed:** progressively streamed topology and tile-local traversal
-  evidence.
-- **Base:** the same bounded graph with sequence labels and node orientation
-  when the pixel budget makes them legible.
+## Tube-map model and rendering
 
-Advanced users may override the automatic detail refusal. The resulting model
-and canvas budgets still cap retained graph objects and traversal lanes.
+The public `/viewer` entry has three framework-neutral stages:
 
-## Detailed layout and inspection
+```text
+RegionTile[] -> buildTubeMapModel() -> layoutTubeMap() -> renderTubeMapSvg()
+```
 
-The viewer places the real reference traversal on a coordinate spine in stable
-reference order. Alternate components are assigned to their nearest reference
-anchors and colored into deterministic non-overlapping lanes. Insertions,
-inversions, deletions/bypasses, and unanchored components have distinct visual
-forms. Progressive tile completion order cannot reorder already known
-reference nodes or change stable alternate lane colors.
+The adapter sorts tiles, selects the top 0/4/8/16 patterns, assigns tile-local
+identifiers, records source provenance, and collapses bounded structural
+segments. Pattern ordering is weight descending, tile start ascending, then
+lexicographic oriented-node sequence. Selected patterns terminate at their
+source tile and are never joined across a boundary.
 
-Node, edge, and traversal hit testing returns source-tile provenance. Traversal
-rows remain grouped by source tile and ranked by exact integer weight; they are
-never merged into a synthetic cross-tile sample. The inspector exposes the
-available regional payload range and sizes without inventing fields the format
-does not contain.
+The real reference traversal defines horizontal order. Reference segments are
+dominant, alternate components use deterministic lanes above and below it,
+skip edges arc across the backbone, and reverse nodes use a reversed notch.
+Widths encode sequence length only approximately; the ruler is the exact
+coordinate source. Fit, pointer-anchored wheel/pinch zoom, double-click zoom,
+Home reset, and drag pan are local SVG transforms and do not issue archive
+requests. Wheel deltas use a continuous bounded scale instead of treating each
+trackpad event as a fixed zoom step, and repaints are coalesced to animation
+frames.
 
-When a regional graph is too dense for individual alternate nodes, the canvas
-keeps the reference spine and renders deterministic topology bundles with
-explicit branch-count capsules. This is semantic aggregation, not silent
-truncation. Individual readable nodes return at detailed/base scale.
+Default post-collapse refusal limits are 400 displayed node groups and 800
+topology edges. The renderer does not silently truncate beyond those limits.
+At locus-fit scale labels are suppressed or shortened when their shapes are too
+narrow; they return in full as the user zooms. Pattern labels sit outside their
+lanes with enough deterministic vertical separation to avoid label collisions.
 
-## Interaction and accessibility
+## Inspection and sources
 
-The explorer supports visible focus, semantic buttons and inputs, an ARIA live
-status region, a keyboard-help panel, `Ctrl/Cmd+K`, arrow/Enter search
-selection, keyboard pan/zoom, Escape cancellation, high-DPI rendering,
-reduced-motion preferences, persistent layers/theme, and responsive tablet
-panels. The detailed graph remains a dark focus surface in either shell theme;
-light, dark, and tablet screenshots are retained as browser evidence.
+Clicking a node opens a bounded drawer with its sequence preview, orientation,
+boundary IDs for a collapsed chain, displayed neighbor counts, byte provenance,
+and source-tile coordinates. Inspection does not unexpectedly expand the graph;
+a collapsed chain has an explicit expansion action while retaining all member
+IDs in the model. Clicking a pattern opens its exact integer weight, oriented
+visit count, source tile, and the semantic warning above. Escape or an empty
+graph click closes a drawer.
 
-## Acceptance and evidence
+The archive menu supports the configured URL, another range-capable URL, and a
+local `.pngr` file. Local files stay in the browser. The normal reader and
+viewer exports contain no Vue, VitePress, Node built-ins, or native launcher.
 
-The hermetic Pages test requires real strict `206` responses, a populated and
-absent named-index state, coordinate and prefix navigation, hover/selection,
-local-file isolation, custom URL loading, stale-load cancellation, actionable
-bad-range errors, browser history-compatible URLs, all three browser engines,
-desktop/dark/tablet screenshots, and explicit no-page-overflow checks at
-1600x1000, 1366x768, 1024x768, and 820x1180. Reader/viewer unit tests cover
-command parsing, exact region planning, partial-bin policy, hit testing, and
-progressive layout stability.
+## Evidence requirements
 
-Measured limitations and outstanding product work are recorded in
-[Viewer performance](VIEWER_PERFORMANCE.md) and
-[Viewer format gaps](VIEWER_FORMAT_GAPS.md).
+Unit tests cover parsing, region policy, recommendations, deterministic pattern
+selection, reference order, lane placement, reverse orientation, collapse and
+expansion, thickness bounds, and stale cancellation. A checked-in two-tile
+golden model exercises an insertion branch, deletion-like skip, reverse node,
+collapsed chain, and four weighted local patterns on `/tube-map-lab`, which is
+excluded from documentation navigation.
+
+The hermetic Pages test requires real `206` requests, coordinate and named-locus
+navigation, history, pan/zoom controls, node and pattern inspection, custom URL,
+local-file isolation, the golden route, no desktop overflow, and Chromium,
+Firefox, and WebKit. Public-archive validation also checks bounded
+pointer-anchored wheel zoom, label collisions, inspection without implicit
+expansion, and explicit chain expansion. It remains conditional on the
+configured URL and retains HLA-B plus a lower-complexity locus screenshot.
+
+Outstanding scientific and performance constraints remain in
+[Viewer format gaps](VIEWER_FORMAT_GAPS.md) and
+[Viewer performance](VIEWER_PERFORMANCE.md).
