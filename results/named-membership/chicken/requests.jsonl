@@ -1,0 +1,13 @@
+{"layer":"locus","index":0,"offset":"15533944","length":535,"dependencyGroup":1}
+{"layer":"locus","index":1,"offset":"15519860","length":6326,"dependencyGroup":2}
+{"layer":"graph","index":0,"offset":"0","length":16384}
+{"layer":"graph","index":1,"offset":"61902","length":4096}
+{"layer":"graph","index":2,"offset":"9250750","length":118623}
+{"layer":"membership","index":0,"offset":"15939384","length":208,"dependencyGroup":1}
+{"layer":"membership","index":1,"offset":"15535302","length":520,"dependencyGroup":1}
+{"layer":"membership","index":2,"offset":"15898424","length":4096,"dependencyGroup":2}
+{"layer":"membership","index":3,"offset":"15719144","length":386,"dependencyGroup":3}
+{"layer":"membership","index":4,"offset":"15719530","length":613,"dependencyGroup":3}
+{"layer":"membership","index":5,"offset":"15720143","length":849,"dependencyGroup":3}
+{"layer":"membership","index":6,"offset":"15720992","length":414,"dependencyGroup":3}
+{"layer":"catalog","index":0,"offset":"15535822","length":1058,"dependencyGroup":4}

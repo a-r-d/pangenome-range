@@ -38,6 +38,8 @@ const populationArchiveUrl =
   process.env.VITE_PANGENOME_RANGE_DEMO_1000G_ARCHIVE_URL ?? "";
 const riceArchiveUrl =
   process.env.VITE_PANGENOME_RANGE_DEMO_RICE_ARCHIVE_URL ?? "";
+const chickenArchiveUrl =
+  process.env.VITE_PANGENOME_RANGE_DEMO_CHICKEN_ARCHIVE_URL ?? "";
 const screenshotBase =
   process.env.PANGENOME_RANGE_DEMO_SCREENSHOT ??
   "/tmp/pangenome-range-demo.png";
@@ -350,6 +352,10 @@ try {
   if (riceArchiveUrl.length > 0) {
     riceArchive = await exerciseRiceArchive(browser, baseUrl);
   }
+  let chickenArchive;
+  if (chickenArchiveUrl.length > 0) {
+    chickenArchive = await exerciseChickenArchive(browser, baseUrl);
+  }
   assert.deepEqual(pageErrors, []);
   console.log(
     JSON.stringify(
@@ -366,6 +372,7 @@ try {
         configuredArchive,
         populationArchive,
         riceArchive,
+        chickenArchive,
         fixtureScreenshot: screenshotPath("fixture"),
         goldenScreenshot: screenshotPath("golden"),
         searchScreenshot: screenshotPath("search"),
@@ -641,6 +648,77 @@ async function exerciseRiceArchive(browser, baseUrl) {
       locus: "Xa7",
       nodes: await page.locator("[data-node-key]").count(),
       screenshot: screenshotPath("rice-xa7"),
+    };
+  } finally {
+    await page.close();
+  }
+}
+
+async function exerciseChickenArchive(browser, baseUrl) {
+  const page = await browser.newPage({
+    viewport: { width: 1600, height: 1000 },
+  });
+  const errors = [];
+  page.on("pageerror", (error) => errors.push(error.message));
+  try {
+    await page.goto(
+      `${baseUrl}/demo?archive=chicken&locus=IGLL1&zoom=0.35&center=0.5&vscale=1.2`,
+    );
+    await waitForReady(page, "chicken IGLL1 view", 45_000);
+    assert.equal(
+      await page
+        .getByRole("textbox", { name: "Search gene or coordinate" })
+        .inputValue(),
+      "IGLL1",
+    );
+    await assertViewportState(page, {
+      zoom: 0.35,
+      center: 0.5,
+      vscale: 1.2,
+    });
+    assert.match(
+      await page.locator(".reference-track__heading").innerText(),
+      /bGalGal1b.*chr15/,
+    );
+    assert((await page.locator("[data-node-key]").count()) > 0);
+    await page.getByRole("button", { name: "Source" }).click();
+    const sourceDialog = page.getByRole("dialog", { name: "Archive source" });
+    assert.equal(
+      await sourceDialog.getByLabel("Demo archive").inputValue(),
+      "chicken",
+    );
+    assert.match(
+      await sourceDialog.innerText(),
+      /exact named GBWT source-path/i,
+    );
+    await sourceDialog
+      .getByRole("button", { name: "Close archive source" })
+      .click();
+    const pattern = page.locator("[data-pattern-id]").first();
+    await pattern.focus();
+    await pattern.press("Enter");
+    const inspector = page.getByRole("complementary", {
+      name: "Pattern inspector",
+    });
+    await inspector
+      .getByRole("heading", { name: "Named source paths" })
+      .waitFor();
+    await inspector.getByText("Unique named paths").waitFor();
+    assert((await inspector.locator("li").count()) > 0);
+    assert.match(
+      await inspector.locator("li").first().innerText(),
+      /multiplicity/,
+    );
+    await page.screenshot({
+      path: screenshotPath("chicken-igll1"),
+      fullPage: true,
+    });
+    assert.deepEqual(errors, []);
+    return {
+      source: "chicken",
+      locus: "IGLL1",
+      nodes: await page.locator("[data-node-key]").count(),
+      screenshot: screenshotPath("chicken-igll1"),
     };
   } finally {
     await page.close();

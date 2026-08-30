@@ -36,6 +36,7 @@ export type DemoArchiveId =
   | "hprc"
   | "1000g"
   | "rice"
+  | "chicken"
   | "poplar"
   | "fixture"
   | "custom"

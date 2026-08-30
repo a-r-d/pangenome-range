@@ -4,6 +4,17 @@
 
 ### Changed
 
+- Added a publishable 30-chicken pangenome demo using the CC BY 4.0 Rice et al.
+  graph. The production recipe checksum-gates and stream-extracts the closed
+  chromosome 15 component before invoking vg; it never indexes the complete
+  49-million-node GFA. The full 776-tile archive includes GRCg7b gene search,
+  summaries, provenance, and exact named source-path membership. Exhaustive
+  validation and five GBZ-oracle queries passed, including IGLL1; a live browser
+  smoke resolves named catalog paths with orientation and multiplicity. The
+  content-addressed 15,939,592-byte archive and retained origin probe passed the
+  static range/CORS/cache/byte-equality contract. The abandoned whole-source vg
+  attempt exceeded a 12 GiB zero-swap cgroup during path indexing, so the
+  chromosome-first guard is part of the supported recipe.
 - Fixed named-membership request-wave accounting and scheduling. Traces now retain
   the actual dependency group for each range; membership directories, tile pages,
   and catalog pages use shared bounded batches in `pathMembership()` and

@@ -66,6 +66,12 @@ const riceArchiveUrl =
       | string
       | undefined
   )?.trim() ?? "";
+const chickenArchiveUrl =
+  (
+    import.meta.env.VITE_PANGENOME_RANGE_DEMO_CHICKEN_ARCHIVE_URL as
+      | string
+      | undefined
+  )?.trim() ?? "";
 const poplarArchiveUrl =
   (
     import.meta.env.VITE_PANGENOME_RANGE_DEMO_POPLAR_ARCHIVE_URL as
@@ -154,6 +160,7 @@ const selectedPatternTile = computed(() => {
 const configuredLabel = "HPRC v2.1 + GENCODE v50 (GRCh38 / CHM13)";
 const populationLabel = "1000 Genomes hs38d1 (NA19239 haplotype 0)";
 const riceLabel = "PPanG rice chromosome 6 (NATELBORO / Xa7)";
+const chickenLabel = "Chicken pangenome chromosome 15 (bGalGal1b / IGLL1)";
 const poplarLabel = "Populus trichocarpa chromosome 19 (Nisqually-1)";
 const demoSources = computed<readonly ArchiveSourceSelection[]>(() => {
   const sources: ArchiveSourceSelection[] = [];
@@ -185,6 +192,16 @@ const demoSources = computed<readonly ArchiveSourceSelection[]>(() => {
       key: `url:${riceArchiveUrl}`,
       description:
         "PPanG Minigraph-Cactus chromosome 6 anchored on NATELBORO, with curated Xa7 search. Traversals are anonymous weighted tile-local patterns, not named accessions.",
+    });
+  }
+  if (chickenArchiveUrl.length > 0) {
+    sources.push({
+      id: "chicken",
+      source: chickenArchiveUrl,
+      label: chickenLabel,
+      key: `url:${chickenArchiveUrl}`,
+      description:
+        "Published 30-haplotype chicken graph chromosome 15 with GRCg7b gene search and exact named GBWT source-path membership.",
     });
   }
   if (poplarArchiveUrl.length > 0) {
@@ -352,6 +369,27 @@ async function initialRegion(opened: PangenomeArchive): Promise<RegionQuery> {
         end: Math.min(poplarReference.end, 6_324_224),
         context: 100,
       };
+    }
+  }
+  if (activeSourceId.value === "chicken" && opened.capabilities().namedLoci) {
+    try {
+      const result = await opened.searchLoci({
+        name: "IGLL1",
+        mode: "exact",
+        sample: "bGalGal1b",
+        limit: 1,
+      });
+      const hit = result.hits[0];
+      if (hit !== undefined) {
+        locus.value = hit;
+        return {
+          ...paddedLocus(hit),
+          start: 7_913_472,
+          end: 7_979_008,
+        };
+      }
+    } catch {
+      // Coordinate fallback remains available if the optional index is corrupt.
     }
   }
   if (opened.capabilities().namedLoci) {
@@ -857,6 +895,7 @@ function sourceFromUrl(): ArchiveSourceSelection {
     demoSources.value.find((source) => source.id === "hprc") ??
     demoSources.value.find((source) => source.id === "1000g") ??
     demoSources.value.find((source) => source.id === "rice") ??
+    demoSources.value.find((source) => source.id === "chicken") ??
     demoSources.value.find((source) => source.id === "poplar") ??
     demoSources.value[0];
   if (fallback === undefined)

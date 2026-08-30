@@ -1,0 +1,35 @@
+{
+  "schemaVersion": 1,
+  "graph": {
+    "record": "https://zenodo.org/records/10018222",
+    "url": "https://zenodo.org/api/records/10018222/files/pangenome.gfa.gz/content",
+    "filename": "pangenome.gfa.gz",
+    "bytes": 2358369558,
+    "md5": "f2ddedbe3bab487d87c34b1842b26b8f",
+    "sha256": "609230aa36071690bfde02445a7d0693f75e512a79276f60a3b5d04361c2600d",
+    "format": "GFA 1.1",
+    "license": "CC-BY-4.0"
+  },
+  "annotation": {
+    "assembly": "GCF_016699485.2",
+    "release": "106",
+    "url": "https://ftp.ncbi.nlm.nih.gov/genomes/all/GCF/016/699/485/GCF_016699485.2_bGalGal1.mat.broiler.GRCg7b/GCF_016699485.2_bGalGal1.mat.broiler.GRCg7b_genomic.gff.gz",
+    "filename": "GCF_016699485.2_genomic.gff.gz",
+    "bytes": 25161571,
+    "sha256": "d298f52807d16a467068a18dcf384b331b823d0861837731cc77a331e07fef72"
+  },
+  "vg": {
+    "version": "v1.76.1",
+    "url": "https://github.com/vgteam/vg/releases/download/v1.76.1/vg",
+    "filename": "vg-v1.76.1",
+    "bytes": 55374080,
+    "sha256": "87b457fdda6801c9580f79a53c3c0aa502261420abf222920c7222a703fd856b"
+  },
+  "reference": {
+    "sample": "bGalGal1b",
+    "contig": "chr15",
+    "length": 12703657,
+    "sourceWalk": "bGalGal1b#0#chr15@0",
+    "closedComponentNodeRange": [14724903, 15245596]
+  }
+}

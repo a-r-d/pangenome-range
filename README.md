@@ -34,13 +34,19 @@ The rice demo explores chromosome 6 from the PPanG rice pangenome, using NATELBO
 
 - [Rice Xa7 — bacterial-blight-resistance locus](https://a-r-d.github.io/pangenome-range/demo?archive=rice&locus=Xa7&zoom=2.856&center=0.600576&vscale=1.45)
 
+The chicken demo explores chromosome 15 from the published graph of 30 chicken
+haplotypes. It includes searchable GRCg7b genes and exact named GBWT source-path
+membership:
+
+- [Chicken IGLL1 — named paths through an immune-gene locus](https://a-r-d.github.io/pangenome-range/demo?archive=chicken&locus=IGLL1&zoom=0.35&center=0.5&vscale=1.2)
+
 An additional Populus trichocarpa Chr19 archive has passed local whole-chromosome
 named-path validation. Its source does not yet state a redistribution license, so it
 is not deployed. Once permission is confirmed, setting
 `PANGENOME_RANGE_DEMO_POPLAR_ARCHIVE_URL` activates the source-menu entry and this
 view: `archive=poplar&sample=Nisqually-1&contig=Chr19&start=6291456&end=6324224&zoom=0.35&center=0.5&vscale=1`.
 
-Demo URLs can select `archive=hprc`, `archive=1000g`, `archive=rice`, `archive=poplar`, or `archive=fixture`; select a named `locus` or an exact `sample`/`contig`/`start`/`end` interval; and restore horizontal `zoom`, normalized `center`, and vertical `vscale`. Local file selections cannot be restored from a link because browsers do not grant URLs access to local files.
+Demo URLs can select `archive=hprc`, `archive=1000g`, `archive=rice`, `archive=chicken`, `archive=poplar`, or `archive=fixture`; select a named `locus` or an exact `sample`/`contig`/`start`/`end` interval; and restore horizontal `zoom`, normalized `center`, and vertical `vscale`. Local file selections cannot be restored from a link because browsers do not grant URLs access to local files.
 
 ## Encoder
 
@@ -213,5 +219,7 @@ This project is possible because research groups made large pangenome resources 
 - The [GENCODE project](https://www.gencodegenes.org/) for the Human Release 50 gene annotations that power named-locus search in the HPRC demo ([exact GFF3 source](https://ftp.ebi.ac.uk/pub/databases/gencode/Gencode_human/release_50/gencode.v50.annotation.gff3.gz)).
 - The [1000 Genomes Project](https://www.internationalgenome.org/) and the [UCSC Computational Genomics Lab](https://cgl.gi.ucsc.edu/data/giraffe/mapping/graphs/for-NA19239/1000gplons/hs38d1/) for the 1000GPlons `hs38d1` graph used by the NA19239 demo.
 - The [PPanG team at SJTU-CGM](https://cgm.sjtu.edu.cn/PPanG/) for the rice Minigraph-Cactus graphs and Xa7 locus context ([source repository](https://github.com/SJTU-CGM/PPanG), [paper](https://doi.org/10.1186/s12864-024-10302-5)).
+- Rice et al. for the [30-chicken pangenome graph](https://zenodo.org/records/10018222) and its [BMC Biology article](https://doi.org/10.1186/s12915-023-01758-0). The source graph is CC BY 4.0.
+- [NCBI RefSeq](https://www.ncbi.nlm.nih.gov/datasets/genome/GCF_016699485.2/) for the GRCg7b gene annotations used by the chicken demo.
 
 The demo archives are derived, range-addressable representations. Please credit and follow the terms of the original data providers when using them; the repository's MIT license covers the `pangenome-range` software, not a replacement license for every upstream dataset.

@@ -1,0 +1,11 @@
+{
+  "schema_version": 1,
+  "host": "apollo",
+  "os": "Linux 6.17.0-41-generic x86_64",
+  "cpu": "Intel Core i7-10700, 8 cores, 16 threads",
+  "node": "v24.16.0",
+  "pnpm": "11.24.0",
+  "rustc": "1.97.1",
+  "vg": "1.76.1",
+  "resource_enforcement": "systemd user transient units with stage-specific MemoryMax and MemorySwapMax=0"
+}

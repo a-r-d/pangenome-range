@@ -107,13 +107,26 @@ It is 325,664,519 bytes with SHA-256
 The workflow maps an optional `PANGENOME_RANGE_DEMO_RICE_ARCHIVE_URL`
 repository variable to `VITE_PANGENOME_RANGE_DEMO_RICE_ARCHIVE_URL`.
 
+The named-membership chicken chromosome 15 archive is published at:
+
+```text
+https://archives.ard.ninja/pangenome-range/sha256/fcb19b2c6e850c16e7e831613f34d27feef477331064cde5b16137492e6d1b43/chicken-chr15-named.pngr
+```
+
+It is 15,939,592 bytes with SHA-256
+`fcb19b2c6e850c16e7e831613f34d27feef477331064cde5b16137492e6d1b43`.
+The source graph is CC BY 4.0; provenance and attribution are retained in the
+archive and `results/named-membership/chicken/REPORT.md`. The origin probe passed
+range, CORS, immutable-cache, ETag, and local-byte-equality checks.
+
 ## Connect the deployed demo
 
-The checked-in Pages workflow supplies the canonical HPRC, 1000 Genomes, and
-rice URLs. Poplar is an opt-in source because its derived-data redistribution
+The checked-in Pages workflow supplies the canonical HPRC, 1000 Genomes, rice,
+and chicken URLs. Poplar is an opt-in source because its derived-data redistribution
 terms are not yet confirmed. Repository variables named `PANGENOME_RANGE_DEMO_ARCHIVE_URL`,
 `PANGENOME_RANGE_DEMO_1000G_ARCHIVE_URL`, and
-`PANGENOME_RANGE_DEMO_RICE_ARCHIVE_URL` may replace the defaults with other immutable
+`PANGENOME_RANGE_DEMO_RICE_ARCHIVE_URL`, and
+`PANGENOME_RANGE_DEMO_CHICKEN_ARCHIVE_URL` may replace the defaults with other immutable
 HTTPS `.pngr` URLs without a code change. `PANGENOME_RANGE_DEMO_POPLAR_ARCHIVE_URL`
 adds the locally validated Chr19 archive only after data-use approval. The workflow
 maps them to:
@@ -122,6 +135,7 @@ maps them to:
 VITE_PANGENOME_RANGE_DEMO_ARCHIVE_URL
 VITE_PANGENOME_RANGE_DEMO_1000G_ARCHIVE_URL
 VITE_PANGENOME_RANGE_DEMO_RICE_ARCHIVE_URL
+VITE_PANGENOME_RANGE_DEMO_CHICKEN_ARCHIVE_URL
 VITE_PANGENOME_RANGE_DEMO_POPLAR_ARCHIVE_URL
 ```
 
