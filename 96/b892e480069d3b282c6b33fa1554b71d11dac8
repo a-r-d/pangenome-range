@@ -1,0 +1,134 @@
+crates/pangenome-range-build/src/fixed.rs
+  s_2ec244cc8606c0::t_43bc4bff64e82b 61
+results/named-membership/hprc/query-results.csv
+  s_2ec244cc8606c0::t_ded26692f71d05 4
+results/named-membership/poplar/requests.jsonl
+  s_2ec244cc8606c0::t_db345f2b9b9168 1-11
+results/named-membership/poplar/archive-size.json
+  s_2ec244cc8606c0::t_db345f2b9b9168 1-14
+docs/adr/ADR-path-membership-production.md
+  s_2ec244cc8606c0::t_85b603b04a3ef8 51-56,72-81
+packages/browser/src/reader/archive.ts
+  s_2ec244cc8606c0::t_b1ac9ae2f60532 2156,2162,2191
+  s_2ec244cc8606c0::t_11431ce50269b5 328-332
+  s_2ec244cc8606c0::t_c579ab42a2ad56 2187-2190,2192
+  s_2ec244cc8606c0::t_57a28952f816cd 2257-2278,2281-2288,2290,2292-2293,2295-2327,2329-2336,2338-2417,2419-2463,2469-2488,2490-2501,2526,2528
+  s_2ec244cc8606c0::t_07d4078f58d1a5 277,296,310
+  s_2ec244cc8606c0::t_3049f20937b13d 2256,2291,2337,2464-2468
+  s_2ec244cc8606c0::t_b3fb476c931633 2289
+  s_2ec244cc8606c0::t_fc9111f262c743 1378-1381,1387,1406,1412-1418,1521,1529,1678,1680,1685,1687-1689
+  s_2ec244cc8606c0::t_4627f9be65ef42 1774,1776-1791,1799,1814,1845,1847-1852,1854-1862,1864-1868,1880
+  s_2ec244cc8606c0::t_1ff6c7ebe55611 2073,2087,2103,2118-2125,2234,2241,2542,2567-2573,2586,2598,2608,2622,2647,2676-2682,2696-2702,2754,2757-2758
+  s_2ec244cc8606c0::t_e48cfb294ec8e5 2161,2183,2195-2197
+  s_2ec244cc8606c0::t_67d6d9b9bb1bc3 1724-1749,1756-1758
+results/named-membership/rice/requests.jsonl
+  s_2ec244cc8606c0::t_ded26692f71d05 3-11
+docs/components/browser/types.ts
+  s_2ec244cc8606c0::t_fcb8d9210f2ec1 39
+results/named-membership/hprc/requests.jsonl
+  s_2ec244cc8606c0::t_ded26692f71d05 3-12
+results/named-membership/poplar/environment.json
+  s_2ec244cc8606c0::t_db345f2b9b9168 1-11
+scripts/poplar/build-poplar-demo.sh
+  s_2ec244cc8606c0::t_6e98a08497c312 1-65
+results/named-membership/1000g-pilot/REPORT.md
+  s_2ec244cc8606c0::t_da0019155d5f7f 3-5
+data/poplar/.gitignore
+  s_2ec244cc8606c0::t_6e98a08497c312 1-5
+results/named-membership/1000g-pilot/query-results.csv
+  s_2ec244cc8606c0::t_da0019155d5f7f 1-2
+results/named-membership/poplar/memberships.csv
+  s_2ec244cc8606c0::t_db345f2b9b9168 1-3
+results/named-membership/hprc/summary.json
+  s_2ec244cc8606c0::t_ded26692f71d05 11
+results/named-membership/poplar/config.json
+  s_2ec244cc8606c0::t_db345f2b9b9168 1-24
+README.md
+  s_2ec244cc8606c0::t_fcb8d9210f2ec1 37-43
+  s_2ec244cc8606c0::t_43bc4bff64e82b 188
+docs/components/browser/PangenomeBrowser.vue
+  s_2ec244cc8606c0::t_fcb8d9210f2ec1 69-74,157,190-199,342-356,860
+results/named-membership/1000g-pilot/encoder-report.json
+  s_2ec244cc8606c0::t_4bc9d60f62b77b 3-4,8
+docs/components/browser/PatternInspector.vue
+  s_2ec244cc8606c0::t_c5b047000e19c0 55
+data/poplar/sources.json
+  s_2ec244cc8606c0::t_6e98a08497c312 1-33
+results/named-membership/rice/REPORT.md
+  s_2ec244cc8606c0::t_ded26692f71d05 9
+results/named-membership/1000g-pilot/summary.json
+  s_2ec244cc8606c0::t_da0019155d5f7f 3,5-6
+docs/BENCHMARKS.md
+  s_2ec244cc8606c0::t_85b603b04a3ef8 438-443
+results/named-membership/poplar/encoder-report.json
+  s_2ec244cc8606c0::t_db345f2b9b9168 1-32
+data/poplar/LICENSE_REVIEW.md
+  s_2ec244cc8606c0::t_6e98a08497c312 1-17
+packages/browser/test/reader.test.ts
+  s_2ec244cc8606c0::t_db586ed94ce38a 1081-1084
+  s_2ec244cc8606c0::t_70921c2aa9a3eb 188,1136-1137
+  s_2ec244cc8606c0::t_f64660b0c6adff 1073-1080
+  s_2ec244cc8606c0::t_3e44dc1222295c 1173-1205,1208-1220
+  s_2ec244cc8606c0::t_3049f20937b13d 1206-1207
+  s_2ec244cc8606c0::t_79c69704067b72 24-25,181-187,189-235
+  s_2ec244cc8606c0::t_617605526e1429 236
+scripts/docs-dev.mjs
+  s_2ec244cc8606c0::t_fcb8d9210f2ec1 10,24-26
+scripts/poplar/fetch-poplar.sh
+  s_2ec244cc8606c0::t_6e98a08497c312 1-40
+results/named-membership/hprc/REPORT.md
+  s_2ec244cc8606c0::t_ded26692f71d05 9
+docs/HOSTING.md
+  s_2ec244cc8606c0::t_fcb8d9210f2ec1 113-114,116-119,125,128-130
+  s_2ec244cc8606c0::t_03b0b74596e2b7 131
+packages/browser/src/reader/types.ts
+  s_2ec244cc8606c0::t_07d4078f58d1a5 244-245
+experiments/named-membership-query.mjs
+  s_2ec244cc8606c0::t_c5b047000e19c0 35-37
+results/named-membership/poplar/summary.json
+  s_2ec244cc8606c0::t_db345f2b9b9168 1-35
+docs/OPTIMIZATION_LOG.md
+  s_2ec244cc8606c0::t_063ab0f7652c4e 3-18
+  s_2ec244cc8606c0::t_1ddbbf39db51eb 39-44
+  s_2ec244cc8606c0::t_9ace2a9520c4be 1234-1237
+data/poplar/README.md
+  s_2ec244cc8606c0::t_6e98a08497c312 1-17
+results/named-membership/1000g-pilot/config.json
+  s_2ec244cc8606c0::t_da0019155d5f7f 4-7
+results/named-membership/rice/query-results.csv
+  s_2ec244cc8606c0::t_ded26692f71d05 4
+results/named-membership/rice/summary.json
+  s_2ec244cc8606c0::t_ded26692f71d05 11
+crates/pangenome-range-cli/src/main.rs
+  s_2ec244cc8606c0::t_43bc4bff64e82b 330
+CHANGELOG.md
+  s_2ec244cc8606c0::t_063ab0f7652c4e 7-11,14-18
+  s_2ec244cc8606c0::t_43bc4bff64e82b 12-13
+  s_2ec244cc8606c0::t_da0019155d5f7f 45-47
+docs/test/docs.test.mjs
+  s_2ec244cc8606c0::t_063ab0f7652c4e 7,41,45,86-87,96,117-120,127-128,142-145
+results/named-membership/poplar/query-results.csv
+  s_2ec244cc8606c0::t_db345f2b9b9168 1-3
+.github/workflows/pages.yml
+  s_2ec244cc8606c0::t_fcb8d9210f2ec1 24
+results/named-membership/1000g-pilot/requests.jsonl
+  s_2ec244cc8606c0::t_da0019155d5f7f 1
+results/named-membership/poplar/REPORT.md
+  s_2ec244cc8606c0::t_db345f2b9b9168 1-36
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.0",
+  "base_commit_sha": "96b892e480069d3b282c6b33fa1554b71d11dac8",
+  "prompts": {},
+  "sessions": {
+    "s_2ec244cc8606c0": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a048bd-ab38-7a82-b1d9-eb0f59af00f9",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "aaron decker <aaron@ard.ninja>"
+    }
+  }
+}
