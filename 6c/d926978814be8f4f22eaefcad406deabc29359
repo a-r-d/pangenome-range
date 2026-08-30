@@ -1,0 +1,152 @@
+packages/browser/src/viewer/tube-map-model.ts
+  s_2ec244cc8606c0::t_0c48a3914a24a0 90-91,98-102,263,265-267,271,671-681
+  s_2ec244cc8606c0::t_c4e75c4651e6ed 268-270
+  s_2ec244cc8606c0::t_adfc04215f812d 682
+README.md
+  s_2ec244cc8606c0::t_7179ea25f16593 6-8,39-41,45-55
+docs/test/docs.test.mjs
+  s_2ec244cc8606c0::t_db1ddcd39bb897 42,47-50,100,110
+  s_2ec244cc8606c0::t_f762fdbc74ab85 112
+  s_2ec244cc8606c0::t_48b032a809a45e 51-54
+packages/browser/test/research-exports.test.ts
+  s_2ec244cc8606c0::t_6ec623a909e53f 1-103
+docs/components/browser/LinearReferenceTrack.vue
+  s_2ec244cc8606c0::t_3ad8a3226c4424 16-17,19,53
+docs/components/browser/PatternInspector.vue
+  s_2ec244cc8606c0::t_a3af7d99c3d918 12
+  s_2ec244cc8606c0::t_c91d6a96113a29 157-160
+  s_2ec244cc8606c0::t_cfb1c49c9ef16c 4,10-11,13-16,23,27,29,31-34,40-41,59-98,111-112,114,124-129,142-147,161-164,184-192,211-221,228-229
+scripts/chicken/repro-bin/whoami
+  s_2ec244cc8606c0::t_1160c758dc861f 1-2
+results/2026-08-30-chicken-merge-hardening/origin-check.json
+  s_2ec244cc8606c0::t_fcfc3218437c54 1-119
+docs/components/browser/types.ts
+  s_2ec244cc8606c0::t_3ad8a3226c4424 3,57-61,79-95
+packages/browser/test/tube-map.test.ts
+  s_2ec244cc8606c0::t_6bb53f838ef4b0 57-60,64,69,71,73
+  s_2ec244cc8606c0::t_0c48a3914a24a0 56,61-63,65-68,70,72,74-76
+docs/HOSTING.md
+  s_2ec244cc8606c0::t_7179ea25f16593 128-129,133,142-143
+  s_2ec244cc8606c0::t_2a505d3bc6ea80 122-124
+scripts/chicken/build-chicken-demo.sh
+  s_2ec244cc8606c0::t_dfe19660038911 114
+docs/CHICKEN_DEMO.md
+  s_2ec244cc8606c0::t_c5679e65397492 1-49
+docs/index.md
+  s_2ec244cc8606c0::t_7179ea25f16593 10-11,13-14
+results/2026-08-30-chicken-merge-hardening/REPORT.md
+  s_2ec244cc8606c0::t_8da63bb1a4208b 51
+  s_2ec244cc8606c0::t_8be1e0c824c2a8 1-50,52-111
+patches/vg/gbwtgraph-move-gbwt-index.patch
+  s_2ec244cc8606c0::t_8c1e14feaaba27 1-4,7-8
+  s_2ec244cc8606c0::t_9b672917aa9bd7 5,9
+  s_2ec244cc8606c0::t_6c7fd4b920c33a 6
+docs/components/browser/ArchiveSourceMenu.vue
+  s_2ec244cc8606c0::t_3ad8a3226c4424 4,21-23,61-63,75-77,85-96
+  s_2ec244cc8606c0::t_c91d6a96113a29 24-32
+scripts/chicken/build-pinned-vg.sh
+  s_2ec244cc8606c0::t_7f2669d5e90d55 105-106,117-118,129-132,138-142
+  s_2ec244cc8606c0::t_44a925749415ba 47-54,58-62,86-89
+  s_2ec244cc8606c0::t_dfe19660038911 96,116,120,122,128,137
+  s_2ec244cc8606c0::t_8c1e14feaaba27 1-8,10-46,55-57,63-70,76-85,90,94-95,97-104,107-115,119,121,123-127,133-136,143-145
+  s_2ec244cc8606c0::t_1160c758dc861f 9,71-75,91-93
+data/chicken/sources.json
+  s_2ec244cc8606c0::t_7f2669d5e90d55 46,80
+  s_2ec244cc8606c0::t_e1ea76f1b206ae 2-6,8,11,13-42,44-45,50-79
+  s_2ec244cc8606c0::t_2a505d3bc6ea80 9-10
+scripts/chicken/repro-bin/hostname
+  s_2ec244cc8606c0::t_1160c758dc861f 1-2
+data/chicken/.gitignore
+  s_2ec244cc8606c0::t_2a505d3bc6ea80 6-7
+PR_DESCRIPTION.md
+  s_2ec244cc8606c0::t_0edd83cfe2b156 1-35,38-81
+  s_2ec244cc8606c0::t_8be1e0c824c2a8 36-37,82-89
+docs/components/browser/BrowserToolbar.vue
+  s_2ec244cc8606c0::t_3ad8a3226c4424 16-17,35,95-97
+  s_2ec244cc8606c0::t_ac277ea96e4358 98
+scripts/chicken/build-chicken-whole.sh
+  s_2ec244cc8606c0::t_8c1e14feaaba27 5,9,34,70-72,117
+data/chicken/vg-tool-manifest.json
+  s_2ec244cc8606c0::t_dfe19660038911 29
+  s_2ec244cc8606c0::t_61348abfd600ce 31
+  s_2ec244cc8606c0::t_e1ea76f1b206ae 1-13,15-16,27-28,30,32-37
+  s_2ec244cc8606c0::t_8da63bb1a4208b 14
+  s_2ec244cc8606c0::t_7f2669d5e90d55 17-26
+docs/components/browser/BrowserStatusBar.vue
+  s_2ec244cc8606c0::t_3ad8a3226c4424 19-20,31-56,73-74,76-78
+  s_2ec244cc8606c0::t_a3af7d99c3d918 9
+packages/browser/src/viewer/index.ts
+  s_2ec244cc8606c0::t_a3af7d99c3d918 16-24
+  s_2ec244cc8606c0::t_48b032a809a45e 47
+  s_029a5c7c9ea47d::t_057d06a7299cfb 15
+data/chicken/demo-presets.json
+  s_2ec244cc8606c0::t_da1adc3039e996 1-211
+docs/HAPLOTYPE_SEMANTICS.md
+  s_2ec244cc8606c0::t_7179ea25f16593 46-50
+docs/components/browser/PangenomeBrowser.vue
+  s_2ec244cc8606c0::t_eb627ed9dedd14 51,130-131,348-350,372,374-375,515,517,896,899,961-963,982-993,995,1001-1007,1011-1014,1028-1030,1032-1037,1040-1042,1044-1052
+  s_2ec244cc8606c0::t_fcbe93bd8951fb 994
+  s_2ec244cc8606c0::t_c91d6a96113a29 968-976,1038-1039
+  s_2ec244cc8606c0::t_0c48a3914a24a0 121-126,514,598,997-1000,1015-1027,1031
+  s_2ec244cc8606c0::t_3092c870428456 54,144,146-147,170-171,174-195,204-210,221-227,238-244,253-255,259-280
+  s_2ec244cc8606c0::t_3b17b515a94ac6 281-286,1219-1220,1236-1245,1248-1257,1276,1296
+  s_2ec244cc8606c0::t_7fc2afb0177227 5,145,287-298,373,516,996,1008-1010,1043,1053-1097,1295
+  s_029a5c7c9ea47d::t_e2da12d8aa0eda 1098
+docs/components/browser/browser.css
+  s_2ec244cc8606c0::t_0e71a03ae979f7 901,911-913
+  s_2ec244cc8606c0::t_d83740f63d454a 356-371,456-499,845-864,914,921-955
+  s_2ec244cc8606c0::t_7fb3c4b199142a 915
+  s_2ec244cc8606c0::t_867b57a0e36751 956
+scripts/chicken/build-demo-presets.mjs
+  s_2ec244cc8606c0::t_e9b733a2efa9ec 76-88,90-94,96-113,115,118-130,176-177
+  s_2ec244cc8606c0::t_c91d6a96113a29 24
+  s_2ec244cc8606c0::t_7dd6c0d7ae18fb 58-66,72-73,89,95
+  s_2ec244cc8606c0::t_ce0ab653641a0f 1-23,25-57,67-71,74-75,114,116-117,131-175,178-288
+CHANGELOG.md
+  s_2ec244cc8606c0::t_e28eb96b20e23c 7-20
+  s_2ec244cc8606c0::t_2a505d3bc6ea80 21-22
+data/chicken/README.md
+  s_2ec244cc8606c0::t_2a505d3bc6ea80 74-75
+  s_2ec244cc8606c0::t_c5679e65397492 1,3-39,42-44,46-65,68-72
+docs/test/pages-smoke.mjs
+  s_2ec244cc8606c0::t_48b032a809a45e 402-405,711-715,765
+  s_2ec244cc8606c0::t_4848fda8657d72 668,670,682-687,698-699,704-707,723-724,729-732,738-743,745-752,754-761,767-768,773-777,783-787,789-792
+  s_2ec244cc8606c0::t_004f92dd2e1d96 753
+  s_2ec244cc8606c0::t_6b521602e12f29 1012
+  s_2ec244cc8606c0::t_75ef391853eea3 766
+  s_2ec244cc8606c0::t_2cdeb5d921ac98 700-703,733,744,762-764,769-772
+  s_2ec244cc8606c0::t_850e8edb778be9 735,788
+docs/FORMAT_RELEASE_CHECKLIST.md
+  s_2ec244cc8606c0::t_7179ea25f16593 135
+packages/browser/src/viewer/research-exports.ts
+  s_2ec244cc8606c0::t_6ec623a909e53f 1-80,83-86,90-143
+  s_2ec244cc8606c0::t_c91d6a96113a29 81-82,87-89
+docs/DISTRIBUTION.md
+  s_2ec244cc8606c0::t_7179ea25f16593 38-41
+results/2026-08-30-chicken-merge-hardening/screenshot-index.json
+  s_2ec244cc8606c0::t_8be1e0c824c2a8 1-52
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.0",
+  "base_commit_sha": "6cd926978814be8f4f22eaefcad406deabc29359",
+  "prompts": {},
+  "sessions": {
+    "s_029a5c7c9ea47d": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a054bb-34f4-7110-8f14-0e59500e8c41",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "aaron decker <aaron@ard.ninja>"
+    },
+    "s_2ec244cc8606c0": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a048bd-ab38-7a82-b1d9-eb0f59af00f9",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "aaron decker <aaron@ard.ninja>"
+    }
+  }
+}
