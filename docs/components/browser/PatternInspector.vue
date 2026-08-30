@@ -7,7 +7,7 @@ import type {
   RegionTile,
 } from "pangenome-range/reader";
 import type { LocalPattern } from "pangenome-range/viewer";
-import { computed, ref, watch } from "vue";
+import { computed, onBeforeUnmount, ref, watch } from "vue";
 
 const props = defineProps<{
   pattern: LocalPattern;
@@ -25,6 +25,7 @@ const filter = ref("");
 const loading = ref(false);
 const error = ref("");
 let operation = 0;
+let controller: AbortController | undefined;
 
 const pathById = computed(
   () => new Map(paths.value.map((path) => [path.pathId, path])),
@@ -44,6 +45,9 @@ const filteredMemberships = computed(() => {
 watch(
   () => [props.archive, props.tile, props.pattern] as const,
   async ([archive, tile, pattern]) => {
+    controller?.abort();
+    controller = new AbortController();
+    const signal = controller.signal;
     const current = ++operation;
     group.value = undefined;
     paths.value = [];
@@ -58,7 +62,7 @@ watch(
     }
     loading.value = true;
     try {
-      const groups = await archive.tilePathMemberships(tile);
+      const groups = await archive.tilePathMemberships(tile, { signal });
       const matched = groups.find(
         (candidate) =>
           candidate.occurrenceWeight === pattern.weight &&
@@ -66,16 +70,16 @@ watch(
       );
       if (matched === undefined)
         throw new Error("Named membership has no matching local traversal");
-      const records: NamedSourcePath[] = [];
       const seen = new Set<bigint>();
       for (const membership of matched.memberships) {
-        if (seen.has(membership.pathId)) continue;
         seen.add(membership.pathId);
-        const path = await archive.pathById(membership.pathId);
+      }
+      const pathIds = [...seen];
+      const resolved = await archive.pathsByIds(pathIds, { signal });
+      const records: NamedSourcePath[] = [];
+      for (const [index, path] of resolved.entries()) {
         if (path === undefined)
-          throw new Error(
-            `Path ${membership.pathId} is absent from the catalog`,
-          );
+          throw new Error(`Path ${pathIds[index]} is absent from the catalog`);
         records.push(path);
       }
       if (current !== operation) return;
@@ -90,6 +94,8 @@ watch(
   },
   { immediate: true },
 );
+
+onBeforeUnmount(() => controller?.abort());
 
 function sameHandles(
   left: BigUint64Array | undefined,

@@ -405,7 +405,8 @@ export interface PathCatalogInfo {
   readonly identitySourceSha256: string;
   readonly membershipGroupCount: bigint;
   readonly membershipOccurrenceTotal: bigint;
-  readonly membershipUniquePathTotal: bigint;
+  /** Sum of each traversal group's distinct path count; not archive-global uniqueness. */
+  readonly membershipGroupUniquePathCountSum: bigint;
   readonly codecDistribution: Readonly<{
     deltaGroups: bigint;
     runGroups: bigint;
@@ -461,6 +462,10 @@ export interface PangenomeArchive {
     pathId: bigint,
     options?: PathCatalogLookupOptions,
   ): Promise<NamedSourcePath | undefined>;
+  pathsByIds(
+    pathIds: readonly bigint[],
+    options?: PathCatalogLookupOptions,
+  ): Promise<readonly (NamedSourcePath | undefined)[]>;
   searchPaths(query: PathSearch): Promise<PathSearchResult>;
   tilePathMemberships(
     tile: RegionTile,

@@ -693,7 +693,7 @@ pub fn run_encode(options: &EncodeOptions) -> ExperimentResult<EncodeSummary> {
     let path_membership_identity_source_sha256 =
         path_membership_enabled.then(|| source_sha256.clone());
     let summary = EncodeSummary {
-        schema_version: 11,
+        schema_version: 12,
         archive_version: 1,
         regional_payload_version: 1,
         source_path: options.input.clone(),
@@ -1428,7 +1428,7 @@ mod tests {
         options.threads = 1;
 
         let summary = run_encode(&options).unwrap();
-        assert_eq!(summary.schema_version, 11);
+        assert_eq!(summary.schema_version, 12);
         assert_eq!(summary.sample.as_deref(), Some(reference.sample.as_str()));
         assert_eq!(summary.reference_haplotype, Some(reference.haplotype));
         assert_eq!(summary.annotations, None);

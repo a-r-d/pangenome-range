@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
+import { blake3 } from "@noble/hashes/blake3.js";
 import { describe, expect, it, vi } from "vitest";
 import {
   decodeArchiveMetadata,
@@ -174,6 +175,33 @@ const pathMembershipArchiveFixture = new Uint8Array(
     ),
   ),
 );
+
+function mismatchedPathMembershipProvenance(): Uint8Array {
+  const bytes = pathMembershipArchiveFixture.slice();
+  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  const extensionOffset = Number(view.getBigUint64(48, true));
+  const extensionCount = Number(view.getBigUint64(extensionOffset + 16, true));
+  const typeId = new TextEncoder().encode("archive-meta-v1-");
+  let metadataEntry = -1;
+  for (let index = 0; index < extensionCount; index += 1) {
+    const offset = extensionOffset + 32 + index * 64;
+    if (typeId.every((byte, byteIndex) => bytes[offset + byteIndex] === byte)) {
+      metadataEntry = offset;
+      break;
+    }
+  }
+  if (metadataEntry < 0 || bytes[metadataEntry + 20] !== 0) {
+    throw new Error("golden archive metadata entry is missing or compressed");
+  }
+  const payloadOffset = Number(view.getBigUint64(metadataEntry + 24, true));
+  const payloadLength = Number(view.getBigUint64(metadataEntry + 32, true));
+  bytes[payloadOffset + 24] = (bytes[payloadOffset + 24] ?? 0) ^ 1;
+  const digest = blake3(
+    bytes.subarray(payloadOffset, payloadOffset + payloadLength),
+  );
+  bytes.set(digest.subarray(0, 16), metadataEntry + 48);
+  return bytes;
+}
 
 const pathMembershipExpected = JSON.parse(
   readFileSync(
@@ -998,11 +1026,24 @@ describe("reader contract validation", () => {
         "1d574ede7533150eb87f6837a7763d4eac120aa03f34877392ecdd53b0410788",
       membershipGroupCount: 79n,
       membershipOccurrenceTotal: 180n,
-      membershipUniquePathTotal: 180n,
+      membershipGroupUniquePathCountSum: 180n,
       codecDistribution: { deltaGroups: 79n, runGroups: 0n },
     });
     expect(await archive.pathById(first?.pathId ?? -1n)).toEqual(first);
     expect(await archive.pathById(10_000n)).toBeUndefined();
+    const batched = await archive.pathsByIds([
+      first?.pathId ?? -1n,
+      first?.pathId ?? -1n,
+      10_000n,
+    ]);
+    expect(batched).toEqual([first, first, undefined]);
+    const aborted = new AbortController();
+    aborted.abort();
+    await expect(
+      archive.pathsByIds([first?.pathId ?? -1n], {
+        signal: aborted.signal,
+      }),
+    ).rejects.toThrow();
     const searched = await archive.searchPaths({
       sample: "GRCh38",
       limit: 1,
@@ -1056,6 +1097,14 @@ describe("reader contract validation", () => {
       corruptArchive.pathMembership(pathMembershipExpected.query),
     ).rejects.toThrow(/path-membership directory/);
     await corruptArchive.close();
+
+    const provenanceMismatch = await openPangenome(
+      new MemoryRangeSource(mismatchedPathMembershipProvenance()),
+    );
+    await expect(provenanceMismatch.pathCatalogInfo()).rejects.toThrow(
+      /differs from archive provenance/,
+    );
+    await provenanceMismatch.close();
   });
 
   it("enforces bounded path-membership decoding and preserves dual orientations", () => {
@@ -1104,6 +1153,30 @@ describe("reader contract validation", () => {
     duplicatePair[duplicatePair.length - 1] = 0;
     expect(() => decodeTileMembershipPage(duplicatePair, 2n)).toThrow(
       /path\/orientation pairs/,
+    );
+
+    const oversizedMemberships = new Uint8Array(bytes.slice(0, 88));
+    const oversizedCount: number[] = [];
+    let remaining = 250_001n;
+    do {
+      let byte = Number(remaining & 0x7fn);
+      remaining >>= 7n;
+      if (remaining !== 0n) byte |= 0x80;
+      oversizedCount.push(byte);
+    } while (remaining !== 0n);
+    new DataView(oversizedMemberships.buffer).setBigUint64(
+      80,
+      BigInt(1 + oversizedCount.length),
+      true,
+    );
+    const oversizedPage = new Uint8Array(
+      oversizedMemberships.length + 1 + oversizedCount.length,
+    );
+    oversizedPage.set(oversizedMemberships);
+    oversizedPage[88] = 0;
+    oversizedPage.set(oversizedCount, 89);
+    expect(() => decodeTileMembershipPage(oversizedPage, 300_000n)).toThrow(
+      /entry count exceeds its bound/,
     );
 
     const catalog: number[] = [];

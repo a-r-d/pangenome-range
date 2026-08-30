@@ -52,7 +52,7 @@ pub(crate) struct FeatureBuildMetrics {
     pub path_membership_groups: u64,
     pub path_membership_memberships: u64,
     pub path_membership_occurrence_total: u64,
-    pub path_membership_unique_path_total: u64,
+    pub path_membership_group_unique_path_count_sum: u64,
     pub path_membership_delta_groups: u64,
     pub path_membership_run_groups: u64,
     pub path_membership_page_encoded_bytes: u64,

@@ -339,12 +339,15 @@ The optional descriptor begins with a 112-byte header:
 | 40 | 32 | bytes | SHA-256 of the authenticated source GBZ |
 | 72 | 8 | `u64` | membership group count |
 | 80 | 8 | `u64` | membership occurrence total |
-| 88 | 8 | `u64` | sum of per-group unique path counts |
+| 88 | 8 | `u64` | `group_unique_path_count_sum`: sum of each group's distinct path-ID count |
 | 96 | 8 | `u64` | groups using delta codec `0` |
 | 104 | 8 | `u64` | groups using run codec `1` |
 
 The codec counts MUST sum to the group count, the source checksum MUST be nonzero,
-and the unique-path total MUST NOT exceed the occurrence total. The complete
+and `group_unique_path_count_sum` MUST NOT exceed the occurrence total. This field
+is not an archive-global distinct-path cardinality; a path may contribute once in
+many groups or tiles. When this extension is present, `archive-meta-v1-` is REQUIRED
+and its source GBZ SHA-256 MUST exactly equal this identity-source SHA-256. The complete
 descriptor is at most 16 MiB. Its exact byte length is the 112-byte
 header plus 64 bytes per catalog descriptor and 32 bytes per membership manifest.
 
@@ -397,7 +400,9 @@ and strictly increasing; path IDs alone may repeat once with each orientation an
 must be less than `path_count`. Multiplicities are nonzero and orientation is `0`
 or `1`. For every group, membership multiplicities MUST sum to `occurrence_weight`
 and `unique_path_count` MUST equal the number of distinct path IDs. Total expanded
-occurrences per tile are at most 16,777,216.
+occurrences per tile are at most 16,777,216. A decoder MUST also reject more than
+250,000 materialized membership records in one group or one tile; multiplicity is
+stored as a scalar and does not consume one record per occurrence.
 
 Membership identity is tile-local. It associates each reconstructed local traversal
 occurrence with a real GBWT source path, but it does not authorize a reader to stitch

@@ -93,7 +93,8 @@ const result = {
     identitySourceSha256: catalogInfo.identitySourceSha256,
     membershipGroupCount: catalogInfo.membershipGroupCount.toString(),
     membershipOccurrenceTotal: catalogInfo.membershipOccurrenceTotal.toString(),
-    membershipUniquePathTotal: catalogInfo.membershipUniquePathTotal.toString(),
+    membershipGroupUniquePathCountSum:
+      catalogInfo.membershipGroupUniquePathCountSum.toString(),
     codecDistribution: {
       deltaGroups: catalogInfo.codecDistribution.deltaGroups.toString(),
       runGroups: catalogInfo.codecDistribution.runGroups.toString(),

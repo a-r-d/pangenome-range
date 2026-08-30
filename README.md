@@ -76,6 +76,9 @@ const region = await archive.query({
 });
 const groups = await archive.tilePathMemberships(region.tiles[0]);
 const sourcePath = await archive.pathById(groups[0].memberships[0].pathId);
+const sourcePaths = await archive.pathsByIds(
+  groups[0].memberships.map(({ pathId }) => pathId),
+);
 
 const combined = await archive.queryWithPathMembership({
   sample: "GRCh38",
@@ -92,6 +95,9 @@ retain the original input spelling of every path name.
 
 Anonymous weighted tile paths remain the default graph semantics. Named memberships
 are tile-local evidence; the reader does not stitch them across tiles.
+Catalog batches deduplicate requested IDs, fetch distinct catalog pages with bounded
+concurrency, and preserve requested ID order. Decoding is capped at 250,000
+membership records per group and per tile, independently of occurrence weight.
 
 ## JavaScript decoder
 

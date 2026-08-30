@@ -451,7 +451,7 @@ pub struct ArchiveBuildMetrics {
     pub path_membership_groups: u64,
     pub path_membership_memberships: u64,
     pub path_membership_occurrence_total: u64,
-    pub path_membership_unique_path_total: u64,
+    pub path_membership_group_unique_path_count_sum: u64,
     pub path_membership_delta_groups: u64,
     pub path_membership_run_groups: u64,
     pub path_membership_page_encoded_bytes: u64,
@@ -2734,7 +2734,8 @@ pub fn build_fixed_archive_from_source_with_options(
         feature_metrics.path_membership_groups = path_metrics.groups;
         feature_metrics.path_membership_memberships = path_metrics.memberships;
         feature_metrics.path_membership_occurrence_total = path_metrics.occurrence_total;
-        feature_metrics.path_membership_unique_path_total = path_metrics.unique_path_total;
+        feature_metrics.path_membership_group_unique_path_count_sum =
+            path_metrics.group_unique_path_count_sum;
         feature_metrics.path_membership_delta_groups = path_metrics.delta_groups;
         feature_metrics.path_membership_run_groups = path_metrics.run_groups;
         feature_metrics.path_membership_page_encoded_bytes = path_metrics.page_encoded_bytes;
@@ -2924,7 +2925,8 @@ pub fn build_fixed_archive_from_source_with_options(
         path_membership_groups: feature_metrics.path_membership_groups,
         path_membership_memberships: feature_metrics.path_membership_memberships,
         path_membership_occurrence_total: feature_metrics.path_membership_occurrence_total,
-        path_membership_unique_path_total: feature_metrics.path_membership_unique_path_total,
+        path_membership_group_unique_path_count_sum: feature_metrics
+            .path_membership_group_unique_path_count_sum,
         path_membership_delta_groups: feature_metrics.path_membership_delta_groups,
         path_membership_run_groups: feature_metrics.path_membership_run_groups,
         path_membership_page_encoded_bytes: feature_metrics.path_membership_page_encoded_bytes,

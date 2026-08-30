@@ -24,6 +24,11 @@ pub const PATH_MEMBERSHIP_DIRECTORY_ENTRIES_PER_PAGE: usize = (PATH_MEMBERSHIP_D
 pub const MAX_PATH_CATALOG_PAGES: usize = 1_000_000;
 pub const MAX_PATH_MEMBERSHIP_MANIFESTS: usize = 1_000_000;
 pub const MAX_PATH_MEMBERSHIP_GROUPS_PER_TILE: usize = 65_536;
+/// Maximum number of materialized `(path_id, orientation, multiplicity)` records
+/// in one group or one tile. This is intentionally separate from occurrence
+/// weight because multiplicity does not require one decoded record per occurrence.
+pub const MAX_PATH_MEMBERSHIPS_PER_GROUP: usize = 250_000;
+pub const MAX_PATH_MEMBERSHIPS_PER_TILE: usize = 250_000;
 
 const PATH_MEMBERSHIP_DESCRIPTOR_HEADER_BYTES: usize = 112;
 const PATH_CATALOG_DESCRIPTOR_BYTES: usize = 64;
@@ -76,7 +81,7 @@ pub struct PathMembershipDescriptor {
     pub identity_source_sha256: [u8; 32],
     pub group_count: u64,
     pub occurrence_total: u64,
-    pub unique_path_total: u64,
+    pub group_unique_path_count_sum: u64,
     pub delta_group_count: u64,
     pub run_group_count: u64,
     pub catalog_pages: Vec<PathCatalogPageDescriptor>,
@@ -237,7 +242,7 @@ pub fn encode_path_membership_descriptor(
             .delta_group_count
             .checked_add(descriptor.run_group_count)
             != Some(descriptor.group_count)
-        || descriptor.unique_path_total > descriptor.occurrence_total
+        || descriptor.group_unique_path_count_sum > descriptor.occurrence_total
     {
         return Err(invalid_data("invalid path-membership provenance totals"));
     }
@@ -255,7 +260,7 @@ pub fn encode_path_membership_descriptor(
     output.extend_from_slice(&descriptor.identity_source_sha256);
     put_u64(&mut output, descriptor.group_count);
     put_u64(&mut output, descriptor.occurrence_total);
-    put_u64(&mut output, descriptor.unique_path_total);
+    put_u64(&mut output, descriptor.group_unique_path_count_sum);
     put_u64(&mut output, descriptor.delta_group_count);
     put_u64(&mut output, descriptor.run_group_count);
     let mut expected_first = 0_u64;
@@ -350,7 +355,7 @@ pub fn decode_path_membership_descriptor(
         .map_err(|_| invalid_data("invalid path identity source checksum"))?;
     let group_count = reader.u64()?;
     let occurrence_total = reader.u64()?;
-    let unique_path_total = reader.u64()?;
+    let group_unique_path_count_sum = reader.u64()?;
     let delta_group_count = reader.u64()?;
     let run_group_count = reader.u64()?;
     if path_count == 0
@@ -367,7 +372,7 @@ pub fn decode_path_membership_descriptor(
     }
     if identity_source_sha256 == [0; 32]
         || delta_group_count.checked_add(run_group_count) != Some(group_count)
-        || unique_path_total > occurrence_total
+        || group_unique_path_count_sum > occurrence_total
     {
         return Err(invalid_data("invalid path-membership provenance totals"));
     }
@@ -452,7 +457,7 @@ pub fn decode_path_membership_descriptor(
         identity_source_sha256,
         group_count,
         occurrence_total,
-        unique_path_total,
+        group_unique_path_count_sum,
         delta_group_count,
         run_group_count,
         catalog_pages,
@@ -805,7 +810,7 @@ fn decode_memberships(bytes: &[u8], path_count: u64) -> io::Result<Vec<PathMembe
     let mut reader = BinaryReader::new(bytes);
     let codec = reader.u8()?;
     let expected_u64 = read_varint(&mut reader)?;
-    if expected_u64 == 0 || expected_u64 > MAX_DECODED_OCCURRENCES_PER_TILE {
+    if expected_u64 == 0 || expected_u64 > MAX_PATH_MEMBERSHIPS_PER_GROUP as u64 {
         return Err(invalid_data(
             "path-membership entry count exceeds its safety bound",
         ));
@@ -948,12 +953,26 @@ pub fn encode_tile_membership_page(
     put_u64(&mut output, core_end);
     output.extend_from_slice(regional_payload_integrity);
     let mut total_occurrence_weight = 0_u64;
+    let mut total_memberships = 0_usize;
     for group in groups {
         if group.occurrence_weight == 0
             || group.occurrence_weight > MAX_DECODED_OCCURRENCES_PER_TILE
             || group.memberships.is_empty()
         {
             return Err(invalid_data("empty tile-membership group"));
+        }
+        if group.memberships.len() > MAX_PATH_MEMBERSHIPS_PER_GROUP {
+            return Err(invalid_data(
+                "path-membership entry count exceeds its safety bound",
+            ));
+        }
+        total_memberships = total_memberships
+            .checked_add(group.memberships.len())
+            .ok_or_else(|| invalid_data("tile-membership record count overflow"))?;
+        if total_memberships > MAX_PATH_MEMBERSHIPS_PER_TILE {
+            return Err(invalid_data(
+                "tile-membership record count exceeds its safety bound",
+            ));
         }
         total_occurrence_weight = total_occurrence_weight
             .checked_add(group.occurrence_weight)
@@ -1035,6 +1054,7 @@ pub fn decode_tile_membership_page(
     }
     let mut groups = Vec::with_capacity(count);
     let mut total_occurrence_weight = 0_u64;
+    let mut total_memberships = 0_usize;
     let mut previous_digest = None;
     for _ in 0..count {
         let traversal_digest = reader
@@ -1050,6 +1070,14 @@ pub fn decode_tile_membership_page(
             .copied()
             .ok_or_else(|| invalid_data("empty membership codec payload"))?;
         let memberships = decode_memberships(encoded, path_count)?;
+        total_memberships = total_memberships
+            .checked_add(memberships.len())
+            .ok_or_else(|| invalid_data("tile-membership record count overflow"))?;
+        if total_memberships > MAX_PATH_MEMBERSHIPS_PER_TILE {
+            return Err(invalid_data(
+                "tile-membership record count exceeds its safety bound",
+            ));
+        }
         if selected_path_membership_codec(&memberships)? != codec {
             return Err(invalid_data(
                 "membership codec differs from deterministic selection",
@@ -1194,7 +1222,7 @@ mod tests {
             identity_source_sha256: [7; 32],
             group_count: 1,
             occurrence_total: 2,
-            unique_path_total: 2,
+            group_unique_path_count_sum: 2,
             delta_group_count: 1,
             run_group_count: 0,
             catalog_pages: vec![PathCatalogPageDescriptor {
@@ -1297,7 +1325,7 @@ mod tests {
         assert!(decode_memberships(&outside_catalog, 1).is_err());
 
         let mut excessive = vec![RUN_CODEC];
-        put_varint(&mut excessive, MAX_DECODED_OCCURRENCES_PER_TILE + 1);
+        put_varint(&mut excessive, MAX_PATH_MEMBERSHIPS_PER_GROUP as u64 + 1);
         assert!(decode_memberships(&excessive, u64::MAX).is_err());
     }
 

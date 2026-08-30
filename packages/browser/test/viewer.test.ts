@@ -434,6 +434,9 @@ function delayedArchive(): PangenomeArchive {
     pathById: async () => {
       throw new Error("not implemented by viewer test archive");
     },
+    pathsByIds: async () => {
+      throw new Error("not implemented by viewer test archive");
+    },
     searchPaths: async () => {
       throw new Error("not implemented by viewer test archive");
     },

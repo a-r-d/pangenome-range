@@ -59,8 +59,9 @@ document-array structures embedded in GBWT, builds the catalog from source metad
 and locates one completed tile's traversal starts at a time. Each LF round groups
 positions by GBWT record, reads and decodes that record once, then releases it. The
 catalog is front-coded in 1,024-ID pages. The extension descriptor records the
-identity-source implementation, authenticated GBZ SHA-256, catalog/group/occurrence/
-unique totals, and codec distribution. Fixed 4 KiB membership-directory pages
+identity-source implementation, authenticated GBZ SHA-256, catalog/group/occurrence
+totals, the sum of each group's distinct-path count, and codec distribution. Fixed
+4 KiB membership-directory pages
 align one-for-one with graph directory pages; each entry addresses one multiplicity-
 and orientation-bearing tile page. Its traversal digest includes manifest identity,
 core bounds, the regional payload BLAKE3-128, and canonical oriented nodes. Before
@@ -184,7 +185,8 @@ the query trace contract. A public-network browser benchmark corpus remains
 explicitly unimplemented.
 
 Named identity is a separate lazy reader capability. `pathCatalogInfo()`,
-`pathById()`, and `searchPaths()` page the catalog without loading it wholesale.
+`pathById()`, `pathsByIds()`, and `searchPaths()` page the catalog without loading
+it wholesale.
 `tilePathMemberships()` reconciles one already-decoded graph tile, while
 `queryWithPathMembership()` returns graph, membership, and catalog traces separately.
 The compatibility `pathMembership()` performs
@@ -194,6 +196,11 @@ IDs. It returns tile-local group membership and real source-path records without
 changing `query()` results or loading GBWT/native code. The documentation tube-map
 inspector loads named paths on demand, filters and copies names, and highlights only
 the same canonical path ID in currently loaded tiles.
+
+Named identity fails closed unless `archive-meta-v1-` is present and its source GBZ
+SHA-256 exactly matches the identity-source SHA-256 in `path-members-v1-`. Browser
+decoding separately caps materialized membership records at 250,000 per group and
+per tile; large multiplicities remain scalar weights rather than expanded objects.
 
 The benchmark package wraps the public reader with a versioned workload, Node
 and Playwright runners, a strict/fault-injectable local range origin, immutable

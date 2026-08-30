@@ -146,7 +146,8 @@ intentionally unsupported and must be regenerated.
 - Anonymous haplotypes have no cross-tile sample identity.
 - Named membership has bounded synthetic, rice, and four-tile HPRC evidence, plus
   a checked-in Rust/TypeScript golden fixture. Archive-wide HPRC construction cost
-  remains unmeasured. The 1000G pilot is explicitly excluded after the earlier
+  and storage overhead remain unmeasured; bounded tile deltas are not whole-archive
+  projections. The 1000G pilot is explicitly excluded after the earlier
   memory failure; no 1000G named-membership scale claim is made.
 - Whole-genome validation remains an explicit opt-in measurement, never a CI
   task.

@@ -28,7 +28,7 @@ pub(crate) struct PathMembershipBuildMetrics {
     pub groups: u64,
     pub memberships: u64,
     pub occurrence_total: u64,
-    pub unique_path_total: u64,
+    pub group_unique_path_count_sum: u64,
     pub delta_groups: u64,
     pub run_groups: u64,
     pub page_encoded_bytes: u64,
@@ -116,9 +116,9 @@ fn record_group_metrics(
             "membership occurrence total",
         )?;
         checked_add(
-            &mut metrics.unique_path_total,
+            &mut metrics.group_unique_path_count_sum,
             group.unique_path_count,
-            "membership unique-path total",
+            "membership group unique-path-count sum",
         )?;
         match selected_path_membership_codec(&group.memberships)? {
             PATH_MEMBERSHIP_DELTA_CODEC => {
@@ -681,7 +681,7 @@ pub(crate) fn write_path_membership_extension(
         identity_source_sha256,
         group_count: metrics.groups,
         occurrence_total: metrics.occurrence_total,
-        unique_path_total: metrics.unique_path_total,
+        group_unique_path_count_sum: metrics.group_unique_path_count_sum,
         delta_group_count: metrics.delta_groups,
         run_group_count: metrics.run_groups,
         catalog_pages,
@@ -854,7 +854,7 @@ pub(crate) fn write_direct_path_membership_extension(
         identity_source_sha256,
         group_count: metrics.groups,
         occurrence_total: metrics.occurrence_total,
-        unique_path_total: metrics.unique_path_total,
+        group_unique_path_count_sum: metrics.group_unique_path_count_sum,
         delta_group_count: metrics.delta_groups,
         run_group_count: metrics.run_groups,
         catalog_pages,

@@ -15,6 +15,8 @@ const MAX_CATALOG_PAGES = 1_000_000;
 const MAX_MANIFESTS = 1_000_000;
 const MAX_GROUPS_PER_TILE = 65_536;
 const MAX_OCCURRENCES_PER_TILE = 16 * 1024 * 1024;
+export const MAX_PATH_MEMBERSHIPS_PER_GROUP = 250_000;
+export const MAX_PATH_MEMBERSHIPS_PER_TILE = 250_000;
 const DIRECTORY_HEADER_BYTES = 32;
 const DIRECTORY_ENTRY_BYTES = 56;
 const DESCRIPTOR_HEADER_BYTES = 112;
@@ -51,7 +53,7 @@ export interface PathMembershipDescriptor {
   identitySourceSha256: Uint8Array;
   groupCount: bigint;
   occurrenceTotal: bigint;
-  uniquePathTotal: bigint;
+  groupUniquePathCountSum: bigint;
   deltaGroupCount: bigint;
   runGroupCount: bigint;
   catalogPages: PathCatalogPageDescriptor[];
@@ -223,7 +225,7 @@ export function decodePathMembershipDescriptor(
   const identitySourceSha256 = reader.take(32).slice();
   const groupCount = reader.u64();
   const occurrenceTotal = reader.u64();
-  const uniquePathTotal = reader.u64();
+  const groupUniquePathCountSum = reader.u64();
   const deltaGroupCount = reader.u64();
   const runGroupCount = reader.u64();
   const identitySource =
@@ -243,7 +245,7 @@ export function decodePathMembershipDescriptor(
     identitySource === undefined ||
     identitySourceSha256.every((byte) => byte === 0) ||
     deltaGroupCount + runGroupCount !== groupCount ||
-    uniquePathTotal > occurrenceTotal
+    groupUniquePathCountSum > occurrenceTotal
   ) {
     fail("invalid path-membership descriptor dimensions");
   }
@@ -317,7 +319,7 @@ export function decodePathMembershipDescriptor(
     identitySourceSha256,
     groupCount,
     occurrenceTotal,
-    uniquePathTotal,
+    groupUniquePathCountSum,
     deltaGroupCount,
     runGroupCount,
     catalogPages,
@@ -428,6 +430,7 @@ export function decodeTileMembershipPage(
   }
   const groups: DecodedTraversalMembershipGroup[] = [];
   let totalWeight = 0n;
+  let totalMemberships = 0;
   let previousDigest: Uint8Array | undefined;
   for (let index = 0; index < count; index += 1) {
     const traversalDigest = reader.take(16).slice();
@@ -438,6 +441,10 @@ export function decodeTileMembershipPage(
       reader.take(encodedLength),
       pathCount,
     );
+    totalMemberships += memberships.length;
+    if (totalMemberships > MAX_PATH_MEMBERSHIPS_PER_TILE) {
+      fail("tile path-membership record count exceeds its safety bound");
+    }
     const sum = memberships.reduce(
       (total, item) => total + item.multiplicity,
       0n,
@@ -497,7 +504,7 @@ function decodeMemberships(
   const reader = new Reader(bytes);
   const codec = reader.u8();
   const expected = varint(reader);
-  if (expected === 0n || expected > BigInt(MAX_OCCURRENCES_PER_TILE)) {
+  if (expected === 0n || expected > BigInt(MAX_PATH_MEMBERSHIPS_PER_GROUP)) {
     fail("path-membership entry count exceeds its bound");
   }
   const expectedCount = safeNumber(expected, "path-membership entry count");

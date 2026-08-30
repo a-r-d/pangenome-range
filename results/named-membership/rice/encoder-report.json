@@ -1,10 +1,10 @@
 {
-  "schema_version": 11,
+  "schema_version": 12,
   "identity_source": "embedded-gbwt-da-bounded-lf-v1",
   "identity_source_sha256": "2cb5e040d35c11dbadc0af6ef73fd16c97dd9be0816b410b9a4c49efbf788fdb",
   "anonymous": { "sha256": "9d54804466b727df37c421970c53781022f132072da668d2e57b1ea9b9d248fc", "wall_ms": 15496.009051, "max_rss_kib": 153460, "swaps": 0 },
   "named": { "sha256": "b3666d8edb31565886d4797333d6ca503f0c21c4861b5b02846fa83b3bed79a4", "wall_ms": 16036.913362, "max_rss_kib": 155344, "swaps": 0 },
-  "overhead": { "wall_ms": 540.904311, "wall_percent": 3.490604, "max_rss_kib": 1884, "persistent_cache_bytes": 0 },
-  "membership": { "catalog_paths": 104959, "groups": 51, "records": 60, "occurrence_total": 60, "unique_path_total": 60, "delta_groups": 51, "run_groups": 0 },
+  "overhead": { "wall_ms": 540.904311, "wall_percent": 3.490604, "rss_increase_kib": 1884, "persistent_cache_bytes": 0 },
+  "membership": { "catalog_paths": 104959, "groups": 51, "records": 60, "occurrence_total": 60, "group_unique_path_count_sum": 60, "delta_groups": 51, "run_groups": 0 },
   "full_validation": "passed"
 }

@@ -240,9 +240,10 @@ pub fn validate_archive_with_options(
     let mut path_membership_groups = 0_u64;
     let mut path_membership_memberships = 0_u64;
     let mut path_membership_occurrence_total = 0_u64;
-    let mut path_membership_unique_path_total = 0_u64;
+    let mut path_membership_group_unique_path_count_sum = 0_u64;
     let mut path_membership_delta_groups = 0_u64;
     let mut path_membership_run_groups = 0_u64;
+    let mut archive_metadata_source_sha256 = None;
     let mut stored_ranges = entries
         .iter()
         .map(|entry| (entry.offset, entry.compressed_len, "regional payload"))
@@ -262,7 +263,8 @@ pub fn validate_archive_with_options(
             .checked_add(usize_to_u64(decoded.len())?)
             .ok_or_else(|| invalid_data("extension decoded byte count overflow"))?;
         if extension.type_id == ARCHIVE_METADATA_TYPE_ID {
-            decode_archive_metadata(&decoded)?;
+            archive_metadata_source_sha256 =
+                Some(decode_archive_metadata(&decoded)?.source_gbz_sha256);
         } else if extension.type_id == NAMED_LOCI_TYPE_ID {
             let descriptor =
                 decode_named_loci_descriptor(&decoded, header.data_offset, source_len)?;
@@ -352,6 +354,14 @@ pub fn validate_archive_with_options(
         } else if extension.type_id == PATH_MEMBERSHIP_TYPE_ID {
             let descriptor =
                 decode_path_membership_descriptor(&decoded, header.data_offset, source_len)?;
+            let source_gbz_sha256 = archive_metadata_source_sha256.ok_or_else(|| {
+                invalid_data("named path membership requires archive provenance metadata")
+            })?;
+            if descriptor.identity_source_sha256 != source_gbz_sha256 {
+                return Err(invalid_data(
+                    "path-membership identity source differs from archive provenance",
+                ));
+            }
             let mut expected_path_id = 0_u64;
             for page in &descriptor.catalog_pages {
                 let encoded = source
@@ -453,7 +463,7 @@ pub fn validate_archive_with_options(
                             &mut path_membership_groups,
                             &mut path_membership_memberships,
                             &mut path_membership_occurrence_total,
-                            &mut path_membership_unique_path_total,
+                            &mut path_membership_group_unique_path_count_sum,
                             &mut path_membership_delta_groups,
                             &mut path_membership_run_groups,
                         )?;
@@ -462,7 +472,8 @@ pub fn validate_archive_with_options(
             }
             if path_membership_groups != descriptor.group_count
                 || path_membership_occurrence_total != descriptor.occurrence_total
-                || path_membership_unique_path_total != descriptor.unique_path_total
+                || path_membership_group_unique_path_count_sum
+                    != descriptor.group_unique_path_count_sum
                 || path_membership_delta_groups != descriptor.delta_group_count
                 || path_membership_run_groups != descriptor.run_group_count
             {
@@ -613,7 +624,7 @@ fn validate_tile_membership(
     path_membership_groups: &mut u64,
     path_membership_memberships: &mut u64,
     path_membership_occurrence_total: &mut u64,
-    path_membership_unique_path_total: &mut u64,
+    path_membership_group_unique_path_count_sum: &mut u64,
     path_membership_delta_groups: &mut u64,
     path_membership_run_groups: &mut u64,
 ) -> io::Result<()> {
@@ -698,9 +709,9 @@ fn validate_tile_membership(
         *path_membership_occurrence_total = path_membership_occurrence_total
             .checked_add(group.occurrence_weight)
             .ok_or_else(|| invalid_data("path-membership occurrence total overflow"))?;
-        *path_membership_unique_path_total = path_membership_unique_path_total
+        *path_membership_group_unique_path_count_sum = path_membership_group_unique_path_count_sum
             .checked_add(group.unique_path_count)
-            .ok_or_else(|| invalid_data("path-membership unique path total overflow"))?;
+            .ok_or_else(|| invalid_data("path-membership unique path-count sum overflow"))?;
         match selected_path_membership_codec(&group.memberships)? {
             PATH_MEMBERSHIP_DELTA_CODEC => {
                 *path_membership_delta_groups = path_membership_delta_groups
@@ -1003,6 +1014,54 @@ mod tests {
         assert_eq!(summary.path_membership_tile_pages, 2);
         assert_eq!(summary.path_membership_groups, 79);
         assert_eq!(summary.path_membership_memberships, 180);
+    }
+
+    #[test]
+    fn rejects_named_membership_from_a_different_provenance_source() {
+        let fixture = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../test-data/golden/path-membership-v1.pngr");
+        let mut bytes = std::fs::read(fixture).unwrap();
+        let extension_offset =
+            usize::try_from(u64::from_le_bytes(bytes[48..56].try_into().unwrap())).unwrap();
+        let extension_count = usize::try_from(u64::from_le_bytes(
+            bytes[extension_offset + 16..extension_offset + 24]
+                .try_into()
+                .unwrap(),
+        ))
+        .unwrap();
+        let metadata_entry = (0..extension_count)
+            .map(|index| extension_offset + 32 + index * 64)
+            .find(|offset| bytes[*offset..*offset + 16] == ARCHIVE_METADATA_TYPE_ID)
+            .unwrap();
+        assert_eq!(bytes[metadata_entry + 20], crate::ChunkCodec::None.code());
+        let payload_offset = usize::try_from(u64::from_le_bytes(
+            bytes[metadata_entry + 24..metadata_entry + 32]
+                .try_into()
+                .unwrap(),
+        ))
+        .unwrap();
+        let payload_len = usize::try_from(u64::from_le_bytes(
+            bytes[metadata_entry + 32..metadata_entry + 40]
+                .try_into()
+                .unwrap(),
+        ))
+        .unwrap();
+        bytes[payload_offset + 24] ^= 1;
+        let digest = blake3::hash(&bytes[payload_offset..payload_offset + payload_len]);
+        bytes[metadata_entry + 48..metadata_entry + 64].copy_from_slice(&digest.as_bytes()[..16]);
+
+        let path = std::env::temp_dir().join(format!(
+            "pangenome-range-provenance-mismatch-{}",
+            std::process::id()
+        ));
+        std::fs::write(&path, bytes).unwrap();
+        let error = validate_archive(&path).unwrap_err();
+        std::fs::remove_file(path).unwrap();
+        assert!(
+            error
+                .to_string()
+                .contains("differs from archive provenance")
+        );
     }
 
     #[test]

@@ -5,8 +5,9 @@
 The registered `path-members-v1-` reader adds strict descriptor, aligned-directory,
 front-coded catalog, delta/run membership, UTF-8, ordering, allocation, tile/payload
 binding, lazy catalog lookup, and combined-query checks to the existing single-file
-ESM reader. The final unminified reader entry is 202,856 bytes raw and 43,694 bytes
-gzip. This is 63,932 raw bytes and 12,499 gzip bytes above the earlier 138,924 /
+ESM reader. After provenance binding and batched catalog lookup, the final unminified
+reader entry is 204,759 bytes raw and 44,051 bytes gzip. This is 65,835 raw bytes and
+12,856 gzip bytes above the earlier 138,924 /
 31,195-byte reader measurement. The network-sensitive gzip budget remains 50 KiB;
 the readable unminified raw budget increases deliberately to 208 KiB. Dynamic chunk
 loading was not introduced because it would change the package's current single-file
@@ -17,8 +18,9 @@ do not fetch membership descriptors, directories, catalog pages, or tile pages.
 
 Final-layout anonymous/named controls measured a 64-byte graph-only read increment
 from the additional registered extension entry, with identical canonical hashes and
-two dependency rounds. Identity-aware rice fetched 12,070 membership plus 10,586
-catalog bytes; HPRC TERT fetched 49,855 plus 40,105 bytes. The current layout needs
+two dependency rounds. With the source-provenance cross-check included, identity-aware
+rice fetched 12,299 membership/provenance plus 10,586 catalog bytes; HPRC TERT fetched
+50,081 plus 40,105 bytes. The current layout needs
 two serial membership rounds and one catalog round after graph decoding, so it does
 not meet the aspirational single-extra-round target. This is retained as the reason
 the identity API is experimental rather than described as stable.
@@ -1208,8 +1210,9 @@ also rejects a corrupted membership-directory digest.
 Final-layout anonymous/named controls are retained in `results/named-membership/`.
 Rice named encoding added 3.49% wall and 1,884 KiB peak RSS; HPRC TERT added 2.57%
 wall with no observed peak increase beyond the anonymous run's 653,596 KiB. The
-fixed catalog dominates tiny bounded archives, but its measured increment projects
-to 0.0683% of the retained whole rice-chr06 archive and 0.00841% of the retained
-whole-HPRC archive. Archive-wide named HPRC remains unmeasured. The user explicitly
+fixed catalog dominates tiny bounded archives. Dividing those bounded deltas by a
+retained whole archive was rejected as an invalid projection: the mirrored directory
+alone costs one 4 KiB page per graph directory page, before tile membership pages and
+catalog data. Archive-wide named HPRC storage remains unmeasured. The user explicitly
 accepted the 1000G exclusion after the earlier memory failure, and the absence record
 does not infer a 1000G result.

@@ -1289,20 +1289,22 @@ class ArchiveReader implements PangenomeArchive {
     const summaryEntry = this.#extension(SUMMARY_PYRAMID_TYPE_ID);
     const metadataEntry = this.#extension(ARCHIVE_METADATA_TYPE_ID);
     const pathMembershipEntry = this.#extension(PATH_MEMBERSHIP_TYPE_ID);
-    const [named, summaries, metadata, pathMembership] = await Promise.all([
-      namedEntry === undefined
-        ? undefined
-        : this.#loadNamedLociDescriptor(options.signal),
-      summaryEntry === undefined
-        ? undefined
-        : this.#loadSummaryDescriptor(options.signal),
-      metadataEntry === undefined
-        ? undefined
-        : this.#loadArchiveMetadata(options.signal),
-      pathMembershipEntry === undefined
-        ? undefined
-        : this.#loadPathMembershipDescriptor(options.signal),
-    ]);
+    const [named, summaries, directMetadata, pathMembership] =
+      await Promise.all([
+        namedEntry === undefined
+          ? undefined
+          : this.#loadNamedLociDescriptor(options.signal),
+        summaryEntry === undefined
+          ? undefined
+          : this.#loadSummaryDescriptor(options.signal),
+        metadataEntry === undefined || pathMembershipEntry !== undefined
+          ? undefined
+          : this.#loadArchiveMetadata(options.signal),
+        pathMembershipEntry === undefined
+          ? undefined
+          : this.#loadPathMembershipDescriptor(options.signal),
+      ]);
+    const metadata = directMetadata ?? this.#archiveMetadata;
     const levelsByManifest = summaries?.series.reduce<number[]>(
       (levels, series) => {
         levels[series.manifestIndex] = Math.max(
@@ -1593,7 +1595,7 @@ class ArchiveReader implements PangenomeArchive {
       identitySourceSha256: hex(descriptor.identitySourceSha256),
       membershipGroupCount: descriptor.groupCount,
       membershipOccurrenceTotal: descriptor.occurrenceTotal,
-      membershipUniquePathTotal: descriptor.uniquePathTotal,
+      membershipGroupUniquePathCountSum: descriptor.groupUniquePathCountSum,
       codecDistribution: {
         deltaGroups: descriptor.deltaGroupCount,
         runGroups: descriptor.runGroupCount,
@@ -1610,21 +1612,31 @@ class ArchiveReader implements PangenomeArchive {
     if (pathId < 0n) throw new RangeError("path ID must be non-negative");
     const instrument = options.trace !== undefined && options.trace !== false;
     const trace = instrument ? featureTraceState() : undefined;
-    const descriptor = await this.#loadPathMembershipDescriptor(
-      options.signal,
-      trace,
-    );
-    const page = this.#catalogPageForId(descriptor, pathId);
-    const record =
-      page === undefined
-        ? undefined
-        : (await this.#loadPathCatalogPage(page, options.signal, trace)).find(
-            (candidate) => candidate.pathId === pathId,
-          );
+    const [record] = await this.#pathsByIds([pathId], options.signal, trace);
     const completedTrace = trace && finishFeatureTrace(trace);
     if (typeof options.trace === "function" && completedTrace !== undefined)
       options.trace(completedTrace);
     return record === undefined ? undefined : namedSourcePath(record);
+  }
+
+  async pathsByIds(
+    pathIds: readonly bigint[],
+    options: PathCatalogLookupOptions = {},
+  ): Promise<readonly (ReturnType<typeof namedSourcePath> | undefined)[]> {
+    this.#assertOpen();
+    options.signal?.throwIfAborted();
+    if (pathIds.some((pathId) => pathId < 0n)) {
+      throw new RangeError("path IDs must be non-negative");
+    }
+    const instrument = options.trace !== undefined && options.trace !== false;
+    const trace = instrument ? featureTraceState() : undefined;
+    const records = await this.#pathsByIds(pathIds, options.signal, trace);
+    const completedTrace = trace && finishFeatureTrace(trace);
+    if (typeof options.trace === "function" && completedTrace !== undefined)
+      options.trace(completedTrace);
+    return records.map((record) =>
+      record === undefined ? undefined : namedSourcePath(record),
+    );
   }
 
   async searchPaths(query: PathSearch): Promise<PathSearchResult> {
@@ -1729,33 +1741,13 @@ class ArchiveReader implements PangenomeArchive {
     const sortedPathIds = [...pathIds].sort((left, right) =>
       left < right ? -1 : left > right ? 1 : 0,
     );
-    const idsByPage = new Map<
-      PathMembershipDescriptor["catalogPages"][number],
-      bigint[]
-    >();
-    for (const pathId of sortedPathIds) {
-      const page = this.#catalogPageForId(descriptor, pathId);
-      if (page === undefined)
-        throw corrupt("membership path ID is absent from the catalog");
-      const pageIds = idsByPage.get(page);
-      if (pageIds === undefined) idsByPage.set(page, [pathId]);
-      else pageIds.push(pathId);
-    }
-    const recordsById = new Map<bigint, DecodedPathCatalogRecord>();
-    for (const [page, pageIds] of idsByPage) {
-      const pageRecords = await this.#loadPathCatalogPage(
-        page,
-        query.signal,
-        catalogTrace,
-      );
-      const requested = new Set(pageIds);
-      for (const record of pageRecords) {
-        if (requested.has(record.pathId))
-          recordsById.set(record.pathId, record);
-      }
-    }
-    const paths = sortedPathIds.map((pathId) => {
-      const record = recordsById.get(pathId);
+    const catalogRecords = await this.#pathsByIds(
+      sortedPathIds,
+      query.signal,
+      catalogTrace,
+      descriptor,
+    );
+    const paths = catalogRecords.map((record) => {
       if (record === undefined)
         throw corrupt("membership path ID is absent from the catalog page");
       return namedSourcePath(record);
@@ -2238,12 +2230,15 @@ class ArchiveReader implements PangenomeArchive {
     if (entry === undefined) {
       throw new RangeError("archive does not contain named path membership");
     }
-    const raw = await this.#readFeatureDecoded(
-      entry,
-      "extension-descriptor",
-      signal,
-      trace,
-    );
+    if (this.#extension(ARCHIVE_METADATA_TYPE_ID) === undefined) {
+      throw corrupt(
+        "named path membership requires archive provenance metadata",
+      );
+    }
+    const [raw, metadata] = await Promise.all([
+      this.#readFeatureDecoded(entry, "extension-descriptor", signal, trace),
+      this.#loadArchiveMetadata(signal, trace),
+    ]);
     const started = performance.now();
     const descriptor = decodeFeature(() =>
       decodePathMembershipDescriptor(
@@ -2252,10 +2247,64 @@ class ArchiveReader implements PangenomeArchive {
         this.#sourceSize,
       ),
     );
+    if (
+      compareBytes(
+        descriptor.identitySourceSha256,
+        metadata.sourceGbzSha256,
+      ) !== 0
+    ) {
+      throw corrupt(
+        "path-membership identity source differs from archive provenance",
+      );
+    }
     if (trace !== undefined)
       recordDecodeInterval(trace, started, performance.now());
     this.#pathMembershipDescriptor = descriptor;
     return descriptor;
+  }
+
+  async #pathsByIds(
+    pathIds: readonly bigint[],
+    signal?: AbortSignal,
+    trace?: MutableFeatureTrace,
+    loadedDescriptor?: PathMembershipDescriptor,
+  ): Promise<readonly (DecodedPathCatalogRecord | undefined)[]> {
+    const descriptor =
+      loadedDescriptor ??
+      (await this.#loadPathMembershipDescriptor(signal, trace));
+    const uniqueIds = [...new Set(pathIds)];
+    const idsByPage = new Map<
+      PathMembershipDescriptor["catalogPages"][number],
+      Set<bigint>
+    >();
+    for (const pathId of uniqueIds) {
+      const page = this.#catalogPageForId(descriptor, pathId);
+      if (page === undefined) continue;
+      const ids = idsByPage.get(page);
+      if (ids === undefined) idsByPage.set(page, new Set([pathId]));
+      else ids.add(pathId);
+    }
+    const pages = [...idsByPage.entries()];
+    const recordsById = new Map<bigint, DecodedPathCatalogRecord>();
+    for (
+      let index = 0;
+      index < pages.length;
+      index += FEATURE_SEARCH_CONCURRENCY
+    ) {
+      const batch = pages.slice(index, index + FEATURE_SEARCH_CONCURRENCY);
+      const decoded = await Promise.all(
+        batch.map(async ([page, ids]) => ({
+          ids,
+          records: await this.#loadPathCatalogPage(page, signal, trace),
+        })),
+      );
+      for (const { ids, records } of decoded) {
+        for (const record of records) {
+          if (ids.has(record.pathId)) recordsById.set(record.pathId, record);
+        }
+      }
+    }
+    return pathIds.map((pathId) => recordsById.get(pathId));
   }
 
   #catalogPageForId(
@@ -2497,6 +2546,7 @@ class ArchiveReader implements PangenomeArchive {
 
   async #loadArchiveMetadata(
     signal?: AbortSignal,
+    trace?: MutableFeatureTrace,
   ): Promise<DecodedArchiveMetadata> {
     if (this.#archiveMetadata !== undefined) return this.#archiveMetadata;
     const entry = this.#extension(ARCHIVE_METADATA_TYPE_ID);
@@ -2507,6 +2557,7 @@ class ArchiveReader implements PangenomeArchive {
       entry,
       "extension-descriptor",
       signal,
+      trace,
     );
     const metadata = decodeFeature(() => decodeArchiveMetadata(raw));
     this.#archiveMetadata = metadata;

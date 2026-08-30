@@ -32,7 +32,8 @@ are implemented. Fixed membership-directory pages scale with graph directory pag
 not a root-wide tile list. The feature preserves tile-local GBWT source identity; it
 does not redefine anonymous graph-query traversals as globally stitchable samples.
 Whole-HPRC construction remains unmeasured and 1000G remains an explicit memory-safety
-exclusion, not an inferred result.
+exclusion, not an inferred result. Bounded rice/HPRC pilots do not establish
+archive-wide identity storage overhead.
 
 While the project remains pre-release, an incompatible format change replaces
 v1 in place and regenerates all fixtures. It does not add a compatibility

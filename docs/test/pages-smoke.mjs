@@ -21,8 +21,15 @@ const indexedFixturePath = join(
   "golden",
   "record-archive-v1.pngr",
 );
+const namedFixturePath = join(
+  repository,
+  "test-data",
+  "golden",
+  "path-membership-v1.pngr",
+);
 const fixture = await readFile(fixturePath);
 const indexedFixture = await readFile(indexedFixturePath);
+const namedFixture = await readFile(namedFixturePath);
 const etag = `"sha256-${createHash("sha256").update(fixture).digest("hex")}"`;
 const requests = [];
 const configuredArchiveUrl =
@@ -63,6 +70,10 @@ const server = createServer(async (request, response) => {
   }
   if (url.pathname.endsWith("/record.pngr")) {
     serveArchive(request, response, indexedFixture, false);
+    return;
+  }
+  if (url.pathname.endsWith("/named.pngr")) {
+    serveArchive(request, response, namedFixture, false);
     return;
   }
   if (url.pathname.endsWith(".pngr")) {
@@ -226,13 +237,19 @@ try {
   assert.match(await search.inputValue(), /PNGRTEST/);
   const pattern = page.locator("[data-pattern-id]").first();
   if ((await pattern.count()) > 0) {
+    const requestsBeforeInspector = requests.length;
     const patternId = await pattern.getAttribute("data-pattern-id");
     await pattern.focus();
     await pattern.press("Enter");
     await page
       .getByRole("complementary", { name: "Pattern inspector" })
-      .getByText(/not a named person/i)
+      .getByText(/anonymous tile-local evidence only/i)
       .waitFor();
+    assert.equal(
+      requests.length,
+      requestsBeforeInspector,
+      "anonymous inspector unexpectedly requested named membership",
+    );
     assert.equal(
       await page
         .locator(".pngr-pattern-port.is-selected")
@@ -245,6 +262,42 @@ try {
     );
     await page.getByRole("button", { name: "Close inspector" }).click();
   }
+
+  await page.getByRole("button", { name: "Source" }).click();
+  await page
+    .getByPlaceholder("https://…/archive.pngr")
+    .fill(`${baseUrl}/named.pngr`);
+  await page.getByRole("button", { name: "Open remote URL" }).click();
+  await waitForReady(page, "named-membership archive");
+  const namedPattern = page.locator("[data-pattern-id]").first();
+  await namedPattern.focus();
+  await namedPattern.press("Enter");
+  const namedInspector = page.getByRole("complementary", {
+    name: "Pattern inspector",
+  });
+  await namedInspector
+    .getByRole("heading", { name: "Named source paths" })
+    .waitFor();
+  await namedInspector.getByText("Unique named paths").waitFor();
+  const firstNamedRecord = namedInspector.locator("li").first();
+  await firstNamedRecord.waitFor();
+  const firstSample = (
+    await firstNamedRecord.locator("strong").textContent()
+  )?.trim();
+  assert(firstSample, "named path record did not resolve a sample");
+  const pathFilter = namedInspector.getByRole("searchbox", {
+    name: "Filter named source paths",
+  });
+  await pathFilter.fill(firstSample);
+  assert((await namedInspector.locator("li").count()) > 0);
+  await pathFilter.fill("no-such-source-path");
+  assert.equal(await namedInspector.locator("li").count(), 0);
+  await pathFilter.fill("");
+  await firstNamedRecord
+    .getByRole("button", { name: "Highlight path" })
+    .click();
+  await page.getByRole("button", { name: "Close inspector" }).click();
+  await page.locator(".pngr-pattern-port.is-selected").first().waitFor();
 
   const requestCountBeforeLocal = requests.length;
   await page.getByRole("button", { name: "Source" }).click();

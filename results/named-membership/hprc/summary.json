@@ -8,7 +8,8 @@
   "unique_referenced_paths": 464,
   "unique_samples": 232,
   "graph_only": { "canonical_equal": true, "extra_bytes": 64, "extra_rounds": 0 },
-  "identity_query": { "extra_bytes": 89960, "membership_ranges": 6, "catalog_ranges": 3, "serial_extension_rounds": 3 },
+  "identity_query": { "extra_bytes": 90186, "membership_ranges": 7, "catalog_ranges": 3, "serial_extension_rounds": 3 },
   "encoder_peak_rss_under_one_gib": true,
-  "projected_archive_overhead_under_fifteen_percent": true
+  "archive_wide_storage_overhead_established": false,
+  "fixed_membership_directory_minimum_bytes": 47345664
 }
