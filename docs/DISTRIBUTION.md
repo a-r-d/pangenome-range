@@ -35,6 +35,10 @@ and ordinary `query()` calls do not fetch its optional descriptor or pages. The
 archive format remains v1 with a skippable registered extension; this is not a stable
 format promise and old research named-membership archives must be regenerated.
 
+The public viewer export also includes pure formatting helpers for named-path TSV
+and oriented tile-local FASTA. They consume already decoded typed arrays and do not
+add transport, DOM, Node, or native dependencies to the reader/viewer bundle.
+
 `npm install --omit=optional` remains a valid JavaScript-only installation. If
 the CLI is invoked from that installation, the shim identifies the exact
 missing optional package and tells the user to reinstall without

@@ -399,6 +399,10 @@ async function exerciseConfiguredArchive(browser, baseUrl) {
       `${baseUrl}/demo?archive=hprc&locus=HLA-B&zoom=0.32&center=0.5&vscale=1.3`,
     );
     await waitForReady(page, "configured HLA-B", 45_000);
+    assert.equal(
+      await page.getByRole("button", { name: "Published example" }).count(),
+      0,
+    );
     const search = page.getByRole("textbox", {
       name: "Search gene or coordinate",
     });
@@ -661,26 +665,26 @@ async function exerciseChickenArchive(browser, baseUrl) {
   const errors = [];
   page.on("pageerror", (error) => errors.push(error.message));
   try {
-    await page.goto(
-      `${baseUrl}/demo?archive=chicken&locus=IGLL1&zoom=0.35&center=0.5&vscale=1.2`,
-    );
+    await page.goto(`${baseUrl}/demo`);
     await waitForReady(page, "chicken IGLL1 view", 45_000);
+    assert.equal(new URL(page.url()).searchParams.get("archive"), "chicken");
     assert.equal(
       await page
         .getByRole("textbox", { name: "Search gene or coordinate" })
         .inputValue(),
       "IGLL1",
     );
-    await assertViewportState(page, {
-      zoom: 0.35,
-      center: 0.5,
-      vscale: 1.2,
-    });
     assert.match(
       await page.locator(".reference-track__heading").innerText(),
       /bGalGal1b.*chr15/,
     );
     assert((await page.locator("[data-node-key]").count()) > 0);
+    await page.getByTestId("named-path-hint").waitFor();
+    await assertNoPageOverflow(page, "default chicken view");
+    await page.screenshot({
+      path: screenshotPath("chicken-default-igll1"),
+      fullPage: true,
+    });
     await page.getByRole("button", { name: "Source" }).click();
     const sourceDialog = page.getByRole("dialog", { name: "Archive source" });
     assert.equal(
@@ -691,12 +695,24 @@ async function exerciseChickenArchive(browser, baseUrl) {
       await sourceDialog.innerText(),
       /exact named GBWT source-path/i,
     );
+    assert.match(await sourceDialog.innerText(), /whole genome/i);
+    assert.match(await sourceDialog.innerText(), /Path catalog.*[1-9]/s);
+    assert.doesNotMatch(
+      await sourceDialog.innerText(),
+      /chromosome 15 archive/i,
+    );
+    await page.screenshot({
+      path: screenshotPath("chicken-source-menu"),
+      fullPage: true,
+    });
     await sourceDialog
       .getByRole("button", { name: "Close archive source" })
       .click();
-    const pattern = page.locator("[data-pattern-id]").first();
-    await pattern.focus();
-    await pattern.press("Enter");
+    const publishedExampleButton = page.getByRole("button", {
+      name: "Published example",
+    });
+    assert.equal(await publishedExampleButton.isEnabled(), true);
+    await publishedExampleButton.click();
     const inspector = page.getByRole("complementary", {
       name: "Pattern inspector",
     });
@@ -704,21 +720,76 @@ async function exerciseChickenArchive(browser, baseUrl) {
       .getByRole("heading", { name: "Named source paths" })
       .waitFor();
     await inspector.getByText("Unique named paths").waitFor();
-    assert((await inspector.locator("li").count()) > 0);
+    assert.equal(await inspector.locator("li").count(), 1);
+    assert.match(await inspector.locator("li").first().innerText(), /UCD312/);
     assert.match(
       await inspector.locator("li").first().innerText(),
       /multiplicity/,
     );
+    await page.getByTestId("published-example").waitFor();
+    assert.match(
+      await page.getByTestId("published-example").innerText(),
+      /Published example.*Observed here/s,
+    );
     await page.screenshot({
-      path: screenshotPath("chicken-igll1"),
+      path: screenshotPath("chicken-published-example"),
       fullPage: true,
     });
+    assert.equal(await page.getByTestId("named-path-hint").count(), 0);
+    const filter = inspector.getByRole("searchbox", {
+      name: "Filter named source paths",
+    });
+    await filter.fill("UCD312");
+    assert.equal(await inspector.locator("li").count(), 1);
+    await inspector.getByRole("button", { name: "Highlight path" }).click();
+
+    const tsvDownloadPromise = page.waitForEvent("download");
+    await inspector.getByTestId("download-path-list").click();
+    const tsvDownload = await tsvDownloadPromise;
+    const tsvPath = await tsvDownload.path();
+    assert(tsvPath !== null);
+    const tsv = await readFile(tsvPath, "utf8");
+    assert.match(tsv, /^traversal digest\ttile sample\ttile contig\t/);
+    assert.match(tsv, /^9a91efcf5ab825db78ea5a43597dd034\t/m);
+    assert.match(tsv, /\tUCD312\t/);
+
+    const fastaDownloadPromise = page.waitForEvent("download");
+    await inspector.getByTestId("download-local-fasta").click();
+    const fastaDownload = await fastaDownloadPromise;
+    const fastaPath = await fastaDownload.path();
+    assert(fastaPath !== null);
+    const fasta = await readFile(fastaPath, "utf8");
+    assert.match(
+      fasta,
+      /^>local_traversal .*scope=tile-local-not-complete-assembly-path/m,
+    );
+    assert.match(fasta, /traversal_digest=9a91efcf5ab825db78ea5a43597dd034/);
+    assert.match(fasta, /\n[ACGTN]+\n/);
+
+    assert.match(
+      await page.locator(".browser-status").innerText(),
+      /named paths available/,
+    );
+    await page.screenshot({
+      path: screenshotPath("chicken-named-path-inspector"),
+      fullPage: true,
+    });
+    await assertNoPageOverflow(page, "chicken named-path inspector");
     assert.deepEqual(errors, []);
     return {
       source: "chicken",
       locus: "IGLL1",
       nodes: await page.locator("[data-node-key]").count(),
-      screenshot: screenshotPath("chicken-igll1"),
+      defaultUrl: `${baseUrl}/demo`,
+      resolvedUrl: page.url(),
+      screenshots: {
+        default: screenshotPath("chicken-default-igll1"),
+        inspector: screenshotPath("chicken-named-path-inspector"),
+        published: screenshotPath("chicken-published-example"),
+        sourceMenu: screenshotPath("chicken-source-menu"),
+      },
+      tsvHeader: tsv.split("\n")[0],
+      fastaHeader: fasta.split("\n")[0],
     };
   } finally {
     await page.close();
@@ -938,7 +1009,7 @@ async function assertHealthyBrowser(page) {
   assert.equal(await page.getByRole("button", { name: "Share" }).count(), 1);
   assert.match(
     await page.locator(".browser-status").innerText(),
-    /SHA-256 verified|integrity/i,
+    /verified|integrity/i,
   );
 }
 

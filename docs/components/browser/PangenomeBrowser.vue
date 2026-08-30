@@ -2,6 +2,7 @@
 // biome-ignore-all lint/correctness/noUnusedVariables: Vue template bindings are consumed outside the script AST.
 import {
   type ArchiveInfo,
+  type FeatureQueryTrace,
   type LocusHit,
   type OverviewBin,
   openPangenome,
@@ -47,8 +48,10 @@ import type {
   DemoArchiveId,
   GraphOptions,
   GraphViewport,
+  PatternEvidence,
 } from "./types";
 import "./browser.css";
+import chickenDemoPresets from "../../../data/chicken/demo-presets.json";
 
 const configuredArchiveUrl =
   (
@@ -69,12 +72,6 @@ const riceArchiveUrl =
 const chickenArchiveUrl =
   (
     import.meta.env.VITE_PANGENOME_RANGE_DEMO_CHICKEN_ARCHIVE_URL as
-      | string
-      | undefined
-  )?.trim() ?? "";
-const poplarArchiveUrl =
-  (
-    import.meta.env.VITE_PANGENOME_RANGE_DEMO_POPLAR_ARCHIVE_URL as
       | string
       | undefined
   )?.trim() ?? "";
@@ -121,11 +118,17 @@ const searching = ref(false);
 const searchMessage = ref("");
 const selection = shallowRef<BrowserSelection>();
 const highlightedPatternIds = ref<readonly string[]>([]);
+const preferredPatterns = shallowRef<
+  readonly {
+    readonly archiveOffset: bigint;
+    readonly orientedNodes: readonly bigint[];
+  }[]
+>([]);
 const sourceOpen = ref(false);
 const shareOpen = ref(false);
 const shareUrl = ref("");
-const activeSourceLabel = ref("Configured HPRC archive");
-const activeSourceId = ref<DemoArchiveId>("hprc");
+const activeSourceLabel = ref("Opening configured archive");
+const activeSourceId = ref<DemoArchiveId>("chicken");
 const activeSourceKey = ref("");
 const activeCustomUrl = ref("");
 const expandedGroups = ref<readonly string[]>([]);
@@ -138,6 +141,10 @@ const options = ref<GraphOptions>({
   showTileBoundaries: true,
 });
 const metrics = ref<BrowserMetrics>({});
+const identityEvidence = shallowRef<PatternEvidence>();
+const publishedMembershipEvidence = shallowRef<FeatureQueryTrace>();
+const namedPathHintDismissed = ref(false);
+const publishedExampleOpen = ref(false);
 let sourceOperation = 0;
 let regionOperation = 0;
 let sourceController: AbortController | undefined;
@@ -160,10 +167,32 @@ const selectedPatternTile = computed(() => {
 const configuredLabel = "HPRC v2.1 + GENCODE v50 (GRCh38 / CHM13)";
 const populationLabel = "1000 Genomes hs38d1 (NA19239 haplotype 0)";
 const riceLabel = "PPanG rice chromosome 6 (NATELBORO / Xa7)";
-const chickenLabel = "Chicken pangenome chromosome 15 (bGalGal1b / IGLL1)";
-const poplarLabel = "Populus trichocarpa chromosome 19 (Nisqually-1)";
+const chickenLabel = "Chicken pangenome, 30 assemblies (whole genome)";
+const publishedPreset = chickenDemoPresets.presets[0];
 const demoSources = computed<readonly ArchiveSourceSelection[]>(() => {
   const sources: ArchiveSourceSelection[] = [];
+  if (chickenArchiveUrl.length > 0) {
+    sources.push({
+      id: "chicken",
+      source: chickenArchiveUrl,
+      label: chickenLabel,
+      key: `url:${chickenArchiveUrl}`,
+      description:
+        "Whole 30-assembly chicken pangenome with GRCg7b gene search and exact named GBWT source-path membership.",
+      group: "Research demonstration",
+      badges: [
+        "Named paths",
+        "Gene search",
+        "Whole genome",
+        "Experimental identity",
+      ],
+      scope: "whole genome",
+      attribution: {
+        label: "Rice et al. (2023), DOI 10.1186/s12915-023-01758-0",
+        url: "https://doi.org/10.1186/s12915-023-01758-0",
+      },
+    });
+  }
   if (configuredArchiveUrl.length > 0) {
     sources.push({
       id: "hprc",
@@ -172,6 +201,13 @@ const demoSources = computed<readonly ArchiveSourceSelection[]>(() => {
       key: `url:${configuredArchiveUrl}`,
       description:
         "Whole HPRC v2.1 graph with GRCh38 and CHM13 references plus GENCODE v50 named-gene search.",
+      group: "Large human demonstration",
+      badges: ["Gene search", "Whole genome", "Graph only"],
+      scope: "whole genome",
+      attribution: {
+        label: "Human Pangenome Reference Consortium",
+        url: "https://humanpangenome.org/",
+      },
     });
   }
   if (populationArchiveUrl.length > 0) {
@@ -182,6 +218,13 @@ const demoSources = computed<readonly ArchiveSourceSelection[]>(() => {
       key: `url:${populationArchiveUrl}`,
       description:
         "NA19239 haplotype-0 population-path coordinates. This archive has no named-gene annotations and is not GRCh38.",
+      group: "Large human demonstration",
+      badges: ["Whole genome", "Graph only"],
+      scope: "whole genome",
+      attribution: {
+        label: "1000 Genomes Project",
+        url: "https://www.internationalgenome.org/",
+      },
     });
   }
   if (riceArchiveUrl.length > 0) {
@@ -192,26 +235,13 @@ const demoSources = computed<readonly ArchiveSourceSelection[]>(() => {
       key: `url:${riceArchiveUrl}`,
       description:
         "PPanG Minigraph-Cactus chromosome 6 anchored on NATELBORO, with curated Xa7 search. Traversals are anonymous weighted tile-local patterns, not named accessions.",
-    });
-  }
-  if (chickenArchiveUrl.length > 0) {
-    sources.push({
-      id: "chicken",
-      source: chickenArchiveUrl,
-      label: chickenLabel,
-      key: `url:${chickenArchiveUrl}`,
-      description:
-        "Published 30-haplotype chicken graph chromosome 15 with GRCg7b gene search and exact named GBWT source-path membership.",
-    });
-  }
-  if (poplarArchiveUrl.length > 0) {
-    sources.push({
-      id: "poplar",
-      source: poplarArchiveUrl,
-      label: poplarLabel,
-      key: `url:${poplarArchiveUrl}`,
-      description:
-        "Chromosome 19 graph from 88 phased assemblies across 44 genotypes. Source-path names are available, but no sex phenotype labels are attached.",
+      group: "Additional cross-species demonstration",
+      badges: ["Gene search", "Graph only"],
+      scope: "partial",
+      attribution: {
+        label: "PPanG rice graph",
+        url: "https://github.com/PlantPangenome/PPanG",
+      },
     });
   }
   sources.push({
@@ -220,8 +250,51 @@ const demoSources = computed<readonly ArchiveSourceSelection[]>(() => {
     label: "Bundled deterministic fixture",
     key: `url:${fixtureUrl}`,
     description: "Tiny offline fixture for deterministic reader testing.",
+    group: "Offline",
+    badges: ["Graph only"],
+    scope: "fixture",
   });
   return sources;
+});
+const activeArchiveSha256 = computed(() => {
+  const match = activeSourceKey.value.match(/\/sha256\/([0-9a-f]{64})\//i);
+  return match?.[1]?.toLocaleLowerCase();
+});
+const publishedExampleAvailable = computed(
+  () => activeSourceId.value === "chicken" && publishedPreset !== undefined,
+);
+const publishedExampleDisabled = computed(
+  () =>
+    !publishedExampleAvailable.value ||
+    activeArchiveSha256.value !== publishedPreset?.archiveSha256,
+);
+const namedPathHintAvailable = computed(
+  () => info.value?.pathMembership.state === "present",
+);
+const namedPathHintVisible = computed(
+  () =>
+    activeSourceId.value === "chicken" &&
+    namedPathHintAvailable.value &&
+    !namedPathHintDismissed.value &&
+    selection.value?.kind !== "pattern",
+);
+const archiveIdentity = computed(
+  () =>
+    (activeArchiveSha256.value === undefined
+      ? info.value?.strongRemoteIdentity
+      : `sha256:${activeArchiveSha256.value}`) ?? activeSourceKey.value,
+);
+const statusIdentityEvidence = computed<PatternEvidence | undefined>(() => {
+  const selected = identityEvidence.value;
+  const published = publishedMembershipEvidence.value;
+  if (published === undefined) return selected;
+  return {
+    membership:
+      selected === undefined
+        ? published
+        : mergeFeatureTraces([published, selected.membership]),
+    catalog: selected?.catalog ?? emptyFeatureTrace(),
+  };
 });
 
 const decision = computed(() => {
@@ -272,6 +345,9 @@ onBeforeUnmount(() => {
 });
 
 watch(command, scheduleSearch);
+watch(selection, (value) => {
+  if (value?.kind === "pattern") namedPathHintDismissed.value = true;
+});
 watch(
   options,
   () => {
@@ -293,6 +369,10 @@ async function openSource(
   message.value = `Opening ${source.label}`;
   sourceOpen.value = false;
   selection.value = undefined;
+  identityEvidence.value = undefined;
+  publishedMembershipEvidence.value = undefined;
+  publishedExampleOpen.value = false;
+  if (source.id === "chicken") namedPathHintDismissed.value = false;
   const started = performance.now();
   try {
     const opened = await openPangenome({
@@ -356,21 +436,6 @@ async function initialRegion(opened: PangenomeArchive): Promise<RegionQuery> {
   const first = references.value[0];
   if (first === undefined)
     throw new Error("Archive contains no reference paths.");
-  if (activeSourceId.value === "poplar") {
-    const poplarReference = references.value.find(
-      (reference) =>
-        reference.sample === "Nisqually-1" && reference.contig === "Chr19",
-    );
-    if (poplarReference !== undefined) {
-      return {
-        sample: poplarReference.sample,
-        contig: poplarReference.contig,
-        start: Math.max(poplarReference.start, 6_291_456),
-        end: Math.min(poplarReference.end, 6_324_224),
-        context: 100,
-      };
-    }
-  }
   if (activeSourceId.value === "chicken" && opened.capabilities().namedLoci) {
     try {
       const result = await opened.searchLoci({
@@ -446,6 +511,10 @@ async function loadRegion(nextRegion: RegionQuery): Promise<void> {
   message.value = `Planning exact ranges for ${formatShortRegion(nextRegion)}`;
   plan.value = undefined;
   trace.value = undefined;
+  preferredPatterns.value = [];
+  identityEvidence.value = undefined;
+  publishedMembershipEvidence.value = undefined;
+  publishedExampleOpen.value = false;
   metrics.value = { openMs: metrics.value.openMs };
   const started = performance.now();
   try {
@@ -526,6 +595,7 @@ function rebuildModel(): void {
   if (currentRegion === undefined) return;
   const next = buildTubeMapModel(tiles.value, currentRegion, {
     maxPatterns: options.value.patternCount,
+    preferredPatterns: preferredPatterns.value,
     simplifyLinearChains: options.value.simplifyLinearChains,
     expandedNodeGroups: expandedGroups.value,
     ...(extendedDisplayBudget.value ? EXTENDED_TUBE_MAP_DISPLAY_LIMITS : {}),
@@ -823,10 +893,10 @@ function share(): void {
   shareOpen.value = true;
 }
 
-async function copy(value: string): Promise<void> {
+async function copy(value: string, label = "Content"): Promise<void> {
   try {
     await navigator.clipboard.writeText(value);
-    message.value = "Sequence copied";
+    message.value = `${label} copied`;
   } catch {
     message.value = "Clipboard access was unavailable";
   }
@@ -888,19 +958,142 @@ function sourceFromUrl(): ArchiveSourceSelection {
         source: absolute,
         label: "Custom remote archive",
         key: `url:${absolute}`,
+        group: "Offline",
+        badges: [],
+        scope: "partial",
       };
     }
   }
   const fallback =
-    demoSources.value.find((source) => source.id === "hprc") ??
-    demoSources.value.find((source) => source.id === "1000g") ??
-    demoSources.value.find((source) => source.id === "rice") ??
-    demoSources.value.find((source) => source.id === "chicken") ??
-    demoSources.value.find((source) => source.id === "poplar") ??
-    demoSources.value[0];
+    requested === null
+      ? (demoSources.value.find((source) => source.id === "chicken") ??
+        demoSources.value.find((source) => source.id === "hprc") ??
+        demoSources.value[0])
+      : (demoSources.value.find((source) => source.id === "hprc") ??
+        demoSources.value.find((source) => source.id === "1000g") ??
+        demoSources.value.find((source) => source.id === "rice") ??
+        demoSources.value.find((source) => source.id === "chicken") ??
+        demoSources.value[0]);
   if (fallback === undefined)
     throw new Error("No demo archive source is available.");
   return fallback;
+}
+
+async function openPublishedExample(): Promise<void> {
+  const preset = publishedPreset;
+  const opened = archive.value;
+  if (
+    preset === undefined ||
+    opened === undefined ||
+    publishedExampleDisabled.value
+  ) {
+    message.value =
+      "The published example is bound to a different archive checksum";
+    return;
+  }
+  options.value = { ...options.value, patternCount: 16 };
+  await navigate({ ...preset.region, context: 100 });
+  const membershipTraces: FeatureQueryTrace[] = [];
+  const locatedGroups: Array<{
+    tile: RegionTile;
+    orientedNodes: BigUint64Array;
+  }> = [];
+  for (const expectedGroup of preset.traversalGroups) {
+    const tile = tiles.value.find(
+      (candidate) =>
+        candidate.coreStart === expectedGroup.tile.start &&
+        candidate.coreEnd === expectedGroup.tile.end,
+    );
+    if (tile === undefined) continue;
+    const groups = await opened.tilePathMemberships(tile, {
+      trace: (value) => membershipTraces.push(value),
+    });
+    const group = groups.find(
+      (candidate) =>
+        bytesToHex(candidate.traversalDigest) === expectedGroup.traversalDigest,
+    );
+    if (group?.orientedNodes === undefined) continue;
+    locatedGroups.push({ tile, orientedNodes: group.orientedNodes });
+  }
+  preferredPatterns.value = locatedGroups.map(({ tile, orientedNodes }) => ({
+    archiveOffset: tile.provenance.archiveOffset,
+    orientedNodes: Array.from(orientedNodes),
+  }));
+  rebuildModel();
+  const currentModel = model.value;
+  if (currentModel === undefined) return;
+  const selectedPatterns: string[] = [];
+  let primary: BrowserSelection | undefined;
+  for (const { tile, orientedNodes } of locatedGroups) {
+    const pattern = currentModel.patterns.find(
+      (candidate) =>
+        candidate.source.archiveOffset === tile.provenance.archiveOffset &&
+        samePatternHandles(orientedNodes, candidate.orientedNodes),
+    );
+    if (pattern === undefined) continue;
+    selectedPatterns.push(pattern.id);
+    primary ??= { kind: "pattern", pattern };
+  }
+  if (primary === undefined) {
+    message.value =
+      "The validated published traversal is outside display limits";
+    return;
+  }
+  highlightedPatternIds.value = selectedPatterns;
+  publishedMembershipEvidence.value = mergeFeatureTraces(membershipTraces);
+  publishedExampleOpen.value = true;
+  selection.value = primary;
+  message.value = "Validated UCD312 deletion traversal selected";
+}
+
+function bytesToHex(bytes: Uint8Array): string {
+  return Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join(
+    "",
+  );
+}
+
+function mergeFeatureTraces(
+  traces: readonly FeatureQueryTrace[],
+): FeatureQueryTrace {
+  return {
+    dependencyRounds: traces.reduce(
+      (total, traceItem) => total + traceItem.dependencyRounds,
+      0,
+    ),
+    requestRanges: traces.flatMap((traceItem) => traceItem.requestRanges),
+    totalBytes: traces.reduce(
+      (total, traceItem) => total + traceItem.totalBytes,
+      0,
+    ),
+    cacheHits: traces.reduce(
+      (total, traceItem) => total + traceItem.cacheHits,
+      0,
+    ),
+    pagesAvoidedByLimit: traces.reduce(
+      (total, traceItem) => total + traceItem.pagesAvoidedByLimit,
+      0,
+    ),
+    integrityMs: traces.reduce(
+      (total, traceItem) => total + traceItem.integrityMs,
+      0,
+    ),
+    decompressionMs: traces.reduce(
+      (total, traceItem) => total + traceItem.decompressionMs,
+      0,
+    ),
+    decompressionTaskMs: traces.reduce(
+      (total, traceItem) => total + traceItem.decompressionTaskMs,
+      0,
+    ),
+    decodeMs: traces.reduce(
+      (total, traceItem) => total + traceItem.decodeMs,
+      0,
+    ),
+  };
+}
+
+function emptyFeatureTrace(): FeatureQueryTrace {
+  return mergeFeatureTraces([]);
 }
 
 async function locusFromUrl(
@@ -1023,6 +1216,8 @@ function fail(cause: unknown, prefix: string): void {
       :disabled="phase === 'opening'"
       :search-message="searchMessage || undefined"
       :options="options"
+      :named-path-hint-available="namedPathHintAvailable"
+      :named-path-hint-visible="namedPathHintVisible"
       @update:command="command = $event"
       @update:active-suggestion="activeSuggestion = $event"
       @update:options="updateOptions"
@@ -1038,9 +1233,28 @@ function fail(cause: unknown, prefix: string): void {
       @vertical-in="tubeMap?.increaseVerticalSpacing()"
       @archive="shareOpen = false; sourceOpen = !sourceOpen"
       @share="share"
+      @show-named-path-hint="namedPathHintDismissed = false"
     />
-    <LinearReferenceTrack :region="region" :locus="locus" :plan="plan" :bins="bins" />
+    <LinearReferenceTrack
+      :region="region"
+      :locus="locus"
+      :plan="plan"
+      :bins="bins"
+      :published-example-available="publishedExampleAvailable"
+      :published-example-disabled="publishedExampleDisabled"
+      @published-example="openPublishedExample"
+    />
     <div class="browser-graph-shell">
+      <div v-if="namedPathHintVisible" class="named-path-hint" data-testid="named-path-hint">
+        <span>Select a colored local traversal to see which source assembly paths carry it.</span>
+        <button type="button" aria-label="Hide named-path hint" @click="namedPathHintDismissed = true">×</button>
+      </div>
+      <div v-if="publishedExampleOpen && publishedPreset" class="published-example-card" data-testid="published-example">
+        <strong>Published example</strong>
+        <span>{{ publishedPreset.publishedClaim }}</span>
+        <small>Observed here: {{ publishedPreset.observedArchiveEvidence }}</small>
+        <a href="https://doi.org/10.1186/s12915-023-01758-0" target="_blank" rel="noreferrer">Rice et al. (2023)</a>
+      </div>
       <TubeMapView
         ref="tubeMap"
         :model="model"
@@ -1059,7 +1273,7 @@ function fail(cause: unknown, prefix: string): void {
         @viewport="updateViewport"
       />
       <NodeInspector v-if="selection?.kind === 'node'" :node="selection.node" :model="model" @close="selection = undefined" @copy="copy" @expand="expandGroup" />
-      <PatternInspector v-else-if="selection?.kind === 'pattern'" :pattern="selection.pattern" :archive="archive" :tile="selectedPatternTile" @close="selection = undefined" @copy="copy" @highlight="highlightNamedPath" />
+      <PatternInspector v-else-if="selection?.kind === 'pattern'" :pattern="selection.pattern" :archive="archive" :tile="selectedPatternTile" :archive-identity="archiveIdentity" @close="selection = undefined" @copy="copy" @highlight="highlightNamedPath" @evidence="identityEvidence = $event" />
       <ArchiveSourceMenu
         :open="sourceOpen"
         :presets="demoSources"
@@ -1078,6 +1292,8 @@ function fail(cause: unknown, prefix: string): void {
       :trace="trace"
       :model="model"
       :metrics="metrics"
+      :identity-evidence="statusIdentityEvidence"
+      :path-membership-available="namedPathHintAvailable"
     />
     <ShareDialog :open="shareOpen" :url="shareUrl" @close="shareOpen = false" />
   </div>

@@ -5,7 +5,6 @@ import {
   DEFAULT_DEMO_1000G_ARCHIVE_URL,
   DEFAULT_DEMO_ARCHIVE_URL,
   DEFAULT_DEMO_CHICKEN_ARCHIVE_URL,
-  DEFAULT_DEMO_POPLAR_ARCHIVE_URL,
   DEFAULT_DEMO_RICE_ARCHIVE_URL,
   docsDevEnvironment,
 } from "../../scripts/docs-dev.mjs";
@@ -40,12 +39,19 @@ test("the demo is a single browser shell using public reader and viewer exports"
   assert.match(browser, /VITE_PANGENOME_RANGE_DEMO_1000G_ARCHIVE_URL/);
   assert.match(browser, /VITE_PANGENOME_RANGE_DEMO_RICE_ARCHIVE_URL/);
   assert.match(browser, /VITE_PANGENOME_RANGE_DEMO_CHICKEN_ARCHIVE_URL/);
-  assert.match(browser, /VITE_PANGENOME_RANGE_DEMO_POPLAR_ARCHIVE_URL/);
+  assert.doesNotMatch(browser, /VITE_PANGENOME_RANGE_DEMO_POPLAR_ARCHIVE_URL/);
   assert.match(browser, /archive=hprc|"hprc"/);
   assert.match(browser, /"1000g"/);
   assert.match(browser, /"rice"/);
   assert.match(browser, /"chicken"/);
-  assert.match(browser, /"poplar"/);
+  assert.doesNotMatch(browser, /"poplar"/);
+  assert.match(browser, /Chicken pangenome, 30 assemblies \(whole genome\)/);
+  assert.match(browser, /namedPathHintVisible/);
+  assert.match(browser, /openPublishedExample/);
+  assert.match(
+    browser,
+    /activeArchiveSha256\.value !== publishedPreset\?\.archiveSha256/,
+  );
   assert.match(browser, /viewportFromUrl/);
   assert.match(browser, /opened\.searchLoci/);
   assert.match(browser, /opened\.planRegion/);
@@ -91,8 +97,7 @@ test("Pages defaults to the content-addressed whole-genome demo archive", async 
     /sha256\/93bcd713ccda14bf4e650c1c8d56751e5ed5db7624aecbf76769fa1909d25e4e\/chicken-whole-named\.pngr/,
   );
   assert.match(source, /vars\.PANGENOME_RANGE_DEMO_CHICKEN_ARCHIVE_URL/);
-  assert.match(source, /vars\.PANGENOME_RANGE_DEMO_POPLAR_ARCHIVE_URL/);
-  assert.doesNotMatch(source, /poplar-chr19-named\.pngr/);
+  assert.doesNotMatch(source, /PANGENOME_RANGE_DEMO_POPLAR_ARCHIVE_URL/);
 });
 
 test("README demo links identify archive, locus or coordinates, and viewport", async () => {
@@ -102,9 +107,9 @@ test("README demo links identify archive, locus or coordinates, and viewport", a
   assert.match(source, /archive=1000g&sample=NA19239&contig=1/);
   assert.match(source, /archive=rice&locus=Xa7/);
   assert.match(source, /archive=chicken&locus=IGLL1/);
-  assert.match(source, /archive=poplar&sample=Nisqually-1&contig=Chr19/);
+  assert.doesNotMatch(source, /archive=poplar/);
   assert.match(source, /zoom=[^&]+&center=[^&]+&vscale=/);
-  assert.match(source, /Local file selections cannot be restored/);
+  assert.match(source, /Local file selections cannot be\s+restored/);
 });
 
 test("npm docs:dev injects all public archives while preserving overrides", async () => {
@@ -127,10 +132,6 @@ test("npm docs:dev injects all public archives while preserving overrides", asyn
     defaults.VITE_PANGENOME_RANGE_DEMO_CHICKEN_ARCHIVE_URL,
     DEFAULT_DEMO_CHICKEN_ARCHIVE_URL,
   );
-  assert.equal(
-    defaults.VITE_PANGENOME_RANGE_DEMO_POPLAR_ARCHIVE_URL,
-    DEFAULT_DEMO_POPLAR_ARCHIVE_URL,
-  );
   const overridden = docsDevEnvironment({
     VITE_PANGENOME_RANGE_DEMO_ARCHIVE_URL: "https://example.test/custom.pngr",
     VITE_PANGENOME_RANGE_DEMO_1000G_ARCHIVE_URL:
@@ -139,8 +140,6 @@ test("npm docs:dev injects all public archives while preserving overrides", asyn
       "https://example.test/custom-rice.pngr",
     VITE_PANGENOME_RANGE_DEMO_CHICKEN_ARCHIVE_URL:
       "https://example.test/custom-chicken.pngr",
-    VITE_PANGENOME_RANGE_DEMO_POPLAR_ARCHIVE_URL:
-      "https://example.test/custom-poplar.pngr",
   });
   assert.equal(
     overridden.VITE_PANGENOME_RANGE_DEMO_ARCHIVE_URL,
@@ -157,9 +156,5 @@ test("npm docs:dev injects all public archives while preserving overrides", asyn
   assert.equal(
     overridden.VITE_PANGENOME_RANGE_DEMO_CHICKEN_ARCHIVE_URL,
     "https://example.test/custom-chicken.pngr",
-  );
-  assert.equal(
-    overridden.VITE_PANGENOME_RANGE_DEMO_POPLAR_ARCHIVE_URL,
-    "https://example.test/custom-poplar.pngr",
   );
 });

@@ -119,36 +119,28 @@ It covers all 207 `bGalGal1b` reference paths (1,052,949,595 reference bases),
 contains 12,237 exact source-path catalog entries, and includes 25,437 mapped
 gene rows. The former chromosome 15 object remains available as retained
 bounded evidence, but it is no longer the demo default.
-The source graph is CC BY 4.0; provenance and attribution are retained in the
-archive and `results/named-membership/chicken-whole/REPORT.md`. The origin probe
-passed range, CORS, immutable-cache, ETag, checksum, and local-byte-equality
-checks.
+The Zenodo graph file is CC BY 4.0. Provenance, license, and attribution are
+retained in `data/chicken/sources.json`. The origin probe passed range, CORS,
+immutable-cache, ETag, checksum, and local-byte-equality checks.
 
 ## Connect the deployed demo
 
-The checked-in Pages workflow supplies the canonical HPRC, 1000 Genomes, rice,
-and chicken URLs. Poplar is an opt-in source because its derived-data redistribution
-terms are not yet confirmed. Repository variables named `PANGENOME_RANGE_DEMO_ARCHIVE_URL`,
+The checked-in Pages workflow supplies the canonical chicken, HPRC, 1000 Genomes,
+and rice URLs. Repository variables named `PANGENOME_RANGE_DEMO_ARCHIVE_URL`,
 `PANGENOME_RANGE_DEMO_1000G_ARCHIVE_URL`, and
 `PANGENOME_RANGE_DEMO_RICE_ARCHIVE_URL`, and
 `PANGENOME_RANGE_DEMO_CHICKEN_ARCHIVE_URL` may replace the defaults with other immutable
-HTTPS `.pngr` URLs without a code change. `PANGENOME_RANGE_DEMO_POPLAR_ARCHIVE_URL`
-adds the locally validated Chr19 archive only after data-use approval. The workflow
-maps them to:
+HTTPS `.pngr` URLs without a code change. The workflow maps them to:
 
 ```text
 VITE_PANGENOME_RANGE_DEMO_ARCHIVE_URL
 VITE_PANGENOME_RANGE_DEMO_1000G_ARCHIVE_URL
 VITE_PANGENOME_RANGE_DEMO_RICE_ARCHIVE_URL
 VITE_PANGENOME_RANGE_DEMO_CHICKEN_ARCHIVE_URL
-VITE_PANGENOME_RANGE_DEMO_POPLAR_ARCHIVE_URL
 ```
 
-The local Poplar candidate is 75,902,344 bytes with SHA-256
-`baf33e2e181efa4485f8ea2a253b24e4bda08ef5725c4ddf9585b495ddafe6ae`.
-Do not copy it to the public origin until the review in `data/poplar/` is resolved.
-
-The deployed demo selects **Configured external archive** by default while
+The deployed demo selects the whole chicken archive by default when it is
+configured, while
 retaining the deterministic bundled fixture, custom URL, and local-file
 fallbacks. Test the deployed page in a fresh browser session and confirm its
 request panel contains `payload` ranges rather than a whole-object response.

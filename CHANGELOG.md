@@ -4,17 +4,22 @@
 
 ### Changed
 
-- Added a publishable 30-chicken pangenome demo using the CC BY 4.0 Rice et al.
-  graph. The production recipe checksum-gates and stream-extracts the closed
-  chromosome 15 component before invoking vg; it never indexes the complete
-  49-million-node GFA. The full 776-tile archive includes GRCg7b gene search,
-  summaries, provenance, and exact named source-path membership. Exhaustive
-  validation and five GBZ-oracle queries passed, including IGLL1; a live browser
-  smoke resolves named catalog paths with orientation and multiplicity. The
-  content-addressed 15,939,592-byte archive and retained origin probe passed the
-  static range/CORS/cache/byte-equality contract. The abandoned whole-source vg
-  attempt exceeded a 12 GiB zero-swap cgroup during path indexing, so the
-  chromosome-first guard is part of the supported recipe.
+- Added the complete 30-assembly chicken pangenome as the default configured
+  research demo. The 1,498,984,132-byte archive covers all 207 `bGalGal1b`
+  reference paths and contains GRCg7b gene search, summaries, 12,237 exact GBWT
+  source-path catalog records, 717,130 tile-local traversal groups, and 1,850,732
+  membership records. Full validation passed 64,371 payloads and eight retained
+  GBZ-oracle workloads. The exact patched vg source/submodule/compiler/binary is
+  now reproducible through `scripts/chicken/build-pinned-vg.sh`, with the minimal
+  rvalue-move repair checked in under `patches/vg/`. The browser labels the
+  archive as whole genome, defaults to IGLL1, explains how to select a named
+  traversal, exposes live capabilities/counts/traces, and exports exact path TSV
+  plus oriented tile-local FASTA. A checksum-pinned graph VCF independently maps
+  the published 5,184-base UCD312 deletion edge to two adjacent fragment-aware
+  tile groups and one UCD312 source path; biological interpretation and directly
+  observed archive membership remain separate. The earlier chromosome 15 object
+  remains historical bounded evidence only. The Zenodo graph file is CC BY 4.0;
+  its license and attribution are retained.
 - Fixed named-membership request-wave accounting and scheduling. Traces now retain
   the actual dependency group for each range; membership directories, tile pages,
   and catalog pages use shared bounded batches in `pathMembership()` and
@@ -22,11 +27,6 @@
   tile reads starting before any completes. The small path-inspector early-return
   loading-state bug is also fixed. The default locate ceiling is reduced from one
   million to 8,192 LF steps; callers may explicitly raise it for unusual inputs.
-- Added a memory-capped Populus trichocarpa corpus recipe and local whole-Chr19
-  named-membership evidence. The 1,015-tile archive passed full reconstruction and a
-  source-oracle demo interval at 170,772 KiB peak RSS under 4 GiB/zero-swap limits.
-  Pages wiring is opt-in through `PANGENOME_RANGE_DEMO_POPLAR_ARCHIVE_URL`; the
-  archive is not published because upstream redistribution terms are not stated.
 - Productionized optional named-path membership as registered `path-members-v1-`.
   `--path-membership` performs bounded tile-batched LF locate in the disk encoder;
   scalable fixed 4 KiB membership directories mirror graph directory pages instead

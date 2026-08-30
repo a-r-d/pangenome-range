@@ -7,11 +7,11 @@ hero:
   tagline: A Rust encoder and portable TypeScript reader/viewer designed for exact HTTP byte-range access without a custom query server.
   actions:
     - theme: brand
-      text: Architecture
-      link: /ARCHITECTURE
+      text: Explore named chicken paths
+      link: /demo?archive=chicken&locus=IGLL1
     - theme: alt
-      text: Demo status
-      link: /demo
+      text: Open the large human pangenome
+      link: /demo?archive=hprc&locus=HLA-B
 
 features:
   - title: Static-object delivery

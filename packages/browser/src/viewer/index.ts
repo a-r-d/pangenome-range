@@ -13,6 +13,16 @@ export {
   parseGenomicCommand,
 } from "./navigation.js";
 export type {
+  LocalTraversalFastaOptions,
+  NamedPathTsvOptions,
+} from "./research-exports.js";
+export {
+  bytesToHex,
+  localTraversalFasta,
+  localTraversalSequence,
+  namedPathMembershipTsv,
+} from "./research-exports.js";
+export type {
   TubeMapLayout,
   TubeMapLayoutBoundary,
   TubeMapLayoutEdge,
@@ -34,6 +44,7 @@ export type {
   TubeMapEdge,
   TubeMapModel,
   TubeMapNode,
+  TubeMapPreferredPattern,
   TubeMapSourceTile,
   TubeMapTileBoundary,
 } from "./tube-map-model.js";

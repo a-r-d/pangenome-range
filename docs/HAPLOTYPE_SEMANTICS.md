@@ -43,6 +43,11 @@ cross-tile highlighting by the same canonical ID, but fragment boundaries and
 tile-local traversal semantics still apply; membership does not authorize
 stitching anonymous traversal geometry into a whole-sample path.
 
+The validated chicken IGLL1 deletion crosses a tile boundary and therefore has
+two tile-local traversal digests bound to the same canonical source path. The demo
+highlights both groups but does not manufacture one cross-tile traversal. This is
+the intended fragment-aware behavior, not duplicate biological evidence.
+
 ## Record reconstruction
 
 For each local packed GBWT record, readers decode successor positions, mark

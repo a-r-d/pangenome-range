@@ -111,7 +111,7 @@ if [[ ! -f "$archive" ]]; then
     --annotation-assembly GCF_016699485.2 \
     --reference-assembly GCF_016699485.2 \
     --dataset-title 'Chicken pangenome chromosome 15' \
-    --dataset-description 'Chromosome 15 component from the 30-haplotype Gallus gallus pangenome graph published by Rice et al., including named source-path membership and GRCg7b gene annotations' \
+    --dataset-description 'Historical chromosome 15 pilot from the 30-assembly Gallus gallus pangenome graph published by Rice et al., including named source-path membership and GRCg7b gene annotations' \
     --source-uri 'https://zenodo.org/records/10018222' \
     --report "$report" --progress plain
 fi

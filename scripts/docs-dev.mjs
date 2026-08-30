@@ -9,7 +9,6 @@ export const DEFAULT_DEMO_RICE_ARCHIVE_URL =
   "https://archives.ard.ninja/pangenome-range/sha256/c91768e6e98d32ff6467732a26e32def5058f4c15d247a0ac6a252a4403e134c/rice-chr06-mc-xa7-anonymous.pngr";
 export const DEFAULT_DEMO_CHICKEN_ARCHIVE_URL =
   "https://archives.ard.ninja/pangenome-range/sha256/93bcd713ccda14bf4e650c1c8d56751e5ed5db7624aecbf76769fa1909d25e4e/chicken-whole-named.pngr";
-export const DEFAULT_DEMO_POPLAR_ARCHIVE_URL = "";
 
 export function docsDevEnvironment(environment = process.env) {
   return {
@@ -26,9 +25,6 @@ export function docsDevEnvironment(environment = process.env) {
     VITE_PANGENOME_RANGE_DEMO_CHICKEN_ARCHIVE_URL:
       environment.VITE_PANGENOME_RANGE_DEMO_CHICKEN_ARCHIVE_URL?.trim() ||
       DEFAULT_DEMO_CHICKEN_ARCHIVE_URL,
-    VITE_PANGENOME_RANGE_DEMO_POPLAR_ARCHIVE_URL:
-      environment.VITE_PANGENOME_RANGE_DEMO_POPLAR_ARCHIVE_URL?.trim() ??
-      DEFAULT_DEMO_POPLAR_ARCHIVE_URL,
   };
 }
 

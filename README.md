@@ -3,7 +3,9 @@
 [![CI](https://img.shields.io/github/actions/workflow/status/a-r-d/pangenome-range/ci.yml?branch=main&style=for-the-badge&logo=githubactions&logoColor=white&label=CI)](https://github.com/a-r-d/pangenome-range/actions/workflows/ci.yml)
 [![MIT](https://img.shields.io/badge/license-MIT-blue?style=for-the-badge)](LICENSE)
 
-## [Open the live demo →](https://a-r-d.github.io/pangenome-range/demo)
+## [Explore named chicken paths →](https://a-r-d.github.io/pangenome-range/demo?archive=chicken&locus=IGLL1)
+
+### [Open the large human pangenome →](https://a-r-d.github.io/pangenome-range/demo?archive=hprc&locus=HLA-B)
 
 `pangenome-range` is four things:
 
@@ -34,19 +36,23 @@ The rice demo explores chromosome 6 from the PPanG rice pangenome, using NATELBO
 
 - [Rice Xa7 — bacterial-blight-resistance locus](https://a-r-d.github.io/pangenome-range/demo?archive=rice&locus=Xa7&zoom=2.856&center=0.600576&vscale=1.45)
 
-The chicken demo explores chromosome 15 from the published graph of 30 chicken
-haplotypes. It includes searchable GRCg7b genes and exact named GBWT source-path
-membership:
+The default demo opens the complete published 30-assembly chicken pangenome at
+the chromosome 15 IGLL1 locus. The 1.50 GB whole-genome object includes
+searchable GRCg7b genes and exact named GBWT source-path membership:
 
 - [Chicken IGLL1 — named paths through an immune-gene locus](https://a-r-d.github.io/pangenome-range/demo?archive=chicken&locus=IGLL1&zoom=0.35&center=0.5&vscale=1.2)
 
-An additional Populus trichocarpa Chr19 archive has passed local whole-chromosome
-named-path validation. Its source does not yet state a redistribution license, so it
-is not deployed. Once permission is confirmed, setting
-`PANGENOME_RANGE_DEMO_POPLAR_ARCHIVE_URL` activates the source-menu entry and this
-view: `archive=poplar&sample=Nisqually-1&contig=Chr19&start=6291456&end=6324224&zoom=0.35&center=0.5&vscale=1`.
+The paper-backed **Published example** control resolves the exact 5,184-base
+reference skip to two fragment-aware tile groups and one UCD312 source path.
+The browser keeps that source observation separate from the paper's biological
+interpretation and makes no phenotype or allele-frequency claim. See the
+[chicken demo evidence](docs/CHICKEN_DEMO.md).
 
-Demo URLs can select `archive=hprc`, `archive=1000g`, `archive=rice`, `archive=chicken`, `archive=poplar`, or `archive=fixture`; select a named `locus` or an exact `sample`/`contig`/`start`/`end` interval; and restore horizontal `zoom`, normalized `center`, and vertical `vscale`. Local file selections cannot be restored from a link because browsers do not grant URLs access to local files.
+Demo URLs can select `archive=hprc`, `archive=1000g`, `archive=rice`,
+`archive=chicken`, or `archive=fixture`; select a named `locus` or an exact
+`sample`/`contig`/`start`/`end` interval; and restore horizontal `zoom`,
+normalized `center`, and vertical `vscale`. Local file selections cannot be
+restored from a link because browsers do not grant URLs access to local files.
 
 ## Encoder
 

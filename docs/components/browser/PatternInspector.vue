@@ -1,29 +1,44 @@
 <script setup lang="ts">
 // biome-ignore-all lint/correctness/noUnusedVariables: Vue template bindings are consumed outside the script AST.
 import type {
+  FeatureQueryTrace,
   NamedSourcePath,
   NamedTraversalGroup,
   PangenomeArchive,
   RegionTile,
 } from "pangenome-range/reader";
-import type { LocalPattern } from "pangenome-range/viewer";
+import {
+  bytesToHex,
+  type LocalPattern,
+  localTraversalFasta,
+  localTraversalSequence,
+  namedPathMembershipTsv,
+} from "pangenome-range/viewer";
 import { computed, onBeforeUnmount, ref, watch } from "vue";
 
 const props = defineProps<{
   pattern: LocalPattern;
   archive?: PangenomeArchive;
   tile?: RegionTile;
+  archiveIdentity: string;
 }>();
 const emit = defineEmits<{
   close: [];
-  copy: [value: string];
+  copy: [value: string, label: string];
   highlight: [pathId?: bigint];
+  evidence: [value?: PatternEvidence];
 }>();
+interface PatternEvidence {
+  readonly membership: FeatureQueryTrace;
+  readonly catalog: FeatureQueryTrace;
+}
 const group = ref<NamedTraversalGroup>();
 const paths = ref<readonly NamedSourcePath[]>([]);
 const filter = ref("");
 const loading = ref(false);
 const error = ref("");
+const membershipTrace = ref<FeatureQueryTrace>();
+const catalogTrace = ref<FeatureQueryTrace>();
 let operation = 0;
 let controller: AbortController | undefined;
 
@@ -41,6 +56,46 @@ const filteredMemberships = computed(() => {
       .some((item) => item.toLocaleLowerCase().includes(value));
   });
 });
+const traversalDigest = computed(() =>
+  group.value === undefined ? "" : bytesToHex(group.value.traversalDigest),
+);
+const categorySummary = computed(() => {
+  const biologicalLabels = new Set<string>();
+  let technical = 0;
+  let unknown = 0;
+  for (const membership of group.value?.memberships ?? []) {
+    const path = pathById.value.get(membership.pathId);
+    if (path?.sense === "haplotype") biologicalLabels.add(path.sample);
+    else if (path?.sense === "reference" || path?.sense === "generic")
+      technical += 1;
+    else unknown += 1;
+  }
+  return { biologicalLabels: biologicalLabels.size, technical, unknown };
+});
+const tsv = computed(() => {
+  if (props.tile === undefined || group.value === undefined) return "";
+  return namedPathMembershipTsv({
+    tile: props.tile,
+    traversalDigest: traversalDigest.value,
+    group: group.value,
+    paths: paths.value,
+  });
+});
+const sequence = computed(() =>
+  props.tile === undefined
+    ? ""
+    : localTraversalSequence(props.tile, props.pattern.orientedNodes),
+);
+const fasta = computed(() => {
+  if (props.tile === undefined || group.value === undefined) return "";
+  return localTraversalFasta({
+    archiveIdentity: props.archiveIdentity,
+    tile: props.tile,
+    traversalDigest: traversalDigest.value,
+    occurrenceWeight: group.value.occurrenceWeight,
+    orientedNodes: props.pattern.orientedNodes,
+  });
+});
 
 watch(
   () => [props.archive, props.tile, props.pattern] as const,
@@ -53,7 +108,10 @@ watch(
     paths.value = [];
     error.value = "";
     loading.value = false;
+    membershipTrace.value = undefined;
+    catalogTrace.value = undefined;
     emit("highlight", undefined);
+    emit("evidence", undefined);
     if (
       archive === undefined ||
       tile === undefined ||
@@ -63,7 +121,12 @@ watch(
     }
     loading.value = true;
     try {
-      const groups = await archive.tilePathMemberships(tile, { signal });
+      const groups = await archive.tilePathMemberships(tile, {
+        signal,
+        trace: (value) => {
+          membershipTrace.value = value;
+        },
+      });
       const matched = groups.find(
         (candidate) =>
           candidate.occurrenceWeight === pattern.weight &&
@@ -76,7 +139,12 @@ watch(
         seen.add(membership.pathId);
       }
       const pathIds = [...seen];
-      const resolved = await archive.pathsByIds(pathIds, { signal });
+      const resolved = await archive.pathsByIds(pathIds, {
+        signal,
+        trace: (value) => {
+          catalogTrace.value = value;
+        },
+      });
       const records: NamedSourcePath[] = [];
       for (const [index, path] of resolved.entries()) {
         if (path === undefined)
@@ -86,6 +154,14 @@ watch(
       if (current !== operation) return;
       group.value = matched;
       paths.value = records;
+      if (
+        membershipTrace.value !== undefined &&
+        catalogTrace.value !== undefined
+      )
+        emit("evidence", {
+          membership: membershipTrace.value,
+          catalog: catalogTrace.value,
+        });
     } catch (cause) {
       if (current === operation)
         error.value = cause instanceof Error ? cause.message : String(cause);
@@ -105,6 +181,15 @@ function sameHandles(
   if (left === undefined || left.length !== right.length) return false;
   return left.every((handle, index) => handle === right[index]);
 }
+
+function download(content: string, filename: string, type: string): void {
+  const url = URL.createObjectURL(new Blob([content], { type }));
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = filename;
+  anchor.click();
+  URL.revokeObjectURL(url);
+}
 </script>
 
 <template>
@@ -123,14 +208,25 @@ function sameHandles(
     <p v-else-if="error" class="inspector-warning">{{ error }}</p>
     <template v-else-if="group">
       <h3>Named source paths</h3>
+      <p class="membership-summary" data-testid="path-category-summary">
+        {{ categorySummary.biologicalLabels.toLocaleString() }} haplotype source labels ·
+        {{ categorySummary.technical.toLocaleString() }} reference/generic path records
+        <template v-if="categorySummary.unknown > 0"> · {{ categorySummary.unknown.toLocaleString() }} unknown records</template>
+      </p>
+      <div class="inspector-actions">
+        <button type="button" data-testid="copy-path-list" @click="emit('copy', tsv, 'Path list')">Copy path list</button>
+        <button type="button" data-testid="download-path-list" @click="download(tsv, `named-paths-${traversalDigest}.tsv`, 'text/tab-separated-values')">Download TSV</button>
+        <button type="button" data-testid="copy-local-sequence" @click="emit('copy', sequence, 'Local traversal sequence')">Copy local sequence</button>
+        <button type="button" data-testid="download-local-fasta" @click="download(fasta, `local-traversal-${traversalDigest}.fa`, 'text/x-fasta')">Download FASTA</button>
+      </div>
       <input v-model="filter" type="search" placeholder="Filter sample or path name" aria-label="Filter named source paths" />
       <ul>
         <li v-for="membership in filteredMemberships" :key="`${membership.pathId}:${membership.reversedRelativeToGroup}`">
           <template v-if="pathById.get(membership.pathId)">
             <strong>{{ pathById.get(membership.pathId)?.sample }}</strong>
             <span>{{ pathById.get(membership.pathId)?.canonicalName }}</span>
-            <small>haplotype {{ pathById.get(membership.pathId)?.haplotype }}, fragment {{ pathById.get(membership.pathId)?.fragment }}, multiplicity {{ membership.multiplicity }}, {{ membership.reversedRelativeToGroup ? 'reverse' : 'forward' }}</small>
-            <button type="button" @click="emit('copy', pathById.get(membership.pathId)?.canonicalName ?? '')">Copy path name</button>
+            <small>{{ pathById.get(membership.pathId)?.sense }} path · haplotype {{ pathById.get(membership.pathId)?.haplotype }}, fragment {{ pathById.get(membership.pathId)?.fragment }}, multiplicity {{ membership.multiplicity }}, {{ membership.reversedRelativeToGroup ? 'reverse' : 'forward' }}</small>
+            <button type="button" @click="emit('copy', pathById.get(membership.pathId)?.canonicalName ?? '', 'Path name')">Copy path name</button>
             <button type="button" @click="emit('highlight', membership.pathId)">Highlight path</button>
           </template>
         </li>

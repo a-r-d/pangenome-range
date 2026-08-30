@@ -2,11 +2,11 @@
 set -euo pipefail
 
 : "${CHICKEN_DATA_DIR:?set CHICKEN_DATA_DIR to an external data directory}"
-: "${CHICKEN_VG:?set CHICKEN_VG to the locally built move-fixed vg binary}"
+: "${VG_BIN:?set VG_BIN to the verified binary produced by scripts/chicken/build-pinned-vg.sh}"
 
 repo_root=$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)
 pngr="$repo_root/target/release/pangenome-range"
-vg="$CHICKEN_VG"
+vg="$VG_BIN"
 compressed_gfa="$CHICKEN_DATA_DIR/pangenome.gfa.gz"
 gfa="$CHICKEN_DATA_DIR/pangenome.gfa"
 gbz="$CHICKEN_DATA_DIR/chicken-whole-patched-gbz-v1.gbz"
@@ -31,7 +31,7 @@ archive_sha256='93bcd713ccda14bf4e650c1c8d56751e5ed5db7624aecbf76769fa1909d25e4e
   exit 1
 }
 [[ -x "$vg" && -f "$compressed_gfa" && -f "$annotation_source" && -f "$assembly_report" ]] || {
-  printf 'error: run scripts/chicken/fetch-chicken.sh and provide CHICKEN_VG\n' >&2
+  printf 'error: run scripts/chicken/fetch-chicken.sh and provide VG_BIN\n' >&2
   exit 1
 }
 command -v systemd-run >/dev/null
@@ -67,8 +67,9 @@ fi
 [[ "$(stat --format=%s "$gfa")" == 12630299872 ]]
 
 # This is the only high-memory stage. The required vg build contains the
-# GBWTGraph rvalue-move repair; one job, a small buffer, and a zero-swap cgroup
-# keep the full conversion bounded. Do not weaken the binary checksum gate.
+# GBWTGraph rvalue-move repair from patches/vg/; one job, a small buffer, and a
+# zero-swap cgroup keep the full conversion bounded. Build the verified binary
+# with scripts/chicken/build-pinned-vg.sh. Do not weaken the checksum gate.
 if [[ ! -f "$gbz" ]]; then
   [[ ! -e "$gbz.part" ]] || { printf 'error: review incomplete %s.part\n' "$gbz" >&2; exit 1; }
   mkdir -p "$CHICKEN_DATA_DIR/vg-full-tmp"
@@ -113,7 +114,7 @@ if [[ ! -f "$archive" ]]; then
     --annotation-assembly GCF_016699485.2 \
     --reference-assembly GCF_016699485.2 \
     --dataset-title 'Chicken pangenome complete reference' \
-    --dataset-description 'All 207 bGalGal1b reference paths from the complete 30-haplotype Gallus gallus pangenome graph, with named source-path membership and GRCg7b gene annotations' \
+    --dataset-description 'All 207 bGalGal1b reference paths from the complete 30-assembly Gallus gallus pangenome graph, with named source-path membership and GRCg7b gene annotations' \
     --source-uri 'https://zenodo.org/records/10018222' \
     --report "$report" --progress plain --progress-interval-seconds 30
 fi
