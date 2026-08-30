@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "status": "passed-bounded-final-layout",
+  "catalog_paths": 53150,
+  "groups": 1686,
+  "occurrence_weight": 4257,
+  "membership_multiplicity": 4257,
+  "unique_referenced_paths": 464,
+  "unique_samples": 232,
+  "graph_only": { "canonical_equal": true, "extra_bytes": 64, "extra_rounds": 0 },
+  "identity_query": { "extra_bytes": 89960, "membership_ranges": 6, "catalog_ranges": 3, "serial_extension_rounds": 3 },
+  "encoder_peak_rss_under_one_gib": true,
+  "projected_archive_overhead_under_fifteen_percent": true
+}

@@ -324,7 +324,7 @@ HTTP identity remains necessary to bind the complete object externally.
 
 #### 3.2.4 Named source-path membership
 
-The optional descriptor begins with a 32-byte header:
+The optional descriptor begins with a 112-byte header:
 
 | Offset | Size | Type | Field |
 | ---: | ---: | --- | --- |
@@ -334,8 +334,18 @@ The optional descriptor begins with a 32-byte header:
 | 16 | 8 | `u64` | total source-path count, nonzero |
 | 24 | 4 | `u32` | catalog-page count, nonzero |
 | 28 | 4 | `u32` | membership-manifest count, nonzero |
+| 32 | 1 | `u8` | identity source: `1` embedded GBWT DA bounded LF v1, `2` prepared authenticated oracle v1 |
+| 33 | 7 | bytes | reserved, all zero |
+| 40 | 32 | bytes | SHA-256 of the authenticated source GBZ |
+| 72 | 8 | `u64` | membership group count |
+| 80 | 8 | `u64` | membership occurrence total |
+| 88 | 8 | `u64` | sum of per-group unique path counts |
+| 96 | 8 | `u64` | groups using delta codec `0` |
+| 104 | 8 | `u64` | groups using run codec `1` |
 
-The complete descriptor is at most 16 MiB. Its exact byte length is the 32-byte
+The codec counts MUST sum to the group count, the source checksum MUST be nonzero,
+and the unique-path total MUST NOT exceed the occurrence total. The complete
+descriptor is at most 16 MiB. Its exact byte length is the 112-byte
 header plus 64 bytes per catalog descriptor and 32 bytes per membership manifest.
 
 Each catalog descriptor is `u64 first_path_id`, `u64 record_count`, then the
@@ -367,13 +377,17 @@ child-page sequence. Remaining bytes MUST be zero. Empty pages are valid only wh
 the aligned graph directory page is empty.
 
 A decoded tile page begins with magic `PNGPMT01`, `u32 version = 1`, `u32
-group_count`, and zero-based half-open `u64 core_start` and `u64 core_end`.
+group_count`, zero-based half-open `u64 core_start` and `u64 core_end`, and the
+16-byte BLAKE3-128 integrity value of the aligned regional payload.
 Zero groups is valid for a tile containing no anonymous traversal evidence.
 Groups are strictly ordered by their 16-byte traversal digest. Each group contains
 that digest, `u64 occurrence_weight`, `u64 unique_path_count`, `u64 membership_bytes`,
 then exactly that many membership-codec bytes. The digest is BLAKE3-128 over the
-domain `pangenome-range/path-membership/traversal/v1\0`, the traversal length as
-little-endian `u64`, and each oriented handle as little-endian `u64`.
+domain `pangenome-range/path-membership/traversal/v1\0`; length-prefixed UTF-8
+manifest sample and contig; little-endian `u64` core start and end; the aligned
+regional payload BLAKE3-128; the traversal length as little-endian `u64`; and each
+oriented handle as little-endian `u64`. This binds a group to the manifest identity,
+physical tile interval, exact regional payload, and canonical oriented traversal.
 
 Membership codec `0` stores a count followed by path-ID deltas, multiplicities,
 and one orientation byte per membership. Codec `1` additionally run-encodes

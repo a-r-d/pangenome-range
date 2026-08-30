@@ -1,0 +1,13 @@
+{
+  "schema_version": 1,
+  "dataset": "PPanG rice chromosome 6 Xa7 tile",
+  "date": "2026-08-30",
+  "format_policy": "optional-path-members-v1-extension",
+  "source": {
+    "name": "chr06_mc.named.gbz",
+    "bytes": 526138568,
+    "sha256": "2cb5e040d35c11dbadc0af6ef73fd16c97dd9be0816b410b9a4c49efbf788fdb"
+  },
+  "interval": { "sample": "NATELBORO", "contig": "chr06", "start": 28868608, "end": 28884992, "tiles": 1 },
+  "limits": { "address_space_bytes": 4294967296, "threads": 1, "max_queued_bytes": 67108864, "max_chunks": 1 }
+}

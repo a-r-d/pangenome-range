@@ -20,6 +20,7 @@ import {
   HttpRangeSource,
   MemoryRangeSource,
   openPangenome,
+  type RegionTile,
   RemoteObjectChangedError,
   TracingRangeSource,
   UnsupportedArchiveVersionError,
@@ -31,6 +32,7 @@ import {
   decodePathCatalogPage,
   decodePathMembershipDescriptor,
   decodeTileMembershipPage,
+  traversalMembershipDigest,
 } from "../src/reader/path-membership.js";
 
 const conformanceDirectory = new URL(
@@ -987,6 +989,48 @@ describe("reader contract validation", () => {
       sense: first?.sense,
     }).toEqual(pathMembershipExpected.firstReferencedPath);
     expect(result.trace?.requestRanges.length).toBeGreaterThan(0);
+    expect(await archive.pathCatalogInfo()).toEqual({
+      pathCount: BigInt(pathMembershipExpected.catalogPathCount),
+      recordsPerPage: 1_024,
+      pageCount: 1,
+      identitySource: "embedded-gbwt-da-bounded-lf-v1",
+      identitySourceSha256:
+        "1d574ede7533150eb87f6837a7763d4eac120aa03f34877392ecdd53b0410788",
+      membershipGroupCount: 79n,
+      membershipOccurrenceTotal: 180n,
+      membershipUniquePathTotal: 180n,
+      codecDistribution: { deltaGroups: 79n, runGroups: 0n },
+    });
+    expect(await archive.pathById(first?.pathId ?? -1n)).toEqual(first);
+    expect(await archive.pathById(10_000n)).toBeUndefined();
+    const searched = await archive.searchPaths({
+      sample: "GRCh38",
+      limit: 1,
+      trace: true,
+    });
+    expect(searched.paths).toHaveLength(1);
+    expect(searched.paths.every((path) => path.sample === "GRCh38")).toBe(true);
+    expect(searched.truncated).toBe(true);
+    const region = await archive.query(pathMembershipExpected.query);
+    const tileGroups = await archive.tilePathMemberships(
+      region.tiles[0] as RegionTile,
+    );
+    expect(tileGroups.length).toBeGreaterThan(0);
+    expect(tileGroups.every((group) => group.orientedNodes !== undefined)).toBe(
+      true,
+    );
+    const combined = await archive.queryWithPathMembership(
+      pathMembershipExpected.query,
+    );
+    expect(combined.region.tiles).toHaveLength(pathMembershipExpected.tiles);
+    expect(combined.pathMembership.tiles).toHaveLength(
+      pathMembershipExpected.tiles,
+    );
+    expect(combined.trace.graph).toBeDefined();
+    expect(combined.trace.membership.dependencyRounds).toBeGreaterThanOrEqual(
+      0,
+    );
+    expect(combined.trace.catalog.dependencyRounds).toBeGreaterThanOrEqual(0);
     await archive.close();
 
     const corruptBytes = pathMembershipArchiveFixture.slice();
@@ -1015,6 +1059,18 @@ describe("reader contract validation", () => {
   });
 
   it("enforces bounded path-membership decoding and preserves dual orientations", () => {
+    expect(
+      Buffer.from(
+        traversalMembershipDigest(
+          "sample",
+          "chr1",
+          100n,
+          200n,
+          new Uint8Array(16).fill(9),
+          [2n, 4n, 6n],
+        ),
+      ).toString("hex"),
+    ).toBe("670d47d546abb21bce595ee9813eb7a0");
     const bytes: number[] = [];
     const text = (value: string) =>
       bytes.push(...new TextEncoder().encode(value));
@@ -1032,6 +1088,7 @@ describe("reader contract validation", () => {
     u32(1);
     u64(100n);
     u64(200n);
+    bytes.push(...new Uint8Array(16).fill(9));
     bytes.push(...new Uint8Array(16).fill(7));
     u64(2n);
     u64(1n);

@@ -428,7 +428,22 @@ function delayedArchive(): PangenomeArchive {
     summary: async () => {
       throw new Error("not implemented by viewer test archive");
     },
+    pathCatalogInfo: async () => {
+      throw new Error("not implemented by viewer test archive");
+    },
+    pathById: async () => {
+      throw new Error("not implemented by viewer test archive");
+    },
+    searchPaths: async () => {
+      throw new Error("not implemented by viewer test archive");
+    },
+    tilePathMemberships: async () => {
+      throw new Error("not implemented by viewer test archive");
+    },
     pathMembership: async () => {
+      throw new Error("not implemented by viewer test archive");
+    },
+    queryWithPathMembership: async () => {
       throw new Error("not implemented by viewer test archive");
     },
     planRegion: async (region) => ({

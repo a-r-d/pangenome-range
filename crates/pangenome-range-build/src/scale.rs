@@ -180,6 +180,9 @@ pub struct EncodeSummary {
     pub path_membership_summary: Option<PathBuf>,
     pub path_membership_catalog: Option<PathBuf>,
     pub path_membership: bool,
+    pub path_membership_mode: &'static str,
+    pub path_membership_identity_source: Option<&'static str>,
+    pub path_membership_identity_source_sha256: Option<String>,
     pub path_locate_max_lf_steps: usize,
     pub window_size: u64,
     pub codec: ChunkCodec,
@@ -678,8 +681,19 @@ pub fn run_encode(options: &EncodeOptions) -> ExperimentResult<EncodeSummary> {
     } else {
         0.0
     };
+    let path_membership_enabled =
+        options.path_membership || options.path_membership_summary.is_some();
+    let path_membership_identity_source = if options.path_membership {
+        Some("embedded-gbwt-da-bounded-lf-v1")
+    } else if options.path_membership_summary.is_some() {
+        Some("prepared-authenticated-oracle-v1")
+    } else {
+        None
+    };
+    let path_membership_identity_source_sha256 =
+        path_membership_enabled.then(|| source_sha256.clone());
     let summary = EncodeSummary {
-        schema_version: 10,
+        schema_version: 11,
         archive_version: 1,
         regional_payload_version: 1,
         source_path: options.input.clone(),
@@ -729,6 +743,13 @@ pub fn run_encode(options: &EncodeOptions) -> ExperimentResult<EncodeSummary> {
         path_membership_summary: options.path_membership_summary.clone(),
         path_membership_catalog: options.path_membership_catalog.clone(),
         path_membership: options.path_membership,
+        path_membership_mode: if path_membership_enabled {
+            "named"
+        } else {
+            "anonymous"
+        },
+        path_membership_identity_source,
+        path_membership_identity_source_sha256,
         path_locate_max_lf_steps: options.path_locate_max_lf_steps,
         window_size: options.window_size,
         codec: options.codec,
@@ -1407,7 +1428,7 @@ mod tests {
         options.threads = 1;
 
         let summary = run_encode(&options).unwrap();
-        assert_eq!(summary.schema_version, 10);
+        assert_eq!(summary.schema_version, 11);
         assert_eq!(summary.sample.as_deref(), Some(reference.sample.as_str()));
         assert_eq!(summary.reference_haplotype, Some(reference.haplotype));
         assert_eq!(summary.annotations, None);

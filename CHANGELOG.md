@@ -11,20 +11,29 @@
   reuses GBWT DA support and the canonical path catalog. Rust validation reconciles
   every group with the unchanged anonymous traversal payload, while the browser
   package exposes `capabilities().pathMembership`, `info().pathMembership`, and
-  `pathMembership()`. A checked-in Rust/TypeScript golden archive covers exact path
+  lazy `pathCatalogInfo()`, `pathById()`, `searchPaths()`,
+  `tilePathMemberships()`, `pathMembership()`, and `queryWithPathMembership()` APIs.
+  Combined queries report graph, membership, and catalog traces separately, and the
+  tube-map inspector filters, copies, and highlights named source paths within loaded
+  tiles. Membership hashes now bind manifest identity, core bounds, regional payload
+  BLAKE3-128, and canonical oriented nodes. The descriptor records authenticated
+  identity-source provenance, catalog/group/occurrence/unique totals, and codec
+  distribution. A checked-in Rust/TypeScript golden archive covers exact path
   identity, multiplicity totals, range decoding, and directory corruption. Missing
   path metadata fails closed without fabricated biological labels, and one path may
   retain both orientations in a group while counting once toward `uniquePathCount`.
   Fresh
-  production-layout rice Xa7 and four-tile HPRC TERT runs passed under a hard 4 GiB
-  address-space cap at 177,528 KiB and 659,856 KiB peak RSS respectively, with zero
-  swap; exact commands and reader evidence are retained under
-  `results/path-membership/production/`. The 1000G pilot
-  is an explicit resource-safety exclusion after the earlier HPRC `.ri` OOM; no
-  1000G membership measurement is inferred.
+  final-layout rice Xa7 and four-tile HPRC TERT runs passed under a hard 4 GiB
+  address-space cap at 155,344 KiB and 653,416 KiB peak RSS respectively, with zero
+  swap. Named encoder wall overhead was 3.49% and 2.57%; projected whole-archive
+  overhead was 0.0683% for rice chr06 and 0.00841% for HPRC. Graph-only hashes and
+  dependency rounds were unchanged, with a measured 64-byte extension-directory
+  increment. Exact evidence is retained under `results/named-membership/`.
+  The 1000G pilot is an explicit user-accepted resource-safety exclusion after the
+  earlier HPRC `.ri` OOM; no 1000G membership measurement is inferred.
   Source-cache v1 directories are intentionally unsupported and must be rebuilt.
-  Encoder reports advance to schema 10 and record `path_membership` plus membership
-  directory-page counts.
+  Encoder reports advance to schema 11 and record named/anonymous mode, identity
+  source/checksum, membership totals, codec distribution, and directory-page counts.
 - Added `named-loci-v1---`, `summary-pyr-v1--`, and `archive-meta-v1-`
   extensions. The encoder always emits summaries and deterministic provenance,
   and emits named loci only with explicit GFF3, sample, release, and assembly

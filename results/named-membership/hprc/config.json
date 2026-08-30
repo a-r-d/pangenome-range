@@ -1,0 +1,9 @@
+{
+  "schema_version": 1,
+  "dataset": "HPRC v2.1 TERT four-tile bounded pilot",
+  "date": "2026-08-30",
+  "format_policy": "optional-path-members-v1-extension",
+  "source": { "name": "hprc-v2.1-mc-grch38.gbz", "bytes": 5492627216, "sha256": "11d6047f79575ffb83757462484bad134ed20928bd2c8171ec52e35a54976e2b" },
+  "interval": { "sample": "GRCh38", "contig": "chr5", "start": 1245184, "end": 1310720, "tiles": 4 },
+  "limits": { "address_space_bytes": 4294967296, "threads": 1, "max_queued_bytes": 67108864, "max_chunks": 4 }
+}

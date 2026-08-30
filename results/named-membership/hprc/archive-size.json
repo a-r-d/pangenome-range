@@ -1,0 +1,10 @@
+{
+  "schema_version": 1,
+  "anonymous_bytes": 249036,
+  "named_bytes": 991718,
+  "bounded_delta_bytes": 742682,
+  "bounded_delta_percent": 298.222747,
+  "retained_whole_hprc_archive_bytes": 8832749949,
+  "projected_whole_hprc_delta_percent": 0.00840828,
+  "note": "The bounded percentage is dominated by the once-per-archive catalog; the projected percentage uses the retained whole-HPRC archive."
+}

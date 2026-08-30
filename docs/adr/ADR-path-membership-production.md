@@ -1,8 +1,8 @@
 # ADR: production named source-path membership
 
-Date: 2026-08-29
+Date: 2026-08-30
 
-Status: accepted locally; archives must be regenerated
+Status: accepted as an experimental identity mode; archives must be regenerated
 
 ## Decision
 
@@ -21,30 +21,51 @@ The build crate parses embedded GBWT DA support and performs bounded tile-batche
 locate. Persistent source-cache v2 stores authenticated DA support and the canonical
 catalog. Neither the format nor browser package depends on GBWT or `gbwt-rs`.
 
-Rust validation reconstructs anonymous regional traversals and requires exact digest
-and occurrence-weight agreement. The TypeScript reader exposes only real catalog IDs
-and tile-local memberships. It does not stitch anonymous traversals across tiles.
+The descriptor records the identity implementation, authenticated source SHA-256,
+catalog/group/occurrence/unique totals, and codec distribution. Each tile page carries
+the aligned regional payload BLAKE3-128. Rust and TypeScript compute the same
+domain-separated traversal digest over manifest identity, core bounds, payload
+integrity, and canonical oriented nodes. Validation requires exact digest,
+occurrence-weight, unique-count, multiplicity, and catalog-bound agreement.
+
+The TypeScript reader provides lazy catalog lookup, search, per-decoded-tile
+membership reconciliation, and a combined query with separate graph, membership,
+and catalog traces. It exposes only real catalog IDs and tile-local memberships. It
+does not stitch anonymous traversals across tiles.
 
 ## Evidence and exclusions
 
-Fresh production-layout runs passed for rice Xa7 (one tile) and HPRC TERT (four
+Fresh final-layout anonymous/named controls passed for rice Xa7 (one tile) and HPRC TERT (four
 tiles), each with one worker, a 64 MiB construction queue, a hard 4 GiB address-space
-limit, and zero swap. HPRC recovered 4,257 memberships across 1,686 traversal groups
-at 659,856 KiB peak RSS; rice recovered 60 memberships across 51 groups at 177,528
-KiB peak RSS. Full Rust reconstruction validation and the public TypeScript reader
-both required occurrence weight to equal membership multiplicity. Exact commands,
-checksums, range-read counts, and limitations are retained in
-`results/path-membership/production/`.
+limit, and zero swap. Named encoder wall overhead was 3.49% for rice and 2.57% for
+HPRC. Observed peaks were 155,344 KiB and 653,416 KiB. Projected overhead against the
+retained full archives is 0.0683% and 0.00841%. Full Rust reconstruction and the
+public TypeScript reader both required occurrence weight to equal membership
+multiplicity. Exact controls, checksums, ranges, timings, and limitations are retained
+in `results/named-membership/`.
+
+Graph-only canonical hashes and two dependency rounds are unchanged. The additional
+registered extension entry adds 64 fetched bytes. The current lazy identity path
+needs two serial membership rounds followed by one catalog round, missing the
+aspirational single-extra-round target. That measured boundary keeps the feature
+experimental rather than stable.
+
+Population, subpopulation, cultivar, country, and phenotype metadata are deliberately
+absent from the core schema. This preview exposes the source sample key for a
+caller-owned join but does not ship a cited metadata sidecar or population-grouping
+UI and makes no enrichment claim.
 
 The checked-in `path-membership-v1.pngr` golden fixture is encoded from the checked-in
 MICB/KIR3DL1 GBZ and is decoded by both Rust and TypeScript, including a
 membership-directory corruption rejection. Ephemeral and persistent-cache v2 encodes
 of the synthetic fixture are byte-identical.
 
-The 1000G pilot remains explicitly excluded after the earlier memory failure. No
+The user explicitly accepts the 1000G exclusion after the earlier memory failure. No
 1000G named-membership overhead, time, or memory claim is inferred. Archive-wide HPRC
 construction cost also remains an operational measurement, not a correctness blocker.
 
 No change was merged upstream while proving the experiment; this ADR records the
 local productionization decision and the required regeneration of older research
 archives.
+
+READY_BUT_EXPERIMENTAL_IDENTITY_MODE

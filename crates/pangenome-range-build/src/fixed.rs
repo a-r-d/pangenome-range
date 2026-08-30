@@ -450,6 +450,10 @@ pub struct ArchiveBuildMetrics {
     pub path_membership_tile_pages: u64,
     pub path_membership_groups: u64,
     pub path_membership_memberships: u64,
+    pub path_membership_occurrence_total: u64,
+    pub path_membership_unique_path_total: u64,
+    pub path_membership_delta_groups: u64,
+    pub path_membership_run_groups: u64,
     pub path_membership_page_encoded_bytes: u64,
     pub path_membership_page_decoded_bytes: u64,
     pub path_membership_descriptor_encoded_bytes: u64,
@@ -2684,7 +2688,14 @@ pub fn build_fixed_archive_from_source_with_options(
         },
         data_offset,
     )?;
+    let identity_source_sha256 = options
+        .archive_metadata
+        .as_ref()
+        .map(|metadata| metadata.source_gbz_sha256);
     let path_membership_result = if options.path_membership {
+        let identity_source_sha256 = identity_source_sha256.ok_or_else(|| {
+            invalid_data("named path membership requires authenticated archive metadata")
+        })?;
         archive_temp.file.flush()?;
         Some(write_direct_path_membership_extension(
             &mut archive_temp.file,
@@ -2694,11 +2705,15 @@ pub fn build_fixed_archive_from_source_with_options(
             &bucket_entries,
             options.path_locate_max_lf_steps,
             data_offset,
+            identity_source_sha256,
         )?)
     } else if let (Some(summary), Some(catalog)) = (
         options.path_membership_summary.as_deref(),
         options.path_membership_catalog.as_deref(),
     ) {
+        let identity_source_sha256 = identity_source_sha256.ok_or_else(|| {
+            invalid_data("named path membership requires authenticated archive metadata")
+        })?;
         Some(write_path_membership_extension(
             &mut archive_temp.file,
             &manifests,
@@ -2706,6 +2721,7 @@ pub fn build_fixed_archive_from_source_with_options(
             summary,
             catalog,
             data_offset,
+            identity_source_sha256,
         )?)
     } else {
         None
@@ -2717,6 +2733,10 @@ pub fn build_fixed_archive_from_source_with_options(
         feature_metrics.path_membership_tile_pages = path_metrics.tile_pages;
         feature_metrics.path_membership_groups = path_metrics.groups;
         feature_metrics.path_membership_memberships = path_metrics.memberships;
+        feature_metrics.path_membership_occurrence_total = path_metrics.occurrence_total;
+        feature_metrics.path_membership_unique_path_total = path_metrics.unique_path_total;
+        feature_metrics.path_membership_delta_groups = path_metrics.delta_groups;
+        feature_metrics.path_membership_run_groups = path_metrics.run_groups;
         feature_metrics.path_membership_page_encoded_bytes = path_metrics.page_encoded_bytes;
         feature_metrics.path_membership_page_decoded_bytes = path_metrics.page_decoded_bytes;
         feature_metrics.path_membership_descriptor_encoded_bytes =
@@ -2903,6 +2923,10 @@ pub fn build_fixed_archive_from_source_with_options(
         path_membership_tile_pages: feature_metrics.path_membership_tile_pages,
         path_membership_groups: feature_metrics.path_membership_groups,
         path_membership_memberships: feature_metrics.path_membership_memberships,
+        path_membership_occurrence_total: feature_metrics.path_membership_occurrence_total,
+        path_membership_unique_path_total: feature_metrics.path_membership_unique_path_total,
+        path_membership_delta_groups: feature_metrics.path_membership_delta_groups,
+        path_membership_run_groups: feature_metrics.path_membership_run_groups,
         path_membership_page_encoded_bytes: feature_metrics.path_membership_page_encoded_bytes,
         path_membership_page_decoded_bytes: feature_metrics.path_membership_page_decoded_bytes,
         path_membership_descriptor_encoded_bytes: feature_metrics

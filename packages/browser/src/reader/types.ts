@@ -367,6 +367,8 @@ export interface NamedTraversalGroup {
   readonly occurrenceWeight: bigint;
   readonly uniquePathCount: bigint;
   readonly memberships: readonly NamedTraversalMembership[];
+  /** Present when memberships were reconciled against a decoded graph tile. */
+  readonly orientedNodes?: BigUint64Array;
 }
 
 export interface PathMembershipTile {
@@ -393,6 +395,59 @@ export interface PathMembershipResult {
   readonly trace?: FeatureQueryTrace;
 }
 
+export interface PathCatalogInfo {
+  readonly pathCount: bigint;
+  readonly recordsPerPage: number;
+  readonly pageCount: number;
+  readonly identitySource:
+    | "embedded-gbwt-da-bounded-lf-v1"
+    | "prepared-authenticated-oracle-v1";
+  readonly identitySourceSha256: string;
+  readonly membershipGroupCount: bigint;
+  readonly membershipOccurrenceTotal: bigint;
+  readonly membershipUniquePathTotal: bigint;
+  readonly codecDistribution: Readonly<{
+    deltaGroups: bigint;
+    runGroups: bigint;
+  }>;
+}
+
+export interface PathCatalogLookupOptions {
+  readonly signal?: AbortSignal;
+  readonly trace?: boolean | ((trace: FeatureQueryTrace) => void);
+}
+
+export interface PathSearch extends PathCatalogLookupOptions {
+  readonly sample?: string;
+  readonly contig?: string;
+  /** Exact match against the deterministic canonical GBWT metadata rendering. */
+  readonly rawName?: string;
+  readonly limit?: number;
+}
+
+export interface PathSearchResult {
+  readonly paths: readonly NamedSourcePath[];
+  readonly truncated: boolean;
+  readonly trace?: FeatureQueryTrace;
+}
+
+export interface TilePathMembershipOptions {
+  readonly signal?: AbortSignal;
+  readonly trace?: boolean | ((trace: FeatureQueryTrace) => void);
+}
+
+export interface PathMembershipLayerTrace {
+  readonly graph?: QueryTrace;
+  readonly membership: FeatureQueryTrace;
+  readonly catalog: FeatureQueryTrace;
+}
+
+export interface QueryWithPathMembershipResult {
+  readonly region: RegionResult;
+  readonly pathMembership: PathMembershipResult;
+  readonly trace: PathMembershipLayerTrace;
+}
+
 export interface PangenomeArchive {
   readonly formatVersion: number;
   readonly semantics: HaplotypeSemantics;
@@ -401,7 +456,20 @@ export interface PangenomeArchive {
   info(options?: { signal?: AbortSignal }): Promise<ArchiveInfo>;
   searchLoci(query: LocusSearch): Promise<LocusSearchResult>;
   summary(query: SummaryQuery): Promise<SummaryResult>;
+  pathCatalogInfo(options?: { signal?: AbortSignal }): Promise<PathCatalogInfo>;
+  pathById(
+    pathId: bigint,
+    options?: PathCatalogLookupOptions,
+  ): Promise<NamedSourcePath | undefined>;
+  searchPaths(query: PathSearch): Promise<PathSearchResult>;
+  tilePathMemberships(
+    tile: RegionTile,
+    options?: TilePathMembershipOptions,
+  ): Promise<readonly NamedTraversalGroup[]>;
   pathMembership(query: PathMembershipQuery): Promise<PathMembershipResult>;
+  queryWithPathMembership(
+    query: RegionQuery,
+  ): Promise<QueryWithPathMembershipResult>;
   planRegion(query: RegionQuery): Promise<RegionPlan>;
   query(query: RegionQuery): Promise<RegionResult>;
   /** Streams tiles as decoding completes; progressive event order is intentionally unspecified. */

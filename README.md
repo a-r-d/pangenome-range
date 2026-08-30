@@ -67,6 +67,23 @@ const membership = await archive.pathMembership({
   end: 31_511_124,
 });
 console.log(membership.paths, membership.tiles[0]?.groups);
+
+const region = await archive.query({
+  sample: "GRCh38",
+  contig: "chr6",
+  start: 31_498_145,
+  end: 31_511_124,
+});
+const groups = await archive.tilePathMemberships(region.tiles[0]);
+const sourcePath = await archive.pathById(groups[0].memberships[0].pathId);
+
+const combined = await archive.queryWithPathMembership({
+  sample: "GRCh38",
+  contig: "chr6",
+  start: 31_498_145,
+  end: 31_511_124,
+});
+console.log(combined.trace.graph, combined.trace.membership, combined.trace.catalog);
 ```
 
 Each returned path has a real canonical GBWT path ID, structured metadata, and a

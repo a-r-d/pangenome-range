@@ -3,16 +3,25 @@
 ## 2026-08-29: production named-membership reader cost
 
 The registered `path-members-v1-` reader adds strict descriptor, aligned-directory,
-front-coded catalog, delta/run membership, UTF-8, ordering, and allocation checks to
-the existing single-file ESM reader. The final unminified reader entry is 187,672
-bytes raw and 41,310 bytes gzip. This is 48,748 raw bytes and 10,115 gzip bytes above
-the earlier 138,924 / 31,195-byte reader measurement. The network-sensitive gzip
-budget remains 50 KiB; the unminified raw budget increases deliberately from 160 KiB
-to 192 KiB. Dynamic chunk loading was not introduced because it would change the
-package's current single-file loading behavior for an optional pre-v1 feature.
+front-coded catalog, delta/run membership, UTF-8, ordering, allocation, tile/payload
+binding, lazy catalog lookup, and combined-query checks to the existing single-file
+ESM reader. The final unminified reader entry is 202,856 bytes raw and 43,694 bytes
+gzip. This is 63,932 raw bytes and 12,499 gzip bytes above the earlier 138,924 /
+31,195-byte reader measurement. The network-sensitive gzip budget remains 50 KiB;
+the readable unminified raw budget increases deliberately to 208 KiB. Dynamic chunk
+loading was not introduced because it would change the package's current single-file
+loading behavior for an optional pre-v1 feature.
 
 The feature remains independently range-addressed at runtime: ordinary graph queries
 do not fetch membership descriptors, directories, catalog pages, or tile pages.
+
+Final-layout anonymous/named controls measured a 64-byte graph-only read increment
+from the additional registered extension entry, with identical canonical hashes and
+two dependency rounds. Identity-aware rice fetched 12,070 membership plus 10,586
+catalog bytes; HPRC TERT fetched 49,855 plus 40,105 bytes. The current layout needs
+two serial membership rounds and one catalog round after graph decoding, so it does
+not meet the aspirational single-extra-round target. This is retained as the reason
+the identity API is experimental rather than described as stable.
 
 This log records failed or incomplete performance experiments as first-class
 evidence. A run belongs here when it changes what we believe about the encoder,
@@ -1190,13 +1199,17 @@ Persistent source-cache format v2 adds authenticated GBWT DA support and the can
 source-path catalog. On the synthetic fixture, ephemeral and persistent-cache encodes
 produced the identical 9,605-byte archive at SHA-256
 `a6d99b656a7f477afc43fdfde5acb5831115be6b09bb6eb1c3533563724a692a`.
-The checked-in MICB/KIR3DL1 golden archive is 31,783 bytes at SHA-256
-`0f158b251de094fce1c446e9fd5af13e3d2e47c6ea8afe0c26f7009ea85cc127`.
+The checked-in MICB/KIR3DL1 golden archive is 32,013 bytes at SHA-256
+`5900f5c77ef4ee46a1e22e51f30634f95a0bf5c50b00e40ef75b80026cb00955`.
 Rust validation and the public TypeScript API agree on 169 catalog paths, two tiles,
 79 groups, 180 memberships, and total occurrence/multiplicity weight 180. TypeScript
 also rejects a corrupted membership-directory digest.
 
-This is the production format/API decision, not new population-scale evidence. The
-bounded rice and four-tile HPRC measurements remain applicable. Archive-wide HPRC is
-still unmeasured, and the 1000G pilot remains explicitly excluded because repeating
-the earlier memory failure would not add correctness information.
+Final-layout anonymous/named controls are retained in `results/named-membership/`.
+Rice named encoding added 3.49% wall and 1,884 KiB peak RSS; HPRC TERT added 2.57%
+wall with no observed peak increase beyond the anonymous run's 653,596 KiB. The
+fixed catalog dominates tiny bounded archives, but its measured increment projects
+to 0.0683% of the retained whole rice-chr06 archive and 0.00841% of the retained
+whole-HPRC archive. Archive-wide named HPRC remains unmeasured. The user explicitly
+accepted the 1000G exclusion after the earlier memory failure, and the absence record
+does not infer a 1000G result.

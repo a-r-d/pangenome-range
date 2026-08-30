@@ -1,0 +1,10 @@
+{
+  "schema_version": 1,
+  "anonymous_bytes": 130236,
+  "named_bytes": 352503,
+  "bounded_delta_bytes": 222267,
+  "bounded_delta_percent": 170.664793,
+  "retained_whole_chr06_archive_bytes": 325664519,
+  "projected_whole_chr06_delta_percent": 0.0682503,
+  "note": "The global catalog is a fixed cost, so the one-tile percentage is not a chromosome-scale projection."
+}

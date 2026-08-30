@@ -3,12 +3,13 @@ use crate::source::{PangenomeSource, SourceLocatedPosition};
 use gbz::Pos;
 use pangenome_range_format::{
     ArchiveEntry, ChunkCodec, ExtensionEntry, PATH_CATALOG_RECORDS_PER_PAGE,
-    PATH_MEMBERSHIP_DIRECTORY_PAGE_BYTES, PATH_MEMBERSHIP_TYPE_ID, PathCatalogPageDescriptor,
-    PathCatalogRecord, PathMembership, PathMembershipDescriptor, PathMembershipDirectoryEntry,
-    PathMembershipManifest, RecordRegionalPayload, ReferenceManifest, TraversalMembershipGroup,
-    decompress, encode_path_catalog_page, encode_path_membership_descriptor,
+    PATH_MEMBERSHIP_DELTA_CODEC, PATH_MEMBERSHIP_DIRECTORY_PAGE_BYTES, PATH_MEMBERSHIP_RUN_CODEC,
+    PATH_MEMBERSHIP_TYPE_ID, PathCatalogPageDescriptor, PathCatalogRecord, PathIdentitySource,
+    PathMembership, PathMembershipDescriptor, PathMembershipDirectoryEntry, PathMembershipManifest,
+    RecordRegionalPayload, ReferenceManifest, TraversalMembershipGroup, decompress,
+    encode_path_catalog_page, encode_path_membership_descriptor,
     encode_path_membership_directory_page, encode_tile_membership_page,
-    traversal_membership_digest,
+    selected_path_membership_codec, traversal_membership_digest,
 };
 use serde::Deserialize;
 use serde_json::Value;
@@ -26,6 +27,10 @@ pub(crate) struct PathMembershipBuildMetrics {
     pub directory_pages: u64,
     pub groups: u64,
     pub memberships: u64,
+    pub occurrence_total: u64,
+    pub unique_path_total: u64,
+    pub delta_groups: u64,
+    pub run_groups: u64,
     pub page_encoded_bytes: u64,
     pub page_decoded_bytes: u64,
     pub descriptor_encoded_bytes: u64,
@@ -90,6 +95,44 @@ fn checked_add(target: &mut u64, value: u64, field: &str) -> io::Result<()> {
     Ok(())
 }
 
+fn record_group_metrics(
+    metrics: &mut PathMembershipBuildMetrics,
+    groups: &[TraversalMembershipGroup],
+) -> io::Result<()> {
+    checked_add(
+        &mut metrics.groups,
+        usize_to_u64(groups.len())?,
+        "membership group count",
+    )?;
+    for group in groups {
+        checked_add(
+            &mut metrics.memberships,
+            usize_to_u64(group.memberships.len())?,
+            "membership count",
+        )?;
+        checked_add(
+            &mut metrics.occurrence_total,
+            group.occurrence_weight,
+            "membership occurrence total",
+        )?;
+        checked_add(
+            &mut metrics.unique_path_total,
+            group.unique_path_count,
+            "membership unique-path total",
+        )?;
+        match selected_path_membership_codec(&group.memberships)? {
+            PATH_MEMBERSHIP_DELTA_CODEC => {
+                checked_add(&mut metrics.delta_groups, 1, "delta membership groups")?;
+            }
+            PATH_MEMBERSHIP_RUN_CODEC => {
+                checked_add(&mut metrics.run_groups, 1, "run membership groups")?;
+            }
+            _ => return Err(invalid("unknown selected path-membership codec")),
+        }
+    }
+    Ok(())
+}
+
 fn usize_to_u64(value: usize) -> io::Result<u64> {
     u64::try_from(value).map_err(|_| invalid("usize does not fit u64"))
 }
@@ -104,6 +147,14 @@ struct TraversalStart {
     traversal: Vec<u64>,
     is_reference: bool,
     canonical: bool,
+}
+
+struct TileMembershipIdentity<'a> {
+    sample: &'a str,
+    contig: &'a str,
+    core_start: u64,
+    core_end: u64,
+    regional_payload_integrity: &'a [u8; 16],
 }
 
 fn canonical_edge(from: u64, to: u64) -> bool {
@@ -235,6 +286,7 @@ fn direct_groups(
     starts: &[TraversalStart],
     located: &[SourceLocatedPosition],
     path_count: u64,
+    identity: &TileMembershipIdentity<'_>,
 ) -> io::Result<Vec<TraversalMembershipGroup>> {
     if starts.len() != located.len() {
         return Err(invalid(
@@ -294,7 +346,14 @@ fn direct_groups(
             )
             .collect::<Vec<_>>();
         groups.push(TraversalMembershipGroup {
-            traversal_digest: traversal_membership_digest(&traversal),
+            traversal_digest: traversal_membership_digest(
+                identity.sample,
+                identity.contig,
+                identity.core_start,
+                identity.core_end,
+                identity.regional_payload_integrity,
+                &traversal,
+            ),
             occurrence_weight,
             unique_path_count: usize_to_u64(unique_paths.len())?,
             memberships,
@@ -429,6 +488,7 @@ pub(crate) fn write_path_membership_extension(
     summary_path: &Path,
     catalog_path: &Path,
     data_offset: u64,
+    identity_source_sha256: [u8; 32],
 ) -> io::Result<(ExtensionEntry, PathMembershipBuildMetrics)> {
     let summary: InputSummary = serde_json::from_slice(&std::fs::read(summary_path)?)?;
     if summary.manifest.sample.is_empty()
@@ -474,6 +534,25 @@ pub(crate) fn write_path_membership_extension(
     if manifests.len() != bucket_entries.len() {
         return Err(invalid("membership manifest and directory counts differ"));
     }
+    let mut graph_integrity = HashMap::new();
+    for (manifest, graph_buckets) in manifests.iter().zip(bucket_entries) {
+        for entry in graph_buckets.iter().flatten() {
+            if graph_integrity
+                .insert(
+                    (
+                        manifest.sample.clone(),
+                        manifest.contig.clone(),
+                        entry.start,
+                        entry.end,
+                    ),
+                    entry.integrity,
+                )
+                .is_some()
+            {
+                return Err(invalid("duplicate graph tile identity"));
+            }
+        }
+    }
     let mut tiles = HashMap::new();
     for tile in summary.tiles {
         if !tile_is_encoded(
@@ -487,6 +566,15 @@ pub(crate) fn write_path_membership_extension(
                 summary.manifest.sample, summary.manifest.contig, tile.core_start, tile.core_end
             )));
         }
+        let tile_key = (
+            summary.manifest.sample.clone(),
+            summary.manifest.contig.clone(),
+            tile.core_start,
+            tile.core_end,
+        );
+        let regional_payload_integrity = graph_integrity
+            .get(&tile_key)
+            .ok_or_else(|| invalid("prepared membership tile has no graph payload integrity"))?;
         let mut groups = Vec::with_capacity(tile.groups.len());
         for group in tile.groups {
             if group.traversal.is_empty() {
@@ -504,21 +592,28 @@ pub(crate) fn write_path_membership_extension(
             if memberships.iter().any(|item| item.path_id >= path_count) {
                 return Err(invalid("path-membership group refers outside the catalog"));
             }
-            checked_add(
-                &mut metrics.memberships,
-                u64::try_from(memberships.len())
-                    .map_err(|_| invalid("membership count does not fit u64"))?,
-                "membership count",
-            )?;
             groups.push(TraversalMembershipGroup {
-                traversal_digest: traversal_membership_digest(&group.traversal),
+                traversal_digest: traversal_membership_digest(
+                    &summary.manifest.sample,
+                    &summary.manifest.contig,
+                    tile.core_start,
+                    tile.core_end,
+                    regional_payload_integrity,
+                    &group.traversal,
+                ),
                 occurrence_weight: group.occurrence_weight,
                 unique_path_count: group.unique_path_count,
                 memberships,
             });
         }
         groups.sort_by_key(|group| group.traversal_digest);
-        let raw = encode_tile_membership_page(tile.core_start, tile.core_end, &groups)?;
+        record_group_metrics(&mut metrics, &groups)?;
+        let raw = encode_tile_membership_page(
+            tile.core_start,
+            tile.core_end,
+            regional_payload_integrity,
+            &groups,
+        )?;
         let storage = append_page(archive, ChunkCodec::Zstd3, &raw, data_offset)?;
         checked_add(
             &mut metrics.page_encoded_bytes,
@@ -531,20 +626,9 @@ pub(crate) fn write_path_membership_extension(
                 .map_err(|_| invalid("membership page length does not fit u64"))?,
             "membership decoded page bytes",
         )?;
-        checked_add(
-            &mut metrics.groups,
-            u64::try_from(groups.len()).map_err(|_| invalid("group count does not fit u64"))?,
-            "membership group count",
-        )?;
-        let key = (
-            summary.manifest.sample.clone(),
-            summary.manifest.contig.clone(),
-            tile.core_start,
-            tile.core_end,
-        );
         if tiles
             .insert(
-                key,
+                tile_key,
                 PathMembershipDirectoryEntry {
                     group_count: u64::try_from(groups.len())
                         .map_err(|_| invalid("group count does not fit u64"))?,
@@ -593,6 +677,13 @@ pub(crate) fn write_path_membership_extension(
     let descriptor = encode_path_membership_descriptor(&PathMembershipDescriptor {
         path_count,
         records_per_catalog_page: PATH_CATALOG_RECORDS_PER_PAGE,
+        identity_source: PathIdentitySource::PreparedAuthenticatedOracleV1,
+        identity_source_sha256,
+        group_count: metrics.groups,
+        occurrence_total: metrics.occurrence_total,
+        unique_path_total: metrics.unique_path_total,
+        delta_group_count: metrics.delta_groups,
+        run_group_count: metrics.run_groups,
         catalog_pages,
         manifests: membership_manifests,
     })?;
@@ -621,6 +712,7 @@ pub(crate) fn write_direct_path_membership_extension(
     bucket_entries: &[Vec<Vec<ArchiveEntry>>],
     max_lf_steps: usize,
     data_offset: u64,
+    identity_source_sha256: [u8; 32],
 ) -> io::Result<(ExtensionEntry, PathMembershipBuildMetrics)> {
     let source_catalog = source.path_catalog()?.ok_or_else(|| {
         invalid("active source does not provide a complete named path catalog for membership")
@@ -681,7 +773,7 @@ pub(crate) fn write_direct_path_membership_extension(
     }
     let mut payload_reader = File::open(archive_path)?;
     let mut membership_buckets = Vec::with_capacity(bucket_entries.len());
-    for buckets in bucket_entries {
+    for (manifest, buckets) in manifests.iter().zip(bucket_entries) {
         let mut manifest_buckets = Vec::with_capacity(buckets.len());
         for bucket in buckets {
             let mut membership_entries = Vec::with_capacity(bucket.len());
@@ -712,24 +804,23 @@ pub(crate) fn write_direct_path_membership_extension(
                 metrics.maximum_lf_steps = metrics
                     .maximum_lf_steps
                     .max(located.iter().map(|item| item.lf_steps).max().unwrap_or(0));
-                let groups = direct_groups(&payload, &starts, &located, path_count)?;
+                let groups = direct_groups(
+                    &payload,
+                    &starts,
+                    &located,
+                    path_count,
+                    &TileMembershipIdentity {
+                        sample: &manifest.sample,
+                        contig: &manifest.contig,
+                        core_start: entry.start,
+                        core_end: entry.end,
+                        regional_payload_integrity: &entry.integrity,
+                    },
+                )?;
                 drop(payload);
-                checked_add(
-                    &mut metrics.groups,
-                    usize_to_u64(groups.len())?,
-                    "membership group count",
-                )?;
-                let membership_count = groups.iter().try_fold(0_u64, |total, group| {
-                    total
-                        .checked_add(usize_to_u64(group.memberships.len())?)
-                        .ok_or_else(|| invalid("membership count overflow"))
-                })?;
-                checked_add(
-                    &mut metrics.memberships,
-                    membership_count,
-                    "membership count",
-                )?;
-                let raw_page = encode_tile_membership_page(entry.start, entry.end, &groups)?;
+                record_group_metrics(&mut metrics, &groups)?;
+                let raw_page =
+                    encode_tile_membership_page(entry.start, entry.end, &entry.integrity, &groups)?;
                 let storage = append_page(archive, ChunkCodec::Zstd3, &raw_page, data_offset)?;
                 checked_add(
                     &mut metrics.page_encoded_bytes,
@@ -759,6 +850,13 @@ pub(crate) fn write_direct_path_membership_extension(
     let descriptor = encode_path_membership_descriptor(&PathMembershipDescriptor {
         path_count,
         records_per_catalog_page: PATH_CATALOG_RECORDS_PER_PAGE,
+        identity_source: PathIdentitySource::EmbeddedGbwtDaBoundedLfV1,
+        identity_source_sha256,
+        group_count: metrics.groups,
+        occurrence_total: metrics.occurrence_total,
+        unique_path_total: metrics.unique_path_total,
+        delta_group_count: metrics.delta_groups,
+        run_group_count: metrics.run_groups,
         catalog_pages,
         manifests: membership_manifests,
     })?;

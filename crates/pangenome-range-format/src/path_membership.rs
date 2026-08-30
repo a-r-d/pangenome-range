@@ -25,12 +25,15 @@ pub const MAX_PATH_CATALOG_PAGES: usize = 1_000_000;
 pub const MAX_PATH_MEMBERSHIP_MANIFESTS: usize = 1_000_000;
 pub const MAX_PATH_MEMBERSHIP_GROUPS_PER_TILE: usize = 65_536;
 
-const PATH_MEMBERSHIP_DESCRIPTOR_HEADER_BYTES: usize = 32;
+const PATH_MEMBERSHIP_DESCRIPTOR_HEADER_BYTES: usize = 112;
 const PATH_CATALOG_DESCRIPTOR_BYTES: usize = 64;
 const PATH_MEMBERSHIP_MANIFEST_BYTES: usize = 32;
 
 const DELTA_CODEC: u8 = 0;
 const RUN_CODEC: u8 = 1;
+
+pub const PATH_MEMBERSHIP_DELTA_CODEC: u8 = DELTA_CODEC;
+pub const PATH_MEMBERSHIP_RUN_CODEC: u8 = RUN_CODEC;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct PathCatalogRecord {
@@ -69,8 +72,46 @@ pub struct PathMembershipManifest {
 pub struct PathMembershipDescriptor {
     pub path_count: u64,
     pub records_per_catalog_page: u32,
+    pub identity_source: PathIdentitySource,
+    pub identity_source_sha256: [u8; 32],
+    pub group_count: u64,
+    pub occurrence_total: u64,
+    pub unique_path_total: u64,
+    pub delta_group_count: u64,
+    pub run_group_count: u64,
     pub catalog_pages: Vec<PathCatalogPageDescriptor>,
     pub manifests: Vec<PathMembershipManifest>,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum PathIdentitySource {
+    EmbeddedGbwtDaBoundedLfV1,
+    PreparedAuthenticatedOracleV1,
+}
+
+impl PathIdentitySource {
+    fn code(self) -> u8 {
+        match self {
+            Self::EmbeddedGbwtDaBoundedLfV1 => 1,
+            Self::PreparedAuthenticatedOracleV1 => 2,
+        }
+    }
+
+    fn from_code(code: u8) -> io::Result<Self> {
+        match code {
+            1 => Ok(Self::EmbeddedGbwtDaBoundedLfV1),
+            2 => Ok(Self::PreparedAuthenticatedOracleV1),
+            _ => Err(invalid_data("unknown path identity source")),
+        }
+    }
+
+    #[must_use]
+    pub const fn implementation(self) -> &'static str {
+        match self {
+            Self::EmbeddedGbwtDaBoundedLfV1 => "embedded-gbwt-da-bounded-lf-v1",
+            Self::PreparedAuthenticatedOracleV1 => "prepared-authenticated-oracle-v1",
+        }
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
@@ -94,9 +135,23 @@ pub struct TraversalMembershipGroup {
 ///
 /// The fixed 16-byte conversion cannot fail because BLAKE3 always returns 32 bytes.
 #[must_use]
-pub fn traversal_membership_digest(handles: &[u64]) -> [u8; 16] {
+pub fn traversal_membership_digest(
+    sample: &str,
+    contig: &str,
+    core_start: u64,
+    core_end: u64,
+    regional_payload_integrity: &[u8; 16],
+    handles: &[u64],
+) -> [u8; 16] {
     let mut hasher = blake3::Hasher::new();
     hasher.update(b"pangenome-range/path-membership/traversal/v1\0");
+    hasher.update(&(sample.len() as u64).to_le_bytes());
+    hasher.update(sample.as_bytes());
+    hasher.update(&(contig.len() as u64).to_le_bytes());
+    hasher.update(contig.as_bytes());
+    hasher.update(&core_start.to_le_bytes());
+    hasher.update(&core_end.to_le_bytes());
+    hasher.update(regional_payload_integrity);
     hasher.update(&(handles.len() as u64).to_le_bytes());
     for handle in handles {
         hasher.update(&handle.to_le_bytes());
@@ -177,6 +232,15 @@ pub fn encode_path_membership_descriptor(
             "invalid path-membership descriptor dimensions",
         ));
     }
+    if descriptor.identity_source_sha256 == [0; 32]
+        || descriptor
+            .delta_group_count
+            .checked_add(descriptor.run_group_count)
+            != Some(descriptor.group_count)
+        || descriptor.unique_path_total > descriptor.occurrence_total
+    {
+        return Err(invalid_data("invalid path-membership provenance totals"));
+    }
     let encoded_bytes =
         descriptor_bytes(descriptor.catalog_pages.len(), descriptor.manifests.len())?;
     let mut output = Vec::with_capacity(encoded_bytes);
@@ -186,6 +250,14 @@ pub fn encode_path_membership_descriptor(
     put_u64(&mut output, descriptor.path_count);
     put_u32(&mut output, usize_to_u32(descriptor.catalog_pages.len())?);
     put_u32(&mut output, usize_to_u32(descriptor.manifests.len())?);
+    output.push(descriptor.identity_source.code());
+    output.extend_from_slice(&[0_u8; 7]);
+    output.extend_from_slice(&descriptor.identity_source_sha256);
+    put_u64(&mut output, descriptor.group_count);
+    put_u64(&mut output, descriptor.occurrence_total);
+    put_u64(&mut output, descriptor.unique_path_total);
+    put_u64(&mut output, descriptor.delta_group_count);
+    put_u64(&mut output, descriptor.run_group_count);
     let mut expected_first = 0_u64;
     let mut catalog_records = 0_u64;
     for page in &descriptor.catalog_pages {
@@ -266,6 +338,21 @@ pub fn decode_path_membership_descriptor(
     let path_count = reader.u64()?;
     let catalog_count = u32_to_usize(reader.u32()?)?;
     let manifest_count = u32_to_usize(reader.u32()?)?;
+    let identity_source = PathIdentitySource::from_code(reader.u8()?)?;
+    if reader.take(7)? != [0_u8; 7] {
+        return Err(invalid_data(
+            "path-membership provenance reserved bytes are nonzero",
+        ));
+    }
+    let identity_source_sha256 = reader
+        .take(32)?
+        .try_into()
+        .map_err(|_| invalid_data("invalid path identity source checksum"))?;
+    let group_count = reader.u64()?;
+    let occurrence_total = reader.u64()?;
+    let unique_path_total = reader.u64()?;
+    let delta_group_count = reader.u64()?;
+    let run_group_count = reader.u64()?;
     if path_count == 0
         || records_per_catalog_page == 0
         || records_per_catalog_page > 65_536
@@ -277,6 +364,12 @@ pub fn decode_path_membership_descriptor(
         return Err(invalid_data(
             "invalid path-membership descriptor dimensions",
         ));
+    }
+    if identity_source_sha256 == [0; 32]
+        || delta_group_count.checked_add(run_group_count) != Some(group_count)
+        || unique_path_total > occurrence_total
+    {
+        return Err(invalid_data("invalid path-membership provenance totals"));
     }
     let expected_bytes = descriptor_bytes(catalog_count, manifest_count)?;
     if bytes.len() != expected_bytes {
@@ -355,6 +448,13 @@ pub fn decode_path_membership_descriptor(
     Ok(PathMembershipDescriptor {
         path_count,
         records_per_catalog_page,
+        identity_source,
+        identity_source_sha256,
+        group_count,
+        occurrence_total,
+        unique_path_total,
+        delta_group_count,
+        run_group_count,
         catalog_pages,
         manifests,
     })
@@ -805,6 +905,21 @@ fn validate_membership_id_order(memberships: &[PathMembership]) -> io::Result<()
     Ok(())
 }
 
+/// Returns the deterministic codec selected for one membership group.
+///
+/// # Errors
+///
+/// Returns an error when the memberships cannot be encoded canonically.
+pub fn selected_path_membership_codec(memberships: &[PathMembership]) -> io::Result<u8> {
+    let delta = encode_delta(memberships)?;
+    let runs = encode_runs(memberships)?;
+    Ok(if (runs.len(), RUN_CODEC) < (delta.len(), DELTA_CODEC) {
+        RUN_CODEC
+    } else {
+        DELTA_CODEC
+    })
+}
+
 /// Encodes one tile-local membership page, choosing delta or interval runs per group.
 ///
 /// # Errors
@@ -814,6 +929,7 @@ fn validate_membership_id_order(memberships: &[PathMembership]) -> io::Result<()
 pub fn encode_tile_membership_page(
     core_start: u64,
     core_end: u64,
+    regional_payload_integrity: &[u8; 16],
     groups: &[TraversalMembershipGroup],
 ) -> io::Result<Vec<u8>> {
     if core_start >= core_end
@@ -830,6 +946,7 @@ pub fn encode_tile_membership_page(
     put_u32(&mut output, usize_to_u32(groups.len())?);
     put_u64(&mut output, core_start);
     put_u64(&mut output, core_end);
+    output.extend_from_slice(regional_payload_integrity);
     let mut total_occurrence_weight = 0_u64;
     for group in groups {
         if group.occurrence_weight == 0
@@ -890,7 +1007,7 @@ pub fn encode_tile_membership_page(
 pub fn decode_tile_membership_page(
     bytes: &[u8],
     path_count: u64,
-) -> io::Result<(u64, u64, Vec<TraversalMembershipGroup>)> {
+) -> io::Result<(u64, u64, [u8; 16], Vec<TraversalMembershipGroup>)> {
     if usize_to_u64(bytes.len())? > MAX_FEATURE_PAGE_BYTES {
         return Err(invalid_data("tile-membership page is too large"));
     }
@@ -909,6 +1026,10 @@ pub fn decode_tile_membership_page(
     }
     let core_start = reader.u64()?;
     let core_end = reader.u64()?;
+    let regional_payload_integrity = reader
+        .take(16)?
+        .try_into()
+        .map_err(|_| invalid_data("invalid regional payload integrity"))?;
     if core_start >= core_end {
         return Err(invalid_data("invalid tile-membership core interval"));
     }
@@ -923,7 +1044,17 @@ pub fn decode_tile_membership_page(
         let occurrence_weight = reader.u64()?;
         let unique_path_count = reader.u64()?;
         let encoded_len = u64_to_usize(reader.u64()?)?;
-        let memberships = decode_memberships(reader.take(encoded_len)?, path_count)?;
+        let encoded = reader.take(encoded_len)?;
+        let codec = encoded
+            .first()
+            .copied()
+            .ok_or_else(|| invalid_data("empty membership codec payload"))?;
+        let memberships = decode_memberships(encoded, path_count)?;
+        if selected_path_membership_codec(&memberships)? != codec {
+            return Err(invalid_data(
+                "membership codec differs from deterministic selection",
+            ));
+        }
         let sum = memberships.iter().try_fold(0_u64, |total, item| {
             total
                 .checked_add(item.multiplicity)
@@ -960,7 +1091,7 @@ pub fn decode_tile_membership_page(
         previous_digest = Some(traversal_digest);
     }
     reader.finish()?;
-    Ok((core_start, core_end, groups))
+    Ok((core_start, core_end, regional_payload_integrity, groups))
 }
 
 #[cfg(test)]
@@ -979,6 +1110,7 @@ mod tests {
     }
 
     #[test]
+    #[allow(clippy::too_many_lines)]
     fn descriptor_and_pages_round_trip() {
         let records = vec![
             PathCatalogRecord {
@@ -1003,8 +1135,30 @@ mod tests {
         let catalog = encode_path_catalog_page(&records).unwrap();
         assert_eq!(decode_path_catalog_page(&catalog).unwrap(), records);
 
+        let regional_integrity = [9; 16];
+        assert_eq!(
+            traversal_membership_digest(
+                "sample",
+                "chr1",
+                100,
+                200,
+                &regional_integrity,
+                &[2, 4, 6],
+            ),
+            [
+                0x67, 0x0d, 0x47, 0xd5, 0x46, 0xab, 0xb2, 0x1b, 0xce, 0x59, 0x5e, 0xe9, 0x81, 0x3e,
+                0xb7, 0xa0,
+            ]
+        );
         let groups = vec![TraversalMembershipGroup {
-            traversal_digest: traversal_membership_digest(&[2, 4, 6]),
+            traversal_digest: traversal_membership_digest(
+                "sample",
+                "chr1",
+                100,
+                200,
+                &regional_integrity,
+                &[2, 4, 6],
+            ),
             occurrence_weight: 2,
             unique_path_count: 2,
             memberships: vec![
@@ -1020,22 +1174,29 @@ mod tests {
                 },
             ],
         }];
-        let tile = encode_tile_membership_page(100, 200, &groups).unwrap();
+        let tile = encode_tile_membership_page(100, 200, &regional_integrity, &groups).unwrap();
         assert_eq!(
             decode_tile_membership_page(&tile, 2).unwrap(),
-            (100, 200, groups)
+            (100, 200, regional_integrity, groups)
         );
         assert!(decode_tile_membership_page(&tile[..tile.len() - 1], 2).is_err());
         assert!(decode_tile_membership_page(&tile, 1).is_err());
-        let empty_tile = encode_tile_membership_page(200, 300, &[]).unwrap();
+        let empty_tile = encode_tile_membership_page(200, 300, &regional_integrity, &[]).unwrap();
         assert_eq!(
             decode_tile_membership_page(&empty_tile, 2).unwrap(),
-            (200, 300, Vec::new())
+            (200, 300, regional_integrity, Vec::new())
         );
 
         let descriptor = PathMembershipDescriptor {
             path_count: 2,
             records_per_catalog_page: 1_024,
+            identity_source: PathIdentitySource::EmbeddedGbwtDaBoundedLfV1,
+            identity_source_sha256: [7; 32],
+            group_count: 1,
+            occurrence_total: 2,
+            unique_path_total: 2,
+            delta_group_count: 1,
+            run_group_count: 0,
             catalog_pages: vec![PathCatalogPageDescriptor {
                 first_path_id: 0,
                 record_count: 2,
@@ -1107,9 +1268,10 @@ mod tests {
             unique_path_count: 1,
             memberships: dual_orientation,
         };
-        let page = encode_tile_membership_page(100, 200, std::slice::from_ref(&group)).unwrap();
+        let page =
+            encode_tile_membership_page(100, 200, &[9; 16], std::slice::from_ref(&group)).unwrap();
         assert_eq!(
-            decode_tile_membership_page(&page, 2).unwrap().2,
+            decode_tile_membership_page(&page, 2).unwrap().3,
             vec![group]
         );
     }
@@ -1137,5 +1299,59 @@ mod tests {
         let mut excessive = vec![RUN_CODEC];
         put_varint(&mut excessive, MAX_DECODED_OCCURRENCES_PER_TILE + 1);
         assert!(decode_memberships(&excessive, u64::MAX).is_err());
+    }
+
+    #[test]
+    fn membership_codec_rejects_adversarial_varints_and_records() {
+        let zero_id = vec![PathMembership {
+            path_id: 0,
+            multiplicity: 1,
+            reversed_relative_to_group: false,
+        }];
+        let encoded = encode_delta(&zero_id).unwrap();
+        assert_eq!(decode_memberships(&encoded, 1).unwrap(), zero_id);
+
+        assert!(decode_memberships(&[DELTA_CODEC, 0x81, 0x00], 2).is_err());
+        assert!(decode_memberships(&[DELTA_CODEC, 1, 0, 0, 0], 2).is_err());
+        assert!(decode_memberships(&[DELTA_CODEC, 1, 0, 1, 2], 2).is_err());
+        assert!(decode_memberships(&[DELTA_CODEC, 1, 0, 1], 2).is_err());
+        assert!(decode_memberships(&[DELTA_CODEC, 1, 0, 1, 0, 0], 2).is_err());
+        assert!(decode_memberships(&[2, 1, 0, 1, 0], 2).is_err());
+
+        let overflowing = TraversalMembershipGroup {
+            traversal_digest: [3; 16],
+            occurrence_weight: u64::MAX,
+            unique_path_count: 2,
+            memberships: vec![
+                PathMembership {
+                    path_id: 0,
+                    multiplicity: u64::MAX,
+                    reversed_relative_to_group: false,
+                },
+                PathMembership {
+                    path_id: 1,
+                    multiplicity: 1,
+                    reversed_relative_to_group: false,
+                },
+            ],
+        };
+        assert!(encode_tile_membership_page(0, 1, &[1; 16], &[overflowing]).is_err());
+
+        let descending = vec![
+            PathMembership {
+                path_id: 1,
+                multiplicity: 1,
+                reversed_relative_to_group: false,
+            },
+            PathMembership {
+                path_id: 0,
+                multiplicity: 1,
+                reversed_relative_to_group: false,
+            },
+        ];
+        assert_eq!(
+            decode_memberships(&encode_delta(&descending).unwrap(), 2).unwrap(),
+            [descending[1].clone(), descending[0].clone()]
+        );
     }
 }

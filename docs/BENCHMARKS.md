@@ -426,14 +426,14 @@ not public-network performance.
 
 The production tranche changes placement, so earlier archive SHA values remain
 historical. A checked-in MICB/KIR3DL1 fixture now covers two CHM13 chr6 tiles. Its
-31,783-byte archive has SHA-256
-`0f158b251de094fce1c446e9fd5af13e3d2e47c6ea8afe0c26f7009ea85cc127`.
+32,013-byte archive has SHA-256
+`5900f5c77ef4ee46a1e22e51f30634f95a0bf5c50b00e40ef75b80026cb00955`.
 Rust and TypeScript agree on 169 catalog paths, 79 groups, 180 memberships, and total
 occurrence/multiplicity weight 180. Browser tests also corrupt the fixed membership
 directory body and require digest rejection.
 
-The synthetic direct encode through an ephemeral cache and persistent source-cache
-v2 is byte-identical: 9,605 bytes at SHA-256
-`a6d99b656a7f477afc43fdfde5acb5831115be6b09bb6eb1c3533563724a692a`.
-This proves cache-path determinism, not population scale. Rice and four-tile HPRC
-remain the largest bounded named-membership evidence. No 1000G result is claimed.
+The synthetic direct encode through ephemeral and persistent source-cache v2 remains
+the cache-path determinism gate. Final-layout anonymous/named controls, validation,
+query bytes, and memory evidence are retained under `results/named-membership/`.
+Rice and four-tile HPRC remain the largest bounded named-membership evidence. The
+1000G exclusion is explicit and no result is inferred.

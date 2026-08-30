@@ -1,13 +1,14 @@
 use crate::binary::{invalid_data, u64_to_usize, usize_to_u64};
 use crate::{
     ARCHIVE_METADATA_TYPE_ID, ArchiveEntry, DIRECTORY_PAGE_BYTES, FileRangeSource,
-    MAX_DECODED_OCCURRENCES_PER_TILE, NAMED_LOCI_TYPE_ID, PATH_MEMBERSHIP_DIRECTORY_PAGE_BYTES,
-    PATH_MEMBERSHIP_TYPE_ID, RangeSource, RecordRegionalPayload, SUMMARY_PYRAMID_TYPE_ID,
-    bootstrap, decode_archive_metadata, decode_directory_page, decode_locus_page,
+    MAX_DECODED_OCCURRENCES_PER_TILE, NAMED_LOCI_TYPE_ID, PATH_MEMBERSHIP_DELTA_CODEC,
+    PATH_MEMBERSHIP_DIRECTORY_PAGE_BYTES, PATH_MEMBERSHIP_RUN_CODEC, PATH_MEMBERSHIP_TYPE_ID,
+    RangeSource, RecordRegionalPayload, SUMMARY_PYRAMID_TYPE_ID, bootstrap,
+    decode_archive_metadata, decode_directory_page, decode_locus_page,
     decode_named_loci_descriptor, decode_path_catalog_page, decode_path_membership_descriptor,
     decode_path_membership_directory_page, decode_summary_descriptor, decode_summary_page,
-    decode_tile_membership_page, decompress, directory_page_offset, traversal_membership_digest,
-    validate_extension_page, validate_extension_payload,
+    decode_tile_membership_page, decompress, directory_page_offset, selected_path_membership_codec,
+    traversal_membership_digest, validate_extension_page, validate_extension_payload,
 };
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
@@ -238,6 +239,10 @@ pub fn validate_archive_with_options(
     let mut path_membership_tile_pages = 0_u64;
     let mut path_membership_groups = 0_u64;
     let mut path_membership_memberships = 0_u64;
+    let mut path_membership_occurrence_total = 0_u64;
+    let mut path_membership_unique_path_total = 0_u64;
+    let mut path_membership_delta_groups = 0_u64;
+    let mut path_membership_run_groups = 0_u64;
     let mut stored_ranges = entries
         .iter()
         .map(|entry| (entry.offset, entry.compressed_len, "regional payload"))
@@ -447,9 +452,23 @@ pub fn validate_archive_with_options(
                             &mut path_membership_tile_pages,
                             &mut path_membership_groups,
                             &mut path_membership_memberships,
+                            &mut path_membership_occurrence_total,
+                            &mut path_membership_unique_path_total,
+                            &mut path_membership_delta_groups,
+                            &mut path_membership_run_groups,
                         )?;
                     }
                 }
+            }
+            if path_membership_groups != descriptor.group_count
+                || path_membership_occurrence_total != descriptor.occurrence_total
+                || path_membership_unique_path_total != descriptor.unique_path_total
+                || path_membership_delta_groups != descriptor.delta_group_count
+                || path_membership_run_groups != descriptor.run_group_count
+            {
+                return Err(invalid_data(
+                    "path-membership descriptor provenance totals differ from tile pages",
+                ));
             }
         }
     }
@@ -576,7 +595,11 @@ pub fn validate_archive_with_options(
     })
 }
 
-#[allow(clippy::too_many_arguments)]
+#[allow(
+    clippy::too_many_arguments,
+    clippy::too_many_lines,
+    reason = "the complete tile-to-regional-payload reconciliation remains contiguous and auditable"
+)]
 fn validate_tile_membership(
     source: &FileRangeSource,
     path_count: u64,
@@ -589,15 +612,21 @@ fn validate_tile_membership(
     path_membership_tile_pages: &mut u64,
     path_membership_groups: &mut u64,
     path_membership_memberships: &mut u64,
+    path_membership_occurrence_total: &mut u64,
+    path_membership_unique_path_total: &mut u64,
+    path_membership_delta_groups: &mut u64,
+    path_membership_run_groups: &mut u64,
 ) -> io::Result<()> {
     let encoded = source.read_range(
         membership_entry.storage.offset,
         u64_to_usize(membership_entry.storage.encoded_len)?,
     )?;
     let decoded = validate_extension_page(&membership_entry.storage, &encoded)?;
-    let (core_start, core_end, groups) = decode_tile_membership_page(&decoded, path_count)?;
+    let (core_start, core_end, regional_payload_integrity, groups) =
+        decode_tile_membership_page(&decoded, path_count)?;
     if core_start != entry.start
         || core_end != entry.end
+        || regional_payload_integrity != entry.integrity
         || usize_to_u64(groups.len())? != membership_entry.group_count
         || groups
             .windows(2)
@@ -628,7 +657,19 @@ fn validate_tile_membership(
         .reconstruct_traversals()?
         .anonymous
         .into_iter()
-        .map(|group| (traversal_membership_digest(&group.handles), group.weight))
+        .map(|group| {
+            (
+                traversal_membership_digest(
+                    &manifest.sample,
+                    &manifest.contig,
+                    entry.start,
+                    entry.end,
+                    &entry.integrity,
+                    &group.handles,
+                ),
+                group.weight,
+            )
+        })
         .collect::<Vec<_>>();
     anonymous.sort_unstable();
     let expected = groups
@@ -653,6 +694,27 @@ fn validate_tile_membership(
                 .ok_or_else(|| invalid_data("path-membership count overflow"))
         })?)
         .ok_or_else(|| invalid_data("path-membership count overflow"))?;
+    for group in &groups {
+        *path_membership_occurrence_total = path_membership_occurrence_total
+            .checked_add(group.occurrence_weight)
+            .ok_or_else(|| invalid_data("path-membership occurrence total overflow"))?;
+        *path_membership_unique_path_total = path_membership_unique_path_total
+            .checked_add(group.unique_path_count)
+            .ok_or_else(|| invalid_data("path-membership unique path total overflow"))?;
+        match selected_path_membership_codec(&group.memberships)? {
+            PATH_MEMBERSHIP_DELTA_CODEC => {
+                *path_membership_delta_groups = path_membership_delta_groups
+                    .checked_add(1)
+                    .ok_or_else(|| invalid_data("path-membership codec count overflow"))?;
+            }
+            PATH_MEMBERSHIP_RUN_CODEC => {
+                *path_membership_run_groups = path_membership_run_groups
+                    .checked_add(1)
+                    .ok_or_else(|| invalid_data("path-membership codec count overflow"))?;
+            }
+            _ => return Err(invalid_data("unknown selected path-membership codec")),
+        }
+    }
     add_extension_page_metrics(
         &membership_entry.storage,
         decoded.len(),

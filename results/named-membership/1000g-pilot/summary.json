@@ -1,0 +1,7 @@
+{
+  "schema_version": 1,
+  "status": "accepted-1000g-exclusion",
+  "experiment_gate_effect": "The user explicitly declared EXPERIMENT_COMPLETE_WITH_1000G_EXCLUSION equivalent to GO_EXTENSION.",
+  "measurements": null,
+  "inference": null
+}

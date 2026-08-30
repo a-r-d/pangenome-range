@@ -1,0 +1,7 @@
+{
+  "schema_version": 1,
+  "dataset": "1000 Genomes pilot",
+  "status": "waived-resource-safety",
+  "user_waiver": "1000G is explicitly excluded because the required prior index construction caused a host OOM.",
+  "attempt_authorized": false
+}

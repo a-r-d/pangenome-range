@@ -102,6 +102,8 @@ declaring stable v1.
 | V1-M04 | Anonymous evidence remains per tile and is never stitched or named. | Public types, semantic label, viewer tests. | PASS |
 | V1-M05 | Each physical tile is included once; halo evidence is not double-counted. | Physical-range deduplication and keyed payload-cache tests. | PASS |
 | V1-M06 | Merge result is independent of request completion order. | Opposite delayed-decompressor schedules preserve ordered tiles, graph hash, tile hashes, and reference traversal; duplicate logical physical-payload test. | PASS |
+| V1-M07 | Optional named membership preserves occurrence weight while separately reporting unique canonical paths and multiplicity-bearing memberships. | Synthetic golden, rice Xa7, and HPRC TERT final-layout validation. | PASS |
+| V1-M08 | Named groups bind to manifest identity, core bounds, regional BLAKE3-128, and canonical oriented nodes; catalog IDs and totals are checked. | Shared Rust/TypeScript digest vector, full validator, corruption and adversarial tests. | PASS |
 | V1-X01 | Graph hash uses the exact v1 domain, integer/string encoding, sorting, graph/reference fields. | Shared graph hash in manifest consumed by Rust and TypeScript. | PASS |
 | V1-X02 | Tile hash uses exact provenance, weights, orientation, and v1 ordering. | Shared tile-local hash in manifest consumed by Rust and TypeScript. | PASS |
 
@@ -129,12 +131,17 @@ declaring stable v1.
 | Extension policy | ADR 0001; optional/required behavior implemented in Rust, TypeScript, spec, and fixtures. | PASS |
 | Payload integrity | ADR 0002; BLAKE3-128 directory field, full-HPRC occupancy/scan model, MHC encoder and TypeScript query measurements. | PASS |
 | Provenance | `archive-meta-v1-` binary schema, Rust/TypeScript `info()`, extension BLAKE3, source/annotation SHA-256, golden and corrupt shared fixtures. | PASS |
-| Timing integrity | Schema-7 encoder report plus RC retained result; source-cache and annotation stages, output SHA-256, wall phases, and aggregate worker CPU are distinct. | PASS |
+| Timing integrity | Schema-11 encoder report plus retained results; source-cache, annotation, identity locate, output SHA-256, wall phases, and aggregate worker CPU are distinct. | PASS |
+| Named identity preview | Final-layout rice/HPRC pilots pass below 1 GiB RSS with projected archive overhead below targets; graph hashes/rounds match. Graph-only reads add 64 bytes and identity needs three serial extension rounds, so the mode remains experimental. | PASS WITH EXPERIMENTAL STATUS |
 | Atomic validation | Standard gate checks ranges, BLAKE3, exact decompression, and structural decode before rename; full/source modes remain distinct. | PASS |
 | Whole HPRC | Candidate SHA `d1308fce...17435be4` validated 363,105 payloads and passed 9/9 graph plus 58/58 tile-local source-oracle comparisons; MHC t1/t4 proves worker determinism. | PASS |
 | Source RAM | Project-owned persistent disk source whole-HPRC run peaked at 621,808 KiB; cold ephemeral and warm persistent modes produced byte-identical populated archives, while loaded mode remains the independent oracle. | PASS |
 | Default viewer indexes | Whole-HPRC report retains 363,105 validated payloads, 591 summary series, 8,017 bins, 157,466 named-locus records, 9/9 graph and 58/58 tile comparisons. | PASS |
 | 1000GP responsibility | Two-chunk pilot remained at 8,776,080 KiB RSS; whole 1000GP is explicitly not authorized. | PASS |
+
+The named-membership 1000G pilot is separately user-waived after the earlier index
+construction OOM. `results/named-membership/1000g-pilot/` is an explicit absence
+record and no performance or correctness result is inferred from it.
 
 Stable v1 is blocked while any `OPEN` row above is release-critical. A row may
 move to `PASS` only with a checked-in test, retained result, or accepted ADR;

@@ -56,9 +56,10 @@ frequencies or globally unique graph counts.
 It pages a complete path catalog and stores multiplicity-bearing named membership
 for every encoded tile. Fixed 4 KiB membership directories mirror the graph
 directories, avoiding an archive-wide tile list in the root descriptor. Rust
-validation binds every membership group to the anonymous traversal reconstructed
-from the regional payload; TypeScript exposes the same data through
-`pathMembership()`. Readers that do not need named identity may skip the extension.
+validation binds every membership group to its manifest, core bounds, regional
+payload digest, and anonymous traversal reconstructed from that payload. TypeScript
+exposes lazy catalog, per-tile, compatibility, and combined query APIs. Readers that
+do not need named identity may skip the extension.
 
 ## Regional representation
 

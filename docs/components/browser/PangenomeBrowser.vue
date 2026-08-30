@@ -108,6 +108,7 @@ const activeSuggestion = ref(0);
 const searching = ref(false);
 const searchMessage = ref("");
 const selection = shallowRef<BrowserSelection>();
+const highlightedPatternIds = ref<readonly string[]>([]);
 const sourceOpen = ref(false);
 const shareOpen = ref(false);
 const shareUrl = ref("");
@@ -133,6 +134,16 @@ let searchController: AbortController | undefined;
 let searchTimer: ReturnType<typeof setTimeout> | undefined;
 let suppressedCommand: string | undefined;
 let viewportUrlFrame: number | undefined;
+let highlightOperation = 0;
+
+const selectedPatternTile = computed(() => {
+  const selected = selection.value;
+  if (selected?.kind !== "pattern") return undefined;
+  return tiles.value.find(
+    (tile) =>
+      tile.provenance.archiveOffset === selected.pattern.source.archiveOffset,
+  );
+});
 
 const configuredLabel = "HPRC v2.1 + GENCODE v50 (GRCh38 / CHM13)";
 const populationLabel = "1000 Genomes hs38d1 (NA19239 haplotype 0)";
@@ -458,6 +469,45 @@ function rebuildModel(): void {
     selection.value =
       pattern === undefined ? undefined : { kind: "pattern", pattern };
   }
+}
+
+async function highlightNamedPath(pathId?: bigint): Promise<void> {
+  const current = ++highlightOperation;
+  highlightedPatternIds.value = [];
+  const opened = archive.value;
+  const currentModel = model.value;
+  if (
+    pathId === undefined ||
+    opened === undefined ||
+    currentModel === undefined
+  )
+    return;
+  const highlighted = new Set<string>();
+  for (const tile of tiles.value) {
+    const groups = await opened.tilePathMemberships(tile);
+    if (current !== highlightOperation) return;
+    for (const group of groups) {
+      if (!group.memberships.some((item) => item.pathId === pathId)) continue;
+      for (const pattern of currentModel.patterns) {
+        if (
+          pattern.source.archiveOffset === tile.provenance.archiveOffset &&
+          samePatternHandles(group.orientedNodes, pattern.orientedNodes)
+        ) {
+          highlighted.add(pattern.id);
+        }
+      }
+    }
+  }
+  if (current === highlightOperation)
+    highlightedPatternIds.value = [...highlighted];
+}
+
+function samePatternHandles(
+  left: BigUint64Array | undefined,
+  right: readonly bigint[],
+): boolean {
+  if (left === undefined || left.length !== right.length) return false;
+  return left.every((handle, index) => handle === right[index]);
 }
 
 function scheduleSearch(): void {
@@ -929,6 +979,7 @@ function fail(cause: unknown, prefix: string): void {
         :options="options"
         :selection="selection"
         :viewport="viewport"
+        :highlighted-pattern-ids="highlightedPatternIds"
         @select="selection = $event"
         @metrics="updateMetrics"
         @recommended="openRecommended"
@@ -936,7 +987,7 @@ function fail(cause: unknown, prefix: string): void {
         @viewport="updateViewport"
       />
       <NodeInspector v-if="selection?.kind === 'node'" :node="selection.node" :model="model" @close="selection = undefined" @copy="copy" @expand="expandGroup" />
-      <PatternInspector v-else-if="selection?.kind === 'pattern'" :pattern="selection.pattern" @close="selection = undefined" />
+      <PatternInspector v-else-if="selection?.kind === 'pattern'" :pattern="selection.pattern" :archive="archive" :tile="selectedPatternTile" @close="selection = undefined" @copy="copy" @highlight="highlightNamedPath" />
       <ArchiveSourceMenu
         :open="sourceOpen"
         :presets="demoSources"

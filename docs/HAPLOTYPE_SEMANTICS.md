@@ -11,7 +11,9 @@ local GBWT records needed to reconstruct anonymous tile-local traversals.
 
 The encoder may use `HaplotypeOutput::All` as an internal correctness oracle,
 but it is not a serialized mode and is not exposed by the TypeScript format
-model. The current writer does not serialize materialized path tables.
+model. The regional payload does not serialize materialized path tables. Named
+source-path membership is an optional extension layered over these unchanged
+semantics.
 
 ## Identity and query boundary
 
@@ -28,6 +30,18 @@ Weights describe complete canonical traversals through one locally extracted
 subgraph. Identical traversals are collapsed by exact packed oriented-node
 sequence. If the real reference traversal occurs in that group, one occurrence
 is removed before the anonymous weight is reported.
+
+When `path-members-v1-` is present, each canonical group additionally exposes
+`occurrence_weight`, `unique_path_count`, and sorted `(path_id, multiplicity,
+orientation)` records. Occurrence weight remains the anonymous traversal weight.
+Unique path count counts distinct canonical source path IDs and may be smaller.
+The multiplicity sum must equal occurrence weight. These are source-path
+memberships, not allele frequencies or counts of individuals.
+
+The extension's path IDs are stable only within one archive. They may support
+cross-tile highlighting by the same canonical ID, but fragment boundaries and
+tile-local traversal semantics still apply; membership does not authorize
+stitching anonymous traversal geometry into a whole-sample path.
 
 ## Record reconstruction
 

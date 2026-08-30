@@ -778,6 +778,36 @@
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
+.browser-inspector h3 {
+  margin: 4px 0 0;
+  font-size: 14px;
+}
+.browser-inspector input[type="search"] {
+  min-height: 34px;
+  padding: 0 9px;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+}
+.browser-inspector ul {
+  display: grid;
+  gap: 8px;
+  max-height: 280px;
+  margin: 0;
+  overflow: auto;
+  padding: 0;
+  list-style: none;
+}
+.browser-inspector li {
+  display: grid;
+  gap: 4px;
+  padding: 8px;
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+}
+.browser-inspector li span,
+.browser-inspector li small {
+  overflow-wrap: anywhere;
+}
 .inspector-warning {
   margin: 0;
   padding: 10px;

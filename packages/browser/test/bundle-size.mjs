@@ -10,7 +10,7 @@ const entries = {
 // Named-path membership adds strict catalog, directory, and multiplicity codecs.
 // Keep the network-sensitive gzip ceiling unchanged while allowing their readable
 // unminified ESM in the single-file reader entry.
-const readerRawBudget = 192 * 1024;
+const readerRawBudget = 208 * 1024;
 const readerGzipBudget = 50 * 1024;
 const measurements = {};
 for (const [name, url] of Object.entries(entries)) {

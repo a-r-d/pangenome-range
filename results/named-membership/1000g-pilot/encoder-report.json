@@ -1,0 +1,8 @@
+{
+  "schema_version": 1,
+  "status": "not-run-user-waived-after-oom",
+  "wall_ms": null,
+  "max_rss_kib": null,
+  "swaps": null,
+  "claim": "No 1000G encoder result is inferred."
+}

@@ -17,7 +17,7 @@ const MAX_GROUPS_PER_TILE = 65_536;
 const MAX_OCCURRENCES_PER_TILE = 16 * 1024 * 1024;
 const DIRECTORY_HEADER_BYTES = 32;
 const DIRECTORY_ENTRY_BYTES = 56;
-const DESCRIPTOR_HEADER_BYTES = 32;
+const DESCRIPTOR_HEADER_BYTES = 112;
 const CATALOG_DESCRIPTOR_BYTES = 64;
 const MANIFEST_BYTES = 32;
 const DIRECTORY_CAPACITY = Math.floor(
@@ -27,6 +27,7 @@ const DIRECTORY_CAPACITY = Math.floor(
 const U64_MAX = 0xffff_ffff_ffff_ffffn;
 const MAX_SAFE_BIGINT = BigInt(Number.MAX_SAFE_INTEGER);
 const decoder = new TextDecoder("utf-8", { fatal: true });
+const encoder = new TextEncoder();
 
 export interface PathCatalogPageDescriptor {
   firstPathId: bigint;
@@ -44,6 +45,15 @@ export interface PathMembershipManifest {
 export interface PathMembershipDescriptor {
   pathCount: bigint;
   recordsPerCatalogPage: number;
+  identitySource:
+    | "embedded-gbwt-da-bounded-lf-v1"
+    | "prepared-authenticated-oracle-v1";
+  identitySourceSha256: Uint8Array;
+  groupCount: bigint;
+  occurrenceTotal: bigint;
+  uniquePathTotal: bigint;
+  deltaGroupCount: bigint;
+  runGroupCount: bigint;
   catalogPages: PathCatalogPageDescriptor[];
   manifests: PathMembershipManifest[];
 }
@@ -79,7 +89,32 @@ export interface DecodedTraversalMembershipGroup {
 export interface DecodedTileMembershipPage {
   coreStart: bigint;
   coreEnd: bigint;
+  regionalPayloadIntegrity: Uint8Array;
   groups: DecodedTraversalMembershipGroup[];
+}
+
+export function traversalMembershipDigest(
+  sample: string,
+  contig: string,
+  coreStart: bigint,
+  coreEnd: bigint,
+  regionalPayloadIntegrity: Uint8Array,
+  handles: readonly bigint[],
+): Uint8Array {
+  if (regionalPayloadIntegrity.byteLength !== 16)
+    fail("invalid regional payload integrity");
+  const hasher = blake3.create();
+  hasher.update(
+    encoder.encode("pangenome-range/path-membership/traversal/v1\0"),
+  );
+  hashBytes(hasher, encoder.encode(sample));
+  hashBytes(hasher, encoder.encode(contig));
+  hashU64(hasher, coreStart);
+  hashU64(hasher, coreEnd);
+  hasher.update(regionalPayloadIntegrity);
+  hashU64(hasher, BigInt(handles.length));
+  for (const handle of handles) hashU64(hasher, handle);
+  return hasher.digest().subarray(0, 16);
 }
 
 class Reader {
@@ -175,12 +210,28 @@ export function decodePathMembershipDescriptor(
 ): PathMembershipDescriptor {
   if (bytes.byteLength > MAX_DESCRIPTOR_BYTES)
     fail("path-membership descriptor is too large");
+  if (bytes.byteLength < DESCRIPTOR_HEADER_BYTES)
+    fail("invalid path-membership descriptor length");
   const reader = new Reader(bytes);
   header(reader, "PNGPMD01");
   const recordsPerCatalogPage = reader.u32();
   const pathCount = reader.u64();
   const catalogCount = reader.u32();
   const manifestCount = reader.u32();
+  const identitySourceCode = reader.u8();
+  assertZero(reader.take(7), "path-membership provenance reserved bytes");
+  const identitySourceSha256 = reader.take(32).slice();
+  const groupCount = reader.u64();
+  const occurrenceTotal = reader.u64();
+  const uniquePathTotal = reader.u64();
+  const deltaGroupCount = reader.u64();
+  const runGroupCount = reader.u64();
+  const identitySource =
+    identitySourceCode === 1
+      ? "embedded-gbwt-da-bounded-lf-v1"
+      : identitySourceCode === 2
+        ? "prepared-authenticated-oracle-v1"
+        : undefined;
   if (
     pathCount === 0n ||
     recordsPerCatalogPage === 0 ||
@@ -188,7 +239,11 @@ export function decodePathMembershipDescriptor(
     catalogCount === 0 ||
     catalogCount > MAX_CATALOG_PAGES ||
     manifestCount === 0 ||
-    manifestCount > MAX_MANIFESTS
+    manifestCount > MAX_MANIFESTS ||
+    identitySource === undefined ||
+    identitySourceSha256.every((byte) => byte === 0) ||
+    deltaGroupCount + runGroupCount !== groupCount ||
+    uniquePathTotal > occurrenceTotal
   ) {
     fail("invalid path-membership descriptor dimensions");
   }
@@ -255,7 +310,19 @@ export function decodePathMembershipDescriptor(
   }
   reader.finish();
   if (totalEntries === 0n) fail("path-membership descriptor has no entries");
-  return { pathCount, recordsPerCatalogPage, catalogPages, manifests };
+  return {
+    pathCount,
+    recordsPerCatalogPage,
+    identitySource,
+    identitySourceSha256,
+    groupCount,
+    occurrenceTotal,
+    uniquePathTotal,
+    deltaGroupCount,
+    runGroupCount,
+    catalogPages,
+    manifests,
+  };
 }
 
 export function decodePathMembershipDirectoryPage(
@@ -351,6 +418,7 @@ export function decodeTileMembershipPage(
   const count = reader.u32();
   const coreStart = reader.u64();
   const coreEnd = reader.u64();
+  const regionalPayloadIntegrity = reader.take(16).slice();
   if (
     count > MAX_GROUPS_PER_TILE ||
     count > Math.floor(reader.remaining / 41) ||
@@ -400,7 +468,26 @@ export function decodeTileMembershipPage(
     previousDigest = traversalDigest;
   }
   reader.finish();
-  return { coreStart, coreEnd, groups };
+  return { coreStart, coreEnd, regionalPayloadIntegrity, groups };
+}
+
+function hashBytes(
+  hasher: ReturnType<typeof blake3.create>,
+  bytes: Uint8Array,
+): void {
+  hashU64(hasher, BigInt(bytes.byteLength));
+  hasher.update(bytes);
+}
+
+function hashU64(
+  hasher: ReturnType<typeof blake3.create>,
+  value: bigint,
+): void {
+  if (value < 0n || value > U64_MAX)
+    fail("path-membership hash value overflow");
+  const bytes = new Uint8Array(8);
+  new DataView(bytes.buffer).setBigUint64(0, value, true);
+  hasher.update(bytes);
 }
 
 function decodeMemberships(
