@@ -1,0 +1,83 @@
+results/named-membership/chicken/config.json
+  s_2ec244cc8606c0::t_d64f6431a127aa 43,47
+  s_2ec244cc8606c0::t_5f6f64bed27938 1-42,44-46,48-51
+data/chicken/LICENSE_REVIEW.md
+  s_2ec244cc8606c0::t_d6f43fa7256bb2 1-23
+results/named-membership/chicken/query-results.csv
+  s_2ec244cc8606c0::t_5f6f64bed27938 1-6
+docs/test/docs.test.mjs
+  s_2ec244cc8606c0::t_655c7826a89912 7,42,47,89-93,104,126-129,140-141,157-160
+results/named-membership/chicken/workload.json
+  s_2ec244cc8606c0::t_5f6f64bed27938 1-56
+docs/components/browser/types.ts
+  s_2ec244cc8606c0::t_f12e4c6ef8b1c3 39
+results/named-membership/chicken/archive-size.json
+  s_2ec244cc8606c0::t_5f6f64bed27938 1-13
+scripts/chicken/fetch-chicken.sh
+  s_2ec244cc8606c0::t_d6f43fa7256bb2 1-42
+data/chicken/.gitignore
+  s_2ec244cc8606c0::t_d6f43fa7256bb2 1-5
+results/named-membership/chicken/memberships.csv
+  s_2ec244cc8606c0::t_5f6f64bed27938 1-3
+results/named-membership/chicken/encoder-report.json
+  s_2ec244cc8606c0::t_5f6f64bed27938 1-34
+scripts/chicken/extract-gfa-component.cpp
+  s_2ec244cc8606c0::t_d68f761425ec08 1-181
+data/chicken/README.md
+  s_2ec244cc8606c0::t_d6f43fa7256bb2 1-17
+.github/workflows/pages.yml
+  s_2ec244cc8606c0::t_f12e4c6ef8b1c3 24
+scripts/docs-dev.mjs
+  s_2ec244cc8606c0::t_f12e4c6ef8b1c3 10-11,26-28
+README.md
+  s_2ec244cc8606c0::t_f12e4c6ef8b1c3 37-42,49,222-223
+docs/HOSTING.md
+  s_2ec244cc8606c0::t_f12e4c6ef8b1c3 110-121,124-125,128-129,138
+scripts/chicken/query-chicken.mjs
+  s_2ec244cc8606c0::t_f957e2aca12874 70-71
+  s_2ec244cc8606c0::t_1244ed65f92de9 1-69,72-99
+docs/test/pages-smoke.mjs
+  s_2ec244cc8606c0::t_655c7826a89912 41-42,355-358,375,657-689,712-721,725
+  s_2ec244cc8606c0::t_2ca1e61e36c270 694-707
+  s_2ec244cc8606c0::t_458f16f4b94e41 690-693
+  s_2ec244cc8606c0::t_7f58ba95eeb704 708-711
+  s_2ec244cc8606c0::t_6979cc43952b31 722-724,726-727
+CHANGELOG.md
+  s_2ec244cc8606c0::t_8b10c469a0462e 7-17
+results/named-membership/chicken/summary.json
+  s_2ec244cc8606c0::t_5f6f64bed27938 1-44
+scripts/chicken/build-chicken-demo.sh
+  s_2ec244cc8606c0::t_3381c76a8b8fa4 8,129
+  s_2ec244cc8606c0::t_0d1bfd4a506472 41,102-116,121-128
+  s_2ec244cc8606c0::t_d6f43fa7256bb2 1-7,9-40,42-101,117-118,130-131
+  s_2ec244cc8606c0::t_d64f6431a127aa 119-120
+docs/components/browser/PangenomeBrowser.vue
+  s_2ec244cc8606c0::t_f12e4c6ef8b1c3 69-74,163,197-206,374-394,898
+data/chicken/sources.json
+  s_2ec244cc8606c0::t_d6f43fa7256bb2 1-35
+results/named-membership/chicken/environment.json
+  s_2ec244cc8606c0::t_5f6f64bed27938 1-11
+results/named-membership/chicken/origin-check.json
+  s_2ec244cc8606c0::t_33823961e7d450 1-119
+results/named-membership/chicken/requests.jsonl
+  s_2ec244cc8606c0::t_5f6f64bed27938 1-13
+results/named-membership/chicken/REPORT.md
+  s_2ec244cc8606c0::t_5f6f64bed27938 1-59,68-79
+  s_2ec244cc8606c0::t_50937edb4586ab 60-67
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.0",
+  "base_commit_sha": "5fd57c7464cb1a87593e30636d63fb28e43dde6b",
+  "prompts": {},
+  "sessions": {
+    "s_2ec244cc8606c0": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a048bd-ab38-7a82-b1d9-eb0f59af00f9",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "aaron decker <aaron@ard.ninja>"
+    }
+  }
+}
