@@ -1,0 +1,214 @@
+crates/pangenome-range-build/src/features.rs
+  s_2ec244cc8606c0::t_c47e58e70b3e33 54-57
+results/named-membership/rice/REPORT.md
+  s_2ec244cc8606c0::t_328fc296c2c3aa 1-11
+docs/components/browser/browser.css
+  s_2ec244cc8606c0::t_533d3afa85c130 781-810
+results/named-membership/rice/environment.json
+  s_2ec244cc8606c0::t_328fc296c2c3aa 1-8
+results/named-membership/hprc/memberships.csv
+  s_2ec244cc8606c0::t_328fc296c2c3aa 1-2
+  s_2ec244cc8606c0::t_24025c0ef5b25b 3-4
+  s_2ec244cc8606c0::t_57d92902ec1cda 5
+results/named-membership/1000g-pilot/config.json
+  s_2ec244cc8606c0::t_328fc296c2c3aa 1-7
+crates/pangenome-range-build/src/scale.rs
+  s_2ec244cc8606c0::t_6710c29823d5d6 684-694,696,746-752
+  s_2ec244cc8606c0::t_e1a025b8aeed6e 183-185
+  s_2ec244cc8606c0::t_6fe35314049659 1431
+README.md
+  s_2ec244cc8606c0::t_f49cc66f4f0e27 70-86
+docs/components/browser/PatternInspector.vue
+  s_2ec244cc8606c0::t_5bba3704bc86b4 3-8,10,12-75,79-100,107,112-113,115-132
+  s_2ec244cc8606c0::t_2b6983333e4d81 76-78
+docs/FILE_FORMAT_V1.md
+  s_2ec244cc8606c0::t_ce8abc0847cda4 327,337-348,380-381,386-390
+packages/browser/src/viewer/tube-map-renderer.ts
+  s_2ec244cc8606c0::t_eedf3c09dee486 189-191,194,199,201
+  s_2ec244cc8606c0::t_2b6983333e4d81 90-91,192-193
+  s_2ec244cc8606c0::t_4e0ed04c56afa8 6,84,87-89,92,107,109,130
+packages/browser/src/reader/types.ts
+  s_2ec244cc8606c0::t_5b5cd5555f9aa5 398-401,413-450,459-468,470-472
+  s_2ec244cc8606c0::t_2588a158e4696a 402-412
+  s_2ec244cc8606c0::t_39a0c134f4d91b 370-371
+results/named-membership/rice/archive-size.json
+  s_2ec244cc8606c0::t_328fc296c2c3aa 1-10
+AGENTS.md
+  s_2ec244cc8606c0::t_5742d0478d55b9 141-145,153-157
+  s_ce394ddfeaeeea::t_6200201e825763 158
+results/named-membership/rice/requests.jsonl
+  s_2ec244cc8606c0::t_328fc296c2c3aa 1-10
+packages/browser/test/reader.test.ts
+  s_2ec244cc8606c0::t_2b6983333e4d81 1015-1017,1030-1032
+  s_2ec244cc8606c0::t_05d3184c707ee6 1091
+  s_2ec244cc8606c0::t_020b3e3926c792 996-1002
+  s_2ec244cc8606c0::t_b1179cb555e997 35,1062-1073
+  s_2ec244cc8606c0::t_3f3915b2100e4d 23
+  s_2ec244cc8606c0::t_9238227d0d5d56 992-995,1003-1007,1009-1010,1012-1014,1018-1029,1033
+  s_2ec244cc8606c0::t_c78aa3eb1c70dc 1008,1011
+docs/BENCHMARKS.md
+  s_2ec244cc8606c0::t_8bc0447aee5c4d 429-430,435-439
+docs/HAPLOTYPE_SEMANTICS.md
+  s_2ec244cc8606c0::t_35b54d42383b4e 14-16,34-44
+  s_ce394ddfeaeeea::t_03fb7ff93f01d2 45
+crates/pangenome-range-build/src/fixed.rs
+  s_2ec244cc8606c0::t_7be1c9e696b8f6 2691-2694,2696-2698,2708,2714-2716,2724
+  s_2ec244cc8606c0::t_c47e58e70b3e33 453-456,2736-2739,2926-2929
+results/named-membership/1000g-pilot/archive-size.json
+  s_2ec244cc8606c0::t_328fc296c2c3aa 1-7
+results/named-membership/hprc/summary.json
+  s_2ec244cc8606c0::t_328fc296c2c3aa 1-14
+results/named-membership/hprc/query-results.csv
+  s_2ec244cc8606c0::t_328fc296c2c3aa 1-4
+results/named-membership/1000g-pilot/query-results.csv
+  s_2ec244cc8606c0::t_328fc296c2c3aa 1-2
+docs/ARCHITECTURE.md
+  s_2ec244cc8606c0::t_9f03d2f4237d05 61-63,65-68,186-190,194-196
+docs/FIXED_WINDOW_ARCHIVE.md
+  s_2ec244cc8606c0::t_5472cb5ed50c5f 59-62
+results/named-membership/1000g-pilot/memberships.csv
+  s_2ec244cc8606c0::t_328fc296c2c3aa 1-2
+results/named-membership/1000g-pilot/REPORT.md
+  s_2ec244cc8606c0::t_328fc296c2c3aa 1-5
+CHANGELOG.md
+  s_2ec244cc8606c0::t_18ba8c520ed5d7 14-21,26-33,35-36
+packages/browser/test/viewer.test.ts
+  s_2ec244cc8606c0::t_781fb60770c546 431-442,446-448
+results/named-membership/hprc/environment.json
+  s_2ec244cc8606c0::t_328fc296c2c3aa 1-8
+results/named-membership/1000g-pilot/summary.json
+  s_2ec244cc8606c0::t_328fc296c2c3aa 1-7
+results/named-membership/rice/query-results.csv
+  s_2ec244cc8606c0::t_328fc296c2c3aa 1-4
+results/named-membership/1000g-pilot/requests.jsonl
+  s_2ec244cc8606c0::t_328fc296c2c3aa 1
+docs/OPTIMIZATION_LOG.md
+  s_2ec244cc8606c0::t_ed025264e808ca 8-9
+  s_2ec244cc8606c0::t_3fb6987062dc9c 6-7,10-13,18-25,1202-1203,1208-1215
+docs/FORMAT_RELEASE_CHECKLIST.md
+  s_2ec244cc8606c0::t_d1cef67addb57f 105-106,134-135,142-144
+  s_2ec244cc8606c0::t_8833420920d56c 145
+docs/adr/ADR-path-membership-production.md
+  s_2ec244cc8606c0::t_2645e41f90c8ac 53-56
+  s_2ec244cc8606c0::t_52d42bb60148be 3,5,24-34,38,40-51,63,70-71
+  s_2ec244cc8606c0::t_74d8599dd8acca 52
+packages/browser/src/reader/path-membership.ts
+  s_2ec244cc8606c0::t_9ad22d15842ec8 30,92,96-119,421,471-485,488-490
+  s_2ec244cc8606c0::t_020b3e3926c792 213-214
+  s_2ec244cc8606c0::t_2b6983333e4d81 486-487
+  s_2ec244cc8606c0::t_2588a158e4696a 20,48-56,221-234,242-246,313-325
+experiments/graph-query-trace.mjs
+  s_2ec244cc8606c0::t_df7509ccbffe26 1-37,39-49
+  s_2ec244cc8606c0::t_b1179cb555e997 38
+crates/pangenome-range-format/src/lib.rs
+  s_2ec244cc8606c0::t_2b6983333e4d81 48-59
+results/named-membership/hprc/requests.jsonl
+  s_2ec244cc8606c0::t_328fc296c2c3aa 1-11
+docs/DISTRIBUTION.md
+  s_2ec244cc8606c0::t_9e52e5deec7374 32-37
+test-data/golden/path-membership-v1.expected.json
+  s_2ec244cc8606c0::t_05a9ef24361c70 2-3
+crates/pangenome-range-format/src/path_membership.rs
+  s_2ec244cc8606c0::t_6989f2e7cba8ab 1113
+  s_2ec244cc8606c0::t_7c0fd145f632cd 138-145,148-154,932,949,1010,1029-1032
+  s_2ec244cc8606c0::t_f1e3a53624f579 1303-1319,1339-1356
+  s_2ec244cc8606c0::t_fe8259032ccbfa 1138,1154-1161,1180,1184,1187,1274
+  s_2ec244cc8606c0::t_3c692cba755ab2 35-37,908-920
+  s_2ec244cc8606c0::t_550f029112eab6 28,75-81,86-115,235,239-243,253-260,341-355,368-373,451-457,921,1193-1199
+  s_2ec244cc8606c0::t_2b6983333e4d81 236-238,1094,1149-1150,1177,1271-1272
+  s_2ec244cc8606c0::t_6ac22ad04c54c2 1047-1057
+  s_2ec244cc8606c0::t_b1179cb555e997 1139-1148,1151-1152,1320-1338
+  s_2ec244cc8606c0::t_9180fb3c4b9f14 116
+  s_2ec244cc8606c0::t_22ddcaf1955da7 922
+results/named-membership/rice/memberships.csv
+  s_2ec244cc8606c0::t_328fc296c2c3aa 1-2
+results/named-membership/rice/encoder-report.json
+  s_2ec244cc8606c0::t_328fc296c2c3aa 1-10
+packages/browser/test/bundle-size.mjs
+  s_2ec244cc8606c0::t_f49cc66f4f0e27 13
+results/named-membership/hprc/config.json
+  s_2ec244cc8606c0::t_328fc296c2c3aa 1-9
+results/named-membership/rice/summary.json
+  s_2ec244cc8606c0::t_328fc296c2c3aa 1-14
+test-data/README.md
+  s_2ec244cc8606c0::t_cadba237420ce8 7-9
+results/named-membership/hprc/encoder-report.json
+  s_2ec244cc8606c0::t_328fc296c2c3aa 1-11
+results/named-membership/1000g-pilot/encoder-report.json
+  s_2ec244cc8606c0::t_328fc296c2c3aa 1-8
+crates/pangenome-range-format/src/validation.rs
+  s_2ec244cc8606c0::t_2b6983333e4d81 6-7,10-11
+  s_2ec244cc8606c0::t_f5de436f496bf3 625-626,629,660-672
+  s_2ec244cc8606c0::t_6989f2e7cba8ab 598-602
+  s_2ec244cc8606c0::t_8200edb0e60e70 4-5,242-245,455-458,463-472,615-618,697-717
+packages/browser/src/reader/index.ts
+  s_2ec244cc8606c0::t_6adc1b317239d1 53-55,59-60,77
+  s_2ec244cc8606c0::t_883e899aadfbd1 65
+experiments/named-membership-query.mjs
+  s_2ec244cc8606c0::t_8fc8d30d3ebee4 150-156
+  s_2ec244cc8606c0::t_5d81ce5116530d 1-9,13-15,21-95,97-105,107-108,110-125,127-128,130-149
+  s_2ec244cc8606c0::t_5da06d9f9ea7b3 106,126
+  s_2ec244cc8606c0::t_b1179cb555e997 109,129
+  s_2ec244cc8606c0::t_2b6983333e4d81 10-12,16-20,96
+crates/pangenome-range-build/src/path_membership.rs
+  s_2ec244cc8606c0::t_eb840a756d91d0 102-106
+  s_2ec244cc8606c0::t_57439e182c9463 134,152-159,289,350-354,812-818
+  s_2ec244cc8606c0::t_a9797071f73f23 349,355-356,537-555,569-577,596-603,611-616,631,776,807-811
+  s_2ec244cc8606c0::t_9915400eff4f3c 610,821
+  s_2ec244cc8606c0::t_7be1c9e696b8f6 491,680-686,715,853-859
+  s_2ec244cc8606c0::t_2b6983333e4d81 6-10,12,822-823
+  s_2ec244cc8606c0::t_c89d45c83a35a9 30-33,98-101,107-132
+  s_2ec244cc8606c0::t_b7565f5ab546a9 133
+  s_2ec244cc8606c0::t_f12510b50a92e6 135
+  s_2ec244cc8606c0::t_1566fa1d168e22 820
+results/named-membership/rice/config.json
+  s_2ec244cc8606c0::t_328fc296c2c3aa 1-13
+docs/components/browser/PangenomeBrowser.vue
+  s_2ec244cc8606c0::t_a46a742a88d4a9 111,137-146,474-478,484-512,982,990
+  s_2ec244cc8606c0::t_2b6983333e4d81 479-483
+results/named-membership/hprc/archive-size.json
+  s_2ec244cc8606c0::t_328fc296c2c3aa 1-10
+docs/components/browser/TubeMapView.vue
+  s_2ec244cc8606c0::t_4e0ed04c56afa8 28,92
+packages/browser/src/reader/archive.ts
+  s_2ec244cc8606c0::t_39a0c134f4d91b 2418-2421,2428,2435,2440,2444-2446,2448,2450-2451,2456
+  s_2ec244cc8606c0::t_2588a158e4696a 1592-1600
+  s_2ec244cc8606c0::t_d78736dbeb57be 2261-2270,2273-2294,2296,2299-2312,2315-2351,2354-2377,2384-2385,2387-2390,2393-2403,2405-2407,2410-2417,2422-2427,2429-2434,2436-2439,2441-2443,2447,2449,2452-2455,2457-2459
+  s_2ec244cc8606c0::t_deffc32622a87e 30,49-50,54-55,68
+  s_2ec244cc8606c0::t_39a34acb88408e 83,642-646
+  s_2ec244cc8606c0::t_267e9e0bb04b8e 45,2378-2382,2386
+  s_2ec244cc8606c0::t_883e899aadfbd1 58
+  s_2ec244cc8606c0::t_5da06d9f9ea7b3 2295,2297-2298,2383,2391,2404,2408-2409
+  s_2ec244cc8606c0::t_619266f870f5f1 1582-1591,1601-1633,1639-1650,1656-1689,1695-1724,1730,1737-1739,1759-1760,1763-1783
+  s_2ec244cc8606c0::t_2b6983333e4d81 1634-1638,1651-1655,1690-1694,1753-1754,1919-1920,2271-2272,2313-2314,2352-2353,2392
+  s_2ec244cc8606c0::t_0b7470b9ab6e59 1725-1729,1731-1736,1740-1752,1755-1758,1761-1762
+  s_2ec244cc8606c0::t_2722b26904ff9e 647-648
+results/named-membership/hprc/REPORT.md
+  s_2ec244cc8606c0::t_328fc296c2c3aa 1-11
+results/named-membership/1000g-pilot/environment.json
+  s_2ec244cc8606c0::t_328fc296c2c3aa 1-7
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.0",
+  "base_commit_sha": "c425b695edce5d08889cce40f4f71f1d5dd20564",
+  "prompts": {},
+  "sessions": {
+    "s_2ec244cc8606c0": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a048bd-ab38-7a82-b1d9-eb0f59af00f9",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "aaron decker <aaron@ard.ninja>"
+    },
+    "s_ce394ddfeaeeea": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a0503b-7043-73b3-a0da-dfa82d798508",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "aaron decker <aaron@ard.ninja>"
+    }
+  }
+}
