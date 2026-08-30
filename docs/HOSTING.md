@@ -107,17 +107,22 @@ It is 325,664,519 bytes with SHA-256
 The workflow maps an optional `PANGENOME_RANGE_DEMO_RICE_ARCHIVE_URL`
 repository variable to `VITE_PANGENOME_RANGE_DEMO_RICE_ARCHIVE_URL`.
 
-The named-membership chicken chromosome 15 archive is published at:
+The complete named-membership chicken pangenome archive is published at:
 
 ```text
-https://archives.ard.ninja/pangenome-range/sha256/fcb19b2c6e850c16e7e831613f34d27feef477331064cde5b16137492e6d1b43/chicken-chr15-named.pngr
+https://archives.ard.ninja/pangenome-range/sha256/93bcd713ccda14bf4e650c1c8d56751e5ed5db7624aecbf76769fa1909d25e4e/chicken-whole-named.pngr
 ```
 
-It is 15,939,592 bytes with SHA-256
-`fcb19b2c6e850c16e7e831613f34d27feef477331064cde5b16137492e6d1b43`.
+It is 1,498,984,132 bytes with SHA-256
+`93bcd713ccda14bf4e650c1c8d56751e5ed5db7624aecbf76769fa1909d25e4e`.
+It covers all 207 `bGalGal1b` reference paths (1,052,949,595 reference bases),
+contains 12,237 exact source-path catalog entries, and includes 25,437 mapped
+gene rows. The former chromosome 15 object remains available as retained
+bounded evidence, but it is no longer the demo default.
 The source graph is CC BY 4.0; provenance and attribution are retained in the
-archive and `results/named-membership/chicken/REPORT.md`. The origin probe passed
-range, CORS, immutable-cache, ETag, and local-byte-equality checks.
+archive and `results/named-membership/chicken-whole/REPORT.md`. The origin probe
+passed range, CORS, immutable-cache, ETag, checksum, and local-byte-equality
+checks.
 
 ## Connect the deployed demo
 

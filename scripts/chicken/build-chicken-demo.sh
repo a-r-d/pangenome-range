@@ -54,9 +54,10 @@ verify_sha256() {
   }
 }
 
-# The source checksum gates the dataset-specific component bounds below. Never
-# invoke vg on this complete GFA: the full 49-million-node path-index build was
-# observed to exceed 12 GiB before GBZ construction.
+# The source checksum gates the dataset-specific component bounds below. This
+# bounded chromosome recipe intentionally does not run stock vg on the complete
+# GFA. The separate whole-corpus recipe requires the measured move-fixed vg
+# binary and enforces a 42 GiB, zero-swap ceiling.
 verify_sha256 "$compressed_gfa" "$graph_sha256"
 if [[ ! -f "$gfa" ]]; then
   [[ ! -e "$gfa.part" ]] || { printf 'error: review incomplete %s.part\n' "$gfa" >&2; exit 1; }

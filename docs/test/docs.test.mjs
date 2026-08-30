@@ -88,7 +88,7 @@ test("Pages defaults to the content-addressed whole-genome demo archive", async 
   assert.match(source, /vars\.PANGENOME_RANGE_DEMO_RICE_ARCHIVE_URL/);
   assert.match(
     source,
-    /sha256\/fcb19b2c6e850c16e7e831613f34d27feef477331064cde5b16137492e6d1b43\/chicken-chr15-named\.pngr/,
+    /sha256\/93bcd713ccda14bf4e650c1c8d56751e5ed5db7624aecbf76769fa1909d25e4e\/chicken-whole-named\.pngr/,
   );
   assert.match(source, /vars\.PANGENOME_RANGE_DEMO_CHICKEN_ARCHIVE_URL/);
   assert.match(source, /vars\.PANGENOME_RANGE_DEMO_POPLAR_ARCHIVE_URL/);
