@@ -1,0 +1,54 @@
+scripts/chicken/build-chicken-whole.sh
+  s_2ec244cc8606c0::t_61f6272eaabbfe 1-128
+.github/workflows/pages.yml
+  s_2ec244cc8606c0::t_35c7331cdd1411 24
+scripts/chicken/build-chicken-demo.sh
+  s_2ec244cc8606c0::t_61f6272eaabbfe 57-60
+results/named-membership/chicken-whole/archive-size.json
+  s_2ec244cc8606c0::t_5d45e0244c04a5 1-10
+docs/HOSTING.md
+  s_2ec244cc8606c0::t_35c7331cdd1411 110,113,116-121,123-125
+scripts/chicken/fetch-chicken.sh
+  s_2ec244cc8606c0::t_61f6272eaabbfe 12-14,42
+results/named-membership/chicken-whole/REPORT.md
+  s_2ec244cc8606c0::t_5d45e0244c04a5 1-65
+results/named-membership/chicken-whole/workload.json
+  s_2ec244cc8606c0::t_9d73585f042d92 1-86
+results/named-membership/chicken-whole/memberships.csv
+  s_2ec244cc8606c0::t_5d45e0244c04a5 1-2
+results/named-membership/chicken-whole/config.json
+  s_2ec244cc8606c0::t_5d45e0244c04a5 1-49
+scripts/chicken/map-gff-to-reference.awk
+  s_2ec244cc8606c0::t_aeff1e934c5749 1-7,13-17,21-28
+  s_2ec244cc8606c0::t_3d338aa1cc7b0f 8-12,18-20
+results/named-membership/chicken-whole/environment.json
+  s_2ec244cc8606c0::t_5d45e0244c04a5 1-11
+docs/test/docs.test.mjs
+  s_2ec244cc8606c0::t_35c7331cdd1411 91
+results/named-membership/chicken-whole/query-results.csv
+  s_2ec244cc8606c0::t_5d45e0244c04a5 1-9
+results/named-membership/chicken-whole/origin-check.json
+  s_2ec244cc8606c0::t_64f962d9e4f957 1-119
+results/named-membership/chicken-whole/summary.json
+  s_2ec244cc8606c0::t_5d45e0244c04a5 1-32
+scripts/docs-dev.mjs
+  s_2ec244cc8606c0::t_35c7331cdd1411 11
+results/named-membership/chicken-whole/encoder-report.json
+  s_2ec244cc8606c0::t_5d45e0244c04a5 1-28
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.0",
+  "base_commit_sha": "eb4a4597e14299ed76518ca871f78cce96509f3b",
+  "prompts": {},
+  "sessions": {
+    "s_2ec244cc8606c0": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a048bd-ab38-7a82-b1d9-eb0f59af00f9",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "aaron decker <aaron@ard.ninja>"
+    }
+  }
+}
