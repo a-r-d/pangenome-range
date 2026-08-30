@@ -1,0 +1,118 @@
+results/named-membership/rice/REPORT.md
+  s_2ec244cc8606c0::t_33b762a6846bbd 1
+  s_2ec244cc8606c0::t_fbec29bf341e36 9
+docs/test/pages-smoke.mjs
+  s_2ec244cc8606c0::t_d3a71970b26d0b 24-29,32,75-78,240,246,248-252,266-277,281-283,287-295,299-300
+  s_2ec244cc8606c0::t_e745422b31cd80 278-280,284-286,296-298
+  s_2ec244cc8606c0::t_85999538a8dd57 301
+results/named-membership/rice/archive-size.json
+  s_2ec244cc8606c0::t_33b762a6846bbd 2,8-12
+crates/pangenome-range-format/src/validation.rs
+  s_2ec244cc8606c0::t_9cddc198b868cb 357-364
+  s_2ec244cc8606c0::t_ff8849d9977758 1020-1023,1026-1050,1052-1066
+  s_2ec244cc8606c0::t_601105b7120c92 243,246,266-267,466,475-476,627,712,714
+  s_2ec244cc8606c0::t_974885377e5684 1024-1025,1051
+  s_2ec244cc8606c0::t_9a952744d93a2d 1019
+packages/browser/src/reader/archive.ts
+  s_2ec244cc8606c0::t_bef0fb68229b66 1307,1615,1622-1641,1744-1750,2233,2237-2238,2240-2241,2250-2259,2266-2288,2294-2309,2549,2560
+  s_2ec244cc8606c0::t_e745422b31cd80 1292-1306,1598,2234-2236,2239,2289-2293
+docs/FIXED_WINDOW_ARCHIVE.md
+  s_2ec244cc8606c0::t_36ec1ef6dd013f 149-150
+packages/browser/test/reader.test.ts
+  s_2ec244cc8606c0::t_e745422b31cd80 183
+  s_2ec244cc8606c0::t_db769027fb46c4 1158
+  s_2ec244cc8606c0::t_e066f201009ad5 3,179-182,184-205,1029,1034-1046,1100-1107,1159-1180
+  s_2ec244cc8606c0::t_eb69aa19ad60fc 1181
+docs/FILE_FORMAT_V1.md
+  s_2ec244cc8606c0::t_36ec1ef6dd013f 342,347-350,403-405
+experiments/named-membership-query.mjs
+  s_2ec244cc8606c0::t_33b762a6846bbd 96-97
+packages/browser/src/reader/path-membership.ts
+  s_2ec244cc8606c0::t_76da523ed46f07 18-19,56,228,248,322,433,444-447,507
+crates/pangenome-range-build/src/fixed.rs
+  s_2ec244cc8606c0::t_d7b3b6ecfe2ee6 454,2737-2738,2928-2929
+results/named-membership/hprc/summary.json
+  s_2ec244cc8606c0::t_33b762a6846bbd 13-14
+  s_2ec244cc8606c0::t_fbec29bf341e36 11
+docs/ARCHITECTURE.md
+  s_2ec244cc8606c0::t_bb7a2e762c5a8b 62-64,200-203
+  s_2ec244cc8606c0::t_8c55ab2b2c352e 188-189
+  s_2ec244cc8606c0::t_4bd049c4420110 204
+docs/OPTIMIZATION_LOG.md
+  s_2ec244cc8606c0::t_6ed1be6e8590ec 8
+  s_2ec244cc8606c0::t_31e6712e73b9b7 9-10
+  s_2ec244cc8606c0::t_fbec29bf341e36 21-23
+  s_2ec244cc8606c0::t_7ca835babb3cd5 1213-1216
+docs/FORMAT_RELEASE_CHECKLIST.md
+  s_2ec244cc8606c0::t_7ca835babb3cd5 134-135
+results/named-membership/hprc/requests.jsonl
+  s_2ec244cc8606c0::t_fbec29bf341e36 4-9
+results/named-membership/hprc/archive-size.json
+  s_2ec244cc8606c0::t_33b762a6846bbd 2,8-12
+results/named-membership/rice/encoder-report.json
+  s_2ec244cc8606c0::t_8c55ab2b2c352e 7
+  s_2ec244cc8606c0::t_33b762a6846bbd 2,8
+packages/browser/src/reader/types.ts
+  s_2ec244cc8606c0::t_76da523ed46f07 408-409,465-468
+results/named-membership/rice/requests.jsonl
+  s_2ec244cc8606c0::t_fbec29bf341e36 4-6
+crates/pangenome-range-format/src/path_membership.rs
+  s_2ec244cc8606c0::t_974885377e5684 1328
+  s_2ec244cc8606c0::t_30c6f86935188a 27-31,84,245,263,358,375,460,813,956,968-976,1057,1073-1080,1225
+  s_2ec244cc8606c0::t_76ed72e2b7ce2f 964-967
+crates/pangenome-range-build/src/features.rs
+  s_2ec244cc8606c0::t_d7b3b6ecfe2ee6 55
+results/named-membership/rice/query-results.csv
+  s_2ec244cc8606c0::t_fbec29bf341e36 4
+README.md
+  s_2ec244cc8606c0::t_36ec1ef6dd013f 79-81,98-100
+results/named-membership/rice/summary.json
+  s_2ec244cc8606c0::t_33b762a6846bbd 13-14
+  s_2ec244cc8606c0::t_fbec29bf341e36 11
+crates/pangenome-range-format/src/lib.rs
+  s_2ec244cc8606c0::t_974885377e5684 48-54
+packages/browser/test/viewer.test.ts
+  s_2ec244cc8606c0::t_6f43b078cd3fba 437-439
+results/named-membership/hprc/REPORT.md
+  s_2ec244cc8606c0::t_33b762a6846bbd 1,7
+  s_2ec244cc8606c0::t_fbec29bf341e36 9
+docs/components/browser/PatternInspector.vue
+  s_2ec244cc8606c0::t_8c55ab2b2c352e 10,28,48-50,65,78,98
+  s_2ec244cc8606c0::t_d1efab1746a006 77
+  s_2ec244cc8606c0::t_11bbdf35977ea2 76,79-80
+  s_2ec244cc8606c0::t_e745422b31cd80 82
+  s_2ec244cc8606c0::t_6658d8401c660b 99
+crates/pangenome-range-build/src/scale.rs
+  s_2ec244cc8606c0::t_637a5aaef1d60f 1431
+  s_2ec244cc8606c0::t_29472bfbeaf308 696
+results/named-membership/hprc/query-results.csv
+  s_2ec244cc8606c0::t_fbec29bf341e36 4
+docs/FORMAT_GOALS.md
+  s_2ec244cc8606c0::t_36ec1ef6dd013f 35-36
+CHANGELOG.md
+  s_2ec244cc8606c0::t_8c55ab2b2c352e 38-39
+  s_2ec244cc8606c0::t_73ad3eab3280e9 14,20-21,29-30,36-37
+results/named-membership/hprc/encoder-report.json
+  s_2ec244cc8606c0::t_33b762a6846bbd 2,9
+crates/pangenome-range-build/src/path_membership.rs
+  s_2ec244cc8606c0::t_d7b3b6ecfe2ee6 31,119,121,684,857
+docs/adr/ADR-path-membership-production.md
+  s_2ec244cc8606c0::t_6850089ad5d988 25-26,32,42-45,66-68
+  s_2ec244cc8606c0::t_0aae78f94fb27b 69
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.0",
+  "base_commit_sha": "bb6d68c036b22e76f8a383689a9d63a43ad2baf0",
+  "prompts": {},
+  "sessions": {
+    "s_2ec244cc8606c0": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a048bd-ab38-7a82-b1d9-eb0f59af00f9",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "aaron decker <aaron@ard.ninja>"
+    }
+  }
+}
