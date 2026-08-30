@@ -326,6 +326,8 @@ fn print_help() {
     println!("  --source-uri URI           canonical source URI (never a local path)");
     println!("  --annotation-release ID    user-supplied annotation release identifier");
     println!("  --annotation-assembly ID   user-supplied annotation assembly identifier");
+    println!("  --path-membership          preserve named source-path membership");
+    println!("  --path-locate-max-lf-steps N  bounded LF guard (default: 1000000)");
     println!("  --keep-partial             retain the sibling temp archive on failure");
     println!("  --progress auto|plain|json|off");
     println!("  --progress-interval-seconds N  chunk progress cadence (default: 5)");
@@ -881,6 +883,18 @@ fn encode(args: &mut impl Iterator<Item = String>) -> AppResult<()> {
             }
             "--annotation-assembly" => {
                 options.annotation_assembly = Some(option_value(args, &flag)?);
+            }
+            "--experimental-path-membership-summary" => {
+                options.path_membership_summary = Some(PathBuf::from(option_value(args, &flag)?));
+            }
+            "--experimental-path-catalog" => {
+                options.path_membership_catalog = Some(PathBuf::from(option_value(args, &flag)?));
+            }
+            "--path-membership" | "--experimental-direct-path-membership" => {
+                options.path_membership = true;
+            }
+            "--path-locate-max-lf-steps" | "--experimental-path-locate-max-lf-steps" => {
+                options.path_locate_max_lf_steps = parse_option(args, &flag)?;
             }
             "--report" => options.report = Some(PathBuf::from(option_value(args, &flag)?)),
             "--keep-partial" => options.keep_partial = true,

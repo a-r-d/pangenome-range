@@ -11,7 +11,9 @@ mod disk_source;
 mod experiment;
 mod features;
 mod fixed;
+mod gbwt_locate;
 mod local_subgraph;
+mod path_membership;
 mod scale;
 mod source;
 #[cfg(test)]
@@ -37,8 +39,9 @@ pub use scale::{
     run_encoder_scale_experiment,
 };
 pub use source::{
-    LoadedGbzSource, PangenomeSource, SourceMemoryPreflight, SourcePathIndex, SourceReference,
-    SourceReferencePosition, SourceReferenceSeed, source_memory_preflight,
+    LoadedGbzSource, PangenomeSource, SourceLocatedPosition, SourceMemoryPreflight,
+    SourcePathCatalogRecord, SourcePathIndex, SourceReference, SourceReferencePosition,
+    SourceReferenceSeed, source_memory_preflight,
 };
 
 #[derive(Clone, Debug, PartialEq, Eq)]

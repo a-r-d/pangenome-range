@@ -4,6 +4,27 @@
 
 ### Changed
 
+- Productionized optional named-path membership as registered `path-members-v1-`.
+  `--path-membership` performs bounded tile-batched LF locate in the disk encoder;
+  scalable fixed 4 KiB membership directories mirror graph directory pages instead
+  of listing every tile in the root. Persistent source-cache v2 authenticates and
+  reuses GBWT DA support and the canonical path catalog. Rust validation reconciles
+  every group with the unchanged anonymous traversal payload, while the browser
+  package exposes `capabilities().pathMembership`, `info().pathMembership`, and
+  `pathMembership()`. A checked-in Rust/TypeScript golden archive covers exact path
+  identity, multiplicity totals, range decoding, and directory corruption. Missing
+  path metadata fails closed without fabricated biological labels, and one path may
+  retain both orientations in a group while counting once toward `uniquePathCount`.
+  Fresh
+  production-layout rice Xa7 and four-tile HPRC TERT runs passed under a hard 4 GiB
+  address-space cap at 177,528 KiB and 659,856 KiB peak RSS respectively, with zero
+  swap; exact commands and reader evidence are retained under
+  `results/path-membership/production/`. The 1000G pilot
+  is an explicit resource-safety exclusion after the earlier HPRC `.ri` OOM; no
+  1000G membership measurement is inferred.
+  Source-cache v1 directories are intentionally unsupported and must be rebuilt.
+  Encoder reports advance to schema 10 and record `path_membership` plus membership
+  directory-page counts.
 - Added `named-loci-v1---`, `summary-pyr-v1--`, and `archive-meta-v1-`
   extensions. The encoder always emits summaries and deterministic provenance,
   and emits named loci only with explicit GFF3, sample, release, and assembly

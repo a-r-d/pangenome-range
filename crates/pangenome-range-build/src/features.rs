@@ -45,6 +45,18 @@ pub(crate) struct FeatureBuildMetrics {
     pub summary_bins: u64,
     pub extension_encoded_bytes: u64,
     pub extension_decoded_bytes: u64,
+    pub path_membership_catalog_records: u64,
+    pub path_membership_catalog_pages: u64,
+    pub path_membership_directory_pages: u64,
+    pub path_membership_tile_pages: u64,
+    pub path_membership_groups: u64,
+    pub path_membership_memberships: u64,
+    pub path_membership_page_encoded_bytes: u64,
+    pub path_membership_page_decoded_bytes: u64,
+    pub path_membership_descriptor_encoded_bytes: u64,
+    pub path_membership_located_positions: u64,
+    pub path_membership_maximum_lf_steps: u64,
+    pub path_membership_locate_wall_ms: f64,
 }
 
 #[derive(Clone, Debug, Default)]
@@ -443,7 +455,7 @@ fn add_bin(target: &mut SummaryBin, value: &SummaryBin) -> io::Result<()> {
     add(&mut target.occurrences, value.occurrences, "occurrences")
 }
 
-fn append_descriptor(
+pub(crate) fn append_descriptor(
     archive: &mut File,
     type_id: [u8; 16],
     bytes: &[u8],
@@ -475,7 +487,7 @@ fn append_descriptor(
     })
 }
 
-fn append_page(
+pub(crate) fn append_page(
     archive: &mut File,
     codec: ChunkCodec,
     raw: &[u8],

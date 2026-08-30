@@ -1,0 +1,113 @@
+{
+  "schema_version": 1,
+  "status": "production-bounded-evidence",
+  "date": "2026-08-29",
+  "mode": "path-members-v1-production-layout",
+  "environment": {
+    "kernel": "Linux 6.17.0-41-generic x86_64",
+    "rustc": "1.97.1 (8bab26f4f 2026-07-14)",
+    "node": "v24.16.0",
+    "pnpm": "11.24.0",
+    "base_commit": "b273ed19cc75"
+  },
+  "rice_xa7": {
+    "source_gbz_bytes": 526138568,
+    "source_sha256": "2cb5e040d35c11dbadc0af6ef73fd16c97dd9be0816b410b9a4c49efbf788fdb",
+    "interval": {
+      "sample": "NATELBORO",
+      "contig": "chr06",
+      "start": 28868608,
+      "end": 28884992,
+      "tile_width": 16384,
+      "tiles": 1
+    },
+    "encoder": {
+      "archive_bytes": 352420,
+      "archive_sha256": "ada1d10e5590c983a5b97767737c9bec400002aba40483e5e0d97c0930f75429",
+      "whole_wall_seconds": 14.61,
+      "address_space_limit_bytes": 4294967296,
+      "threads": 1,
+      "max_queued_bytes": 67108864,
+      "max_rss_kib": 177528,
+      "swaps": 0
+    },
+    "membership": {
+      "catalog_records": 104959,
+      "catalog_pages": 103,
+      "directory_pages": 1,
+      "tile_pages": 1,
+      "groups": 51,
+      "memberships": 60,
+      "located_positions": 122,
+      "maximum_lf_steps": 1017,
+      "locate_wall_ms": 16.780656
+    },
+    "browser": {
+      "tiles": 1,
+      "groups": 51,
+      "memberships": 60,
+      "referenced_paths": 44,
+      "occurrence_weight": 60,
+      "membership_multiplicity": 60,
+      "range_reads": 8,
+      "bytes_read": 22573
+    }
+  },
+  "hprc_tert": {
+    "source_gbz_bytes": 5492627216,
+    "source_sha256": "11d6047f79575ffb83757462484bad134ed20928bd2c8171ec52e35a54976e2b",
+    "interval": {
+      "sample": "GRCh38",
+      "contig": "chr5",
+      "start": 1245184,
+      "end": 1310720,
+      "tile_width": 16384,
+      "tiles": 4
+    },
+    "encoder": {
+      "archive_bytes": 991576,
+      "archive_sha256": "7a6491c08dfae96b77d48d11fb542b16481b2e0d6760864838048a61a2fa5597",
+      "whole_wall_seconds": 99.08,
+      "address_space_limit_bytes": 4294967296,
+      "threads": 1,
+      "max_queued_bytes": 67108864,
+      "max_rss_kib": 659856,
+      "swaps": 0,
+      "ephemeral_source_cache_bytes": 11922586123
+    },
+    "membership": {
+      "catalog_records": 53150,
+      "catalog_pages": 52,
+      "directory_pages": 1,
+      "tile_pages": 4,
+      "groups": 1686,
+      "memberships": 4257,
+      "located_positions": 8522,
+      "maximum_lf_steps": 1023,
+      "locate_wall_ms": 1585.023549
+    },
+    "browser": {
+      "tiles": 4,
+      "groups": 1686,
+      "memberships": 4257,
+      "referenced_paths": 464,
+      "occurrence_weight": 4257,
+      "membership_multiplicity": 4257,
+      "range_reads": 9,
+      "bytes_read": 89818
+    }
+  },
+  "validation": {
+    "rust_full_reconstruction": "passed",
+    "browser_public_reader": "passed",
+    "anonymous_group_reconciliation": "exact",
+    "occurrence_weight_equals_membership_multiplicity": true,
+    "pnpm_check": "passed",
+    "pnpm_check_rust": "passed"
+  },
+  "exclusions": [
+    "No whole-genome named-membership construction was run.",
+    "The 1000 Genomes pilot remains excluded after the earlier HPRC r-index memory failure; no 1000G result is inferred.",
+    "These bounded runs do not measure archive-wide HPRC output size or wall time."
+  ]
+}

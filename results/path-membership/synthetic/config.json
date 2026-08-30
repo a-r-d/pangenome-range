@@ -1,0 +1,36 @@
+{
+  "schema_version": 1,
+  "dataset": "synthetic",
+  "branch": "experiment/named-path-membership",
+  "repository_commit": "b273ed19cc75cd6e82f8cccf26e2f3b98a22abb5",
+  "gbwt_commit": "c2e0199694fe41ec46c61c201c6ae0cd7dd08783",
+  "sdsl_commit": "a4c77d4ee040344ee8c0cd185b1d26a3c3a95436",
+  "vg_version": "v1.76.1",
+  "source": "experiments/path-membership-oracle/tests/synthetic.gfa",
+  "source_paths": 5,
+  "stored_sequences": 10,
+  "source_occurrences": 56,
+  "gbwt_bytes": 1344,
+  "r_index_bytes": 401,
+  "archive_bytes": 5071,
+  "archive_sha256": "763c3aa86dbd704abc60cc28786eb0bc20a965de0b0d317c2949002d4c42b125",
+  "r_index_construction_wall_seconds": null,
+  "identity_extraction_wall_seconds": 0.0,
+  "identity_extraction_peak_rss_bytes": 5091328,
+  "membership_encoding_wall_ms": 0.047552,
+  "temporary_disk_bytes": 0,
+  "browser_decode": {
+    "browser": "chromium",
+    "groups": 4,
+    "corpus_bytes": 68,
+    "iterations": 1000,
+    "wall_ms": 4.0,
+    "per_corpus_ms": 0.004
+  },
+  "correctness": {
+    "fast_locate_equals_brute_force": true,
+    "complete_expected_occurrence_map_rows": 56,
+    "rust_ordinary_locate_exact_expected_rows": 56,
+    "anonymous_weight_equals_membership_multiplicity_sum": true
+  }
+}

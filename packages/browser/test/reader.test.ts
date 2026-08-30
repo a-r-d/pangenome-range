@@ -27,6 +27,11 @@ import {
   validateArchiveRange,
   validateRegionQuery,
 } from "../src/reader/index.js";
+import {
+  decodePathCatalogPage,
+  decodePathMembershipDescriptor,
+  decodeTileMembershipPage,
+} from "../src/reader/path-membership.js";
 
 const conformanceDirectory = new URL(
   "../../../test-data/conformance/",
@@ -158,6 +163,45 @@ const micbKirArchiveFixture = new Uint8Array(
     ),
   ),
 );
+
+const pathMembershipArchiveFixture = new Uint8Array(
+  readFileSync(
+    new URL(
+      "../../../test-data/golden/path-membership-v1.pngr",
+      import.meta.url,
+    ),
+  ),
+);
+
+const pathMembershipExpected = JSON.parse(
+  readFileSync(
+    new URL(
+      "../../../test-data/golden/path-membership-v1.expected.json",
+      import.meta.url,
+    ),
+    "utf8",
+  ),
+) as {
+  archiveBytes: number;
+  archiveSha256: string;
+  query: { sample: string; contig: string; start: number; end: number };
+  catalogPathCount: string;
+  referencedPaths: number;
+  tiles: number;
+  groups: number;
+  memberships: number;
+  occurrenceWeight: string;
+  membershipMultiplicity: string;
+  firstReferencedPath: {
+    pathId: string;
+    canonicalName: string;
+    sample: string;
+    contig: string;
+    haplotype: string;
+    fragment: string;
+    sense: string;
+  };
+};
 
 class CompletionOrderDecompressor implements ChunkDecompressor {
   readonly #inner = new FzstdDecompressor();
@@ -744,6 +788,7 @@ describe("reader contract validation", () => {
     expect(archive.capabilities()).toEqual({
       namedLoci: true,
       multiscaleSummaries: true,
+      pathMembership: false,
     });
     const info = await archive.info();
     expect(info).toMatchObject({
@@ -894,6 +939,142 @@ describe("reader contract validation", () => {
       ).trace?.canonicalHash,
     ).toBe("3674cc04aea1d17ab4440075089d437cb642702661a454ea764f46866a41e251");
     await blobArchive.close();
+  });
+
+  it("decodes production named-path membership and rejects directory corruption", async () => {
+    expect(pathMembershipArchiveFixture.byteLength).toBe(
+      pathMembershipExpected.archiveBytes,
+    );
+    expect(sha256(pathMembershipArchiveFixture)).toBe(
+      pathMembershipExpected.archiveSha256,
+    );
+    const archive = await openPangenome(
+      new MemoryRangeSource(pathMembershipArchiveFixture),
+    );
+    expect(archive.capabilities().pathMembership).toBe(true);
+    expect((await archive.info()).pathMembership).toEqual({
+      state: "present",
+      pathCount: BigInt(pathMembershipExpected.catalogPathCount),
+    });
+    const result = await archive.pathMembership({
+      ...pathMembershipExpected.query,
+      trace: true,
+    });
+    const groups = result.tiles.flatMap((tile) => tile.groups);
+    const memberships = groups.flatMap((group) => group.memberships);
+    expect(result.tiles).toHaveLength(pathMembershipExpected.tiles);
+    expect(groups).toHaveLength(pathMembershipExpected.groups);
+    expect(memberships).toHaveLength(pathMembershipExpected.memberships);
+    expect(result.paths).toHaveLength(pathMembershipExpected.referencedPaths);
+    expect(
+      groups.reduce((total, group) => total + group.occurrenceWeight, 0n),
+    ).toBe(BigInt(pathMembershipExpected.occurrenceWeight));
+    expect(
+      memberships.reduce(
+        (total, membership) => total + membership.multiplicity,
+        0n,
+      ),
+    ).toBe(BigInt(pathMembershipExpected.membershipMultiplicity));
+    const first = result.paths[0];
+    expect(first).toBeDefined();
+    expect({
+      pathId: first?.pathId.toString(),
+      canonicalName: first?.canonicalName,
+      sample: first?.sample,
+      contig: first?.contig,
+      haplotype: first?.haplotype.toString(),
+      fragment: first?.fragment.toString(),
+      sense: first?.sense,
+    }).toEqual(pathMembershipExpected.firstReferencedPath);
+    expect(result.trace?.requestRanges.length).toBeGreaterThan(0);
+    await archive.close();
+
+    const corruptBytes = pathMembershipArchiveFixture.slice();
+    const magic = new TextEncoder().encode("PNGPMI01");
+    let directoryOffset = -1;
+    for (
+      let offset = 0;
+      offset <= corruptBytes.length - magic.length;
+      offset += 1
+    ) {
+      if (magic.every((byte, index) => corruptBytes[offset + index] === byte)) {
+        directoryOffset = offset;
+        break;
+      }
+    }
+    expect(directoryOffset).toBeGreaterThanOrEqual(0);
+    const corruptionOffset = directoryOffset + 32;
+    corruptBytes[corruptionOffset] = (corruptBytes[corruptionOffset] ?? 0) ^ 1;
+    const corruptArchive = await openPangenome(
+      new MemoryRangeSource(corruptBytes),
+    );
+    await expect(
+      corruptArchive.pathMembership(pathMembershipExpected.query),
+    ).rejects.toThrow(/path-membership directory/);
+    await corruptArchive.close();
+  });
+
+  it("enforces bounded path-membership decoding and preserves dual orientations", () => {
+    const bytes: number[] = [];
+    const text = (value: string) =>
+      bytes.push(...new TextEncoder().encode(value));
+    const u32 = (value: number) => {
+      for (let shift = 0; shift < 32; shift += 8)
+        bytes.push((value >>> shift) & 0xff);
+    };
+    const u64 = (value: bigint) => {
+      for (let shift = 0n; shift < 64n; shift += 8n)
+        bytes.push(Number((value >> shift) & 0xffn));
+    };
+
+    text("PNGPMT01");
+    u32(1);
+    u32(1);
+    u64(100n);
+    u64(200n);
+    bytes.push(...new Uint8Array(16).fill(7));
+    u64(2n);
+    u64(1n);
+    u64(8n);
+    bytes.push(0, 2, 1, 1, 0, 0, 1, 1);
+    const page = decodeTileMembershipPage(new Uint8Array(bytes), 2n);
+    expect(page.groups[0]?.uniquePathCount).toBe(1n);
+    expect(page.groups[0]?.memberships).toEqual([
+      { pathId: 1n, multiplicity: 1n, reversedRelativeToGroup: false },
+      { pathId: 1n, multiplicity: 1n, reversedRelativeToGroup: true },
+    ]);
+    const duplicatePair = new Uint8Array(bytes);
+    duplicatePair[duplicatePair.length - 1] = 0;
+    expect(() => decodeTileMembershipPage(duplicatePair, 2n)).toThrow(
+      /path\/orientation pairs/,
+    );
+
+    const catalog: number[] = [];
+    catalog.push(...new TextEncoder().encode("PNGPCP01"));
+    const catalogU32 = (value: number) => {
+      for (let shift = 0; shift < 32; shift += 8)
+        catalog.push((value >>> shift) & 0xff);
+    };
+    catalogU32(1);
+    catalogU32(2);
+    catalog.push(...new Uint8Array(8));
+    catalog.push(0, 2, 0xc3, 0xa9, 0, 0, 0, 0, 0, 0, 0);
+    catalog.push(1, 1, 0xa9, 0, 0, 0, 0, 0, 0, 0);
+    expect(() => decodePathCatalogPage(new Uint8Array(catalog))).toThrow(
+      /front-coded prefix/,
+    );
+
+    const descriptor = new Uint8Array(32);
+    descriptor.set(new TextEncoder().encode("PNGPMD01"));
+    const descriptorView = new DataView(descriptor.buffer);
+    descriptorView.setUint32(8, 1, true);
+    descriptorView.setUint32(12, 1_024, true);
+    descriptorView.setBigUint64(16, 1n, true);
+    descriptorView.setUint32(24, 1_000_000, true);
+    descriptorView.setUint32(28, 1, true);
+    expect(() =>
+      decodePathMembershipDescriptor(descriptor, 64n, 1_000n),
+    ).toThrow(/descriptor length/);
   });
 
   it("keeps semantic results deterministic across payload completion order", async () => {

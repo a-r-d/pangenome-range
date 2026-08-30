@@ -4,13 +4,14 @@ use super::disk_source::{
 use super::fixed::{
     ArchiveBuildMetrics, ArchiveBuildOptions, BuildProgressMode, ChunkCodec,
     DEFAULT_MAX_QUEUED_BYTES, DEFAULT_MAX_UNCOMPRESSED_CHUNK_BYTES, DEFAULT_MIN_WINDOW_SIZE,
-    DEFAULT_PROGRESS_INTERVAL_MS, ExperimentResult, FixedArchiveConfig, QueryMeasurement,
-    QuerySpec, build_fixed_archive, build_fixed_archive_from_source_with_options,
-    query_fixed_archive, reference_paths, source_oracle,
+    DEFAULT_PATH_LOCATE_MAX_LF_STEPS, DEFAULT_PROGRESS_INTERVAL_MS, ExperimentResult,
+    FixedArchiveConfig, QueryMeasurement, QuerySpec, build_fixed_archive,
+    build_fixed_archive_from_source_with_options, query_fixed_archive, reference_paths,
+    source_oracle,
 };
 use super::source::{
-    LoadedGbzSource, PangenomeSource, SourceMemoryPreflight, SourcePathIndex, SourceReferenceSeed,
-    source_memory_preflight,
+    LoadedGbzSource, PangenomeSource, SourceLocatedPosition, SourceMemoryPreflight,
+    SourcePathCatalogRecord, SourcePathIndex, SourceReferenceSeed, source_memory_preflight,
 };
 use gbz::GBZ;
 use gbz_base::PathIndex;
@@ -72,6 +73,10 @@ pub struct EncodeOptions {
     pub source_uri: Option<String>,
     pub annotation_release: Option<String>,
     pub annotation_assembly: Option<String>,
+    pub path_membership_summary: Option<PathBuf>,
+    pub path_membership_catalog: Option<PathBuf>,
+    pub path_membership: bool,
+    pub path_locate_max_lf_steps: usize,
 }
 
 impl EncodeOptions {
@@ -108,6 +113,10 @@ impl EncodeOptions {
             source_uri: None,
             annotation_release: None,
             annotation_assembly: None,
+            path_membership_summary: None,
+            path_membership_catalog: None,
+            path_membership: false,
+            path_locate_max_lf_steps: DEFAULT_PATH_LOCATE_MAX_LF_STEPS,
         }
     }
 }
@@ -118,6 +127,7 @@ fn default_encode_threads() -> usize {
         .min(8)
 }
 
+#[allow(clippy::struct_excessive_bools)]
 #[derive(Debug, Serialize)]
 pub struct EncodeSummary {
     pub schema_version: u32,
@@ -167,6 +177,10 @@ pub struct EncodeSummary {
     pub source_uri: Option<String>,
     pub annotation_release: Option<String>,
     pub annotation_assembly: Option<String>,
+    pub path_membership_summary: Option<PathBuf>,
+    pub path_membership_catalog: Option<PathBuf>,
+    pub path_membership: bool,
+    pub path_locate_max_lf_steps: usize,
     pub window_size: u64,
     pub codec: ChunkCodec,
     pub haplotype_semantics: &'static str,
@@ -231,6 +245,26 @@ impl PangenomeSource for ActiveEncoderSource {
             Self::Loaded(graph) => LoadedGbzSource::new(graph).packed_record(packed_handle),
         }
     }
+
+    fn path_catalog(&self) -> io::Result<Option<&[SourcePathCatalogRecord]>> {
+        match self {
+            Self::Disk(source) => source.path_catalog(),
+            Self::Loaded(_) => Ok(None),
+        }
+    }
+
+    fn locate_positions(
+        &self,
+        positions: &[gbz::Pos],
+        max_lf_steps: usize,
+    ) -> io::Result<Option<Vec<SourceLocatedPosition>>> {
+        match self {
+            Self::Disk(source) => source.locate_positions(positions, max_lf_steps),
+            Self::Loaded(graph) => {
+                LoadedGbzSource::new(graph).locate_positions(positions, max_lf_steps)
+            }
+        }
+    }
 }
 
 /// Runs the production-shaped direct archive encoder and writes a JSON report.
@@ -262,6 +296,49 @@ pub fn run_encode(options: &EncodeOptions) -> ExperimentResult<EncodeSummary> {
         return Err(io::Error::new(
             io::ErrorKind::InvalidInput,
             "--annotation-sample requires --annotations",
+        )
+        .into());
+    }
+    match (
+        options.path_membership_summary.as_ref(),
+        options.path_membership_catalog.as_ref(),
+    ) {
+        (Some(summary), Some(catalog)) => {
+            if !summary.is_file() || !catalog.is_file() {
+                return Err(io::Error::new(
+                    io::ErrorKind::NotFound,
+                    "experimental path-membership summary or catalog does not exist",
+                )
+                .into());
+            }
+        }
+        (None, None) => {}
+        _ => {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "experimental path membership requires both --experimental-path-membership-summary and --experimental-path-catalog",
+            )
+            .into());
+        }
+    }
+    if options.path_membership && options.path_membership_summary.is_some() {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "--path-membership cannot be combined with prepared membership inputs",
+        )
+        .into());
+    }
+    if options.path_membership && !matches!(options.source_mode, EncodeSourceMode::Disk) {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "--path-membership requires --source-access disk",
+        )
+        .into());
+    }
+    if options.path_membership && options.path_locate_max_lf_steps == 0 {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "--path-locate-max-lf-steps must be nonzero",
         )
         .into());
     }
@@ -555,6 +632,10 @@ pub fn run_encode(options: &EncodeOptions) -> ExperimentResult<EncodeSummary> {
             annotation_release: options.annotation_release.clone(),
             annotation_assembly: options.annotation_assembly.clone(),
         }),
+        path_membership_summary: options.path_membership_summary.clone(),
+        path_membership_catalog: options.path_membership_catalog.clone(),
+        path_membership: options.path_membership,
+        path_locate_max_lf_steps: options.path_locate_max_lf_steps,
         #[cfg(test)]
         test_reverse_worker_completion: false,
     };
@@ -598,7 +679,7 @@ pub fn run_encode(options: &EncodeOptions) -> ExperimentResult<EncodeSummary> {
         0.0
     };
     let summary = EncodeSummary {
-        schema_version: 8,
+        schema_version: 10,
         archive_version: 1,
         regional_payload_version: 1,
         source_path: options.input.clone(),
@@ -645,6 +726,10 @@ pub fn run_encode(options: &EncodeOptions) -> ExperimentResult<EncodeSummary> {
         source_uri: options.source_uri.clone(),
         annotation_release: options.annotation_release.clone(),
         annotation_assembly: options.annotation_assembly.clone(),
+        path_membership_summary: options.path_membership_summary.clone(),
+        path_membership_catalog: options.path_membership_catalog.clone(),
+        path_membership: options.path_membership,
+        path_locate_max_lf_steps: options.path_locate_max_lf_steps,
         window_size: options.window_size,
         codec: options.codec,
         haplotype_semantics: "anonymous-distinct-weighted-tile-paths",
@@ -1254,7 +1339,7 @@ mod tests {
     }
 
     #[test]
-    fn persistent_and_ephemeral_encode_paths_are_byte_identical() {
+    fn persistent_and_ephemeral_named_membership_encodes_are_byte_identical() {
         let input = tiny_gbz_fixture();
         let cache = serialize::temp_file_name("encode-persistent-cache");
         let ephemeral_output = serialize::temp_file_name("encode-ephemeral-output");
@@ -1267,9 +1352,11 @@ mod tests {
         let mut ephemeral = EncodeOptions::new(input.clone(), ephemeral_output.clone());
         ephemeral.report = Some(ephemeral_report.clone());
         ephemeral.threads = 1;
+        ephemeral.path_membership = true;
         let mut persistent = EncodeOptions::new(input, persistent_output.clone());
         persistent.report = Some(persistent_report.clone());
         persistent.threads = 4;
+        persistent.path_membership = true;
         persistent.source_cache = Some(cache.clone());
         let ephemeral_summary = run_encode(&ephemeral).unwrap();
         let persistent_summary = run_encode(&persistent).unwrap();
@@ -1283,6 +1370,8 @@ mod tests {
         );
         assert!(persistent_summary.path_index_wall_ms.abs() < f64::EPSILON);
         assert!(persistent_summary.persistent_source_cache_reused);
+        assert!(persistent_summary.build.path_membership_directory_pages > 0);
+        assert!(persistent_summary.build.path_membership_memberships > 0);
 
         fs::remove_file(ephemeral_output).unwrap();
         fs::remove_file(persistent_output).unwrap();
@@ -1318,7 +1407,7 @@ mod tests {
         options.threads = 1;
 
         let summary = run_encode(&options).unwrap();
-        assert_eq!(summary.schema_version, 8);
+        assert_eq!(summary.schema_version, 10);
         assert_eq!(summary.sample.as_deref(), Some(reference.sample.as_str()));
         assert_eq!(summary.reference_haplotype, Some(reference.haplotype));
         assert_eq!(summary.annotations, None);

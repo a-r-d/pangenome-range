@@ -1,0 +1,25 @@
+H	VN:Z:1.1	RS:Z:REF
+S	1	AAAA
+S	2	CCCC
+S	3	GGGG
+S	4	TTTT
+S	5	ACAC
+S	6	GAGA
+S	7	TATA
+L	1	+	2	+	0M
+L	2	+	3	+	0M
+L	3	+	4	+	0M
+L	4	+	5	+	0M
+L	2	+	6	+	0M
+L	6	+	3	+	0M
+L	2	+	4	+	0M
+L	2	+	4	-	0M
+L	4	-	3	-	0M
+L	3	-	5	+	0M
+L	3	+	7	+	0M
+L	7	+	2	+	0M
+P	REF#0#chr1	1+,2+,3+,4+,5+	*
+P	SAMPLE_A#0#chr1	1+,2+,6+,3+,4+,5+	*
+P	SAMPLE_B#0#chr1	1+,2+,4+,5+	*
+P	SAMPLE_C#0#chr1	1+,2+,4-,3-,5+	*
+P	SAMPLE_D#0#chr1	1+,2+,3+,7+,2+,3+,4+,5+	*

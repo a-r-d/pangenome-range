@@ -7,6 +7,11 @@ const entries = {
   node: new URL("../dist/node/index.js", import.meta.url),
   viewer: new URL("../dist/viewer/index.js", import.meta.url),
 };
+// Named-path membership adds strict catalog, directory, and multiplicity codecs.
+// Keep the network-sensitive gzip ceiling unchanged while allowing their readable
+// unminified ESM in the single-file reader entry.
+const readerRawBudget = 192 * 1024;
+const readerGzipBudget = 50 * 1024;
 const measurements = {};
 for (const [name, url] of Object.entries(entries)) {
   const bytes = await readFile(url);
@@ -31,12 +36,12 @@ for (const [name, url] of Object.entries(entries)) {
 }
 
 assert(
-  measurements.reader.rawBytes <= 160 * 1024,
-  `reader bundle is ${measurements.reader.rawBytes} bytes; budget is 163840`,
+  measurements.reader.rawBytes <= readerRawBudget,
+  `reader bundle is ${measurements.reader.rawBytes} bytes; budget is ${readerRawBudget}`,
 );
 assert(
-  measurements.reader.gzipBytes <= 50 * 1024,
-  `reader gzip is ${measurements.reader.gzipBytes} bytes; budget is 51200`,
+  measurements.reader.gzipBytes <= readerGzipBudget,
+  `reader gzip is ${measurements.reader.gzipBytes} bytes; budget is ${readerGzipBudget}`,
 );
 assert(
   measurements.node.rawBytes <= 8 * 1024,

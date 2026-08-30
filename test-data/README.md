@@ -1,5 +1,12 @@
 # Test data
 
+`golden/path-membership-v1.pngr` is the deterministic production named-membership
+fixture generated from `micb-kir3dl1.gbz` for CHM13 chr6:31350872-31360000 with
+the default 16,384 bp window and `--path-membership`. Its exact command, expected
+counts, source, byte length, and SHA-256 are in the adjacent JSON file. Rust validates
+traversal/weight reconciliation; TypeScript checks catalog identity, multiplicity
+totals, byte-range decoding, and directory corruption.
+
 The tiny MICB/KIR3DL1 and medium MHC fixtures are intentionally committed for
 hermetic integration, conformance, and benchmark smoke tests. Ordinary tests do
 not fetch data or require network access.

@@ -410,3 +410,30 @@ component and bundle inventory, deterministic golden screenshot, public HLA-B
 and lower-complexity screenshots, exact byte-range/query status, and the
 Chromium/Firefox/WebKit result. Older explorer reports remain historical
 evidence and are not the current product contract.
+
+## Bounded integrated path-membership proof (2026-08-28)
+
+`results/path-membership/integrated-encoder/` retains the first same-object encoder
+proof. One- and four-worker tiny archives are byte-identical. The real HPRC workload
+is four aligned TERT tiles, not a chromosome or whole-genome run: the direct encoder
+peaked at 263,828 KiB RSS with zero swaps under a 4 GiB address-space cap, and full
+validation reconciled all 1,686 named groups with their unchanged anonymous payloads.
+Chromium, Firefox, and WebKit each recovered 464 exact catalog records through four
+strict `206` requests totaling 76,869 bytes. Loopback timing is functional evidence,
+not public-network performance.
+
+## Production named-membership conformance (2026-08-29)
+
+The production tranche changes placement, so earlier archive SHA values remain
+historical. A checked-in MICB/KIR3DL1 fixture now covers two CHM13 chr6 tiles. Its
+31,783-byte archive has SHA-256
+`0f158b251de094fce1c446e9fd5af13e3d2e47c6ea8afe0c26f7009ea85cc127`.
+Rust and TypeScript agree on 169 catalog paths, 79 groups, 180 memberships, and total
+occurrence/multiplicity weight 180. Browser tests also corrupt the fixed membership
+directory body and require digest rejection.
+
+The synthetic direct encode through an ephemeral cache and persistent source-cache
+v2 is byte-identical: 9,605 bytes at SHA-256
+`a6d99b656a7f477afc43fdfde5acb5831115be6b09bb6eb1c3533563724a692a`.
+This proves cache-path determinism, not population scale. Rice and four-tile HPRC
+remain the largest bounded named-membership evidence. No 1000G result is claimed.

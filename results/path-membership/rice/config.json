@@ -1,0 +1,46 @@
+{
+  "schema_version": 1,
+  "dataset": "PPanG rice chromosome 6 Xa7 tile",
+  "branch": "experiment/named-path-membership",
+  "repository_commit": "b273ed19cc75cd6e82f8cccf26e2f3b98a22abb5",
+  "gbwt_commit": "c2e0199694fe41ec46c61c201c6ae0cd7dd08783",
+  "vg_version": "v1.76.1",
+  "query": {
+    "sample": "NATELBORO",
+    "contig": "chr06",
+    "start": 28873554,
+    "end": 28874897,
+    "selected_tile_start": 28868608,
+    "selected_tile_end": 28884992
+  },
+  "gbz_bytes": 526138568,
+  "gbwt_bytes": 457520368,
+  "gbwt_sha256": "367ba437b73ff2ba59a37a0747171e9fcdf6b734d138b014c858c38f2ba3874d",
+  "r_index_bytes": 1054507727,
+  "r_index_sha256": "7b3572f70b266fb5f2285c477145af66d555ef1e7c439af1c4d3e9d21bd1e6ea",
+  "archive_bytes": 325664519,
+  "archive_sha256": "c91768e6e98d32ff6467732a26e32def5058f4c15d247a0ac6a252a4403e134c",
+  "r_index_construction_wall_seconds": 28.397177730919793,
+  "r_index_construction_peak_rss_bytes": 5040758784,
+  "r_index_construction_temporary_bytes": 0,
+  "identity_extraction_wall_seconds": 1.30,
+  "identity_extraction_peak_rss_bytes": 1534971904,
+  "membership_encoding_wall_ms": 25.084052,
+  "temporary_disk_bytes": 0,
+  "browser_decode": {
+    "browser": "chromium",
+    "groups": 51,
+    "corpus_bytes": 799,
+    "iterations": 1000,
+    "wall_ms": 15.200000047683716,
+    "per_corpus_ms": 0.015200000047683716
+  },
+  "correctness": {
+    "bounded_start_positions_located": 122,
+    "rust_ordinary_locate_exact_cpp_tile_starts": 122,
+    "rust_ordinary_locate_exact_cpp_deterministic_positions": 4096,
+    "anonymous_weight_equals_membership_multiplicity_sum": true,
+    "whole_chromosome_fast_locate_equals_brute_force": false,
+    "whole_chromosome_note": "Attempt overlapped the failed HPRC r-index build and did not produce a completed equality result; it will not be rerun while protecting host memory."
+  }
+}

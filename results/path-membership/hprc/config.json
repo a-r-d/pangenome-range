@@ -1,0 +1,28 @@
+{
+  "schema_version": 1,
+  "dataset": "HPRC v2.1 bounded difficult-region corpus",
+  "status": "blocked_by_r_index_oom",
+  "source_gbz_bytes": 5492627216,
+  "source_gbz_sha256": "11d6047f79575ffb83757462484bad134ed20928bd2c8171ec52e35a54976e2b",
+  "extracted_gbwt_bytes": 4051134848,
+  "r_index_bytes": 0,
+  "r_index_construction_completed": false,
+  "identity_extraction_completed": false,
+  "bounded_queries": [
+    ["GRCh38", "chr6", 31353194, 31367067, "HLA-B"],
+    ["GRCh38", "chr6", 31498145, 31511124, "MICB"],
+    ["GRCh38", "chr19", 54816468, 54830778, "KIR3DL1"],
+    ["GRCh38", "chr5", 1253146, 1295086, "TERT control"]
+  ],
+  "gbwt_extraction": {
+    "wall_seconds": 30.85,
+    "peak_rss_kib": 13922924,
+    "swaps": 0
+  },
+  "r_index_failure": {
+    "user_observed_host_oom": true,
+    "kernel_log_confirmation": false,
+    "partial_output_bytes": 0,
+    "note": "The host became unusable during vg gbwt -r. No peak claim is made because the measuring process did not return a final record."
+  }
+}

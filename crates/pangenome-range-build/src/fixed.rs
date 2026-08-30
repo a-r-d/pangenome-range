@@ -44,6 +44,9 @@ use crate::features::{
     BaseSummaryBins, FeatureBuildOptions, summary_base_bin_span, write_default_feature_extensions,
 };
 use crate::local_subgraph::LocalSubgraph;
+use crate::path_membership::{
+    write_direct_path_membership_extension, write_path_membership_extension,
+};
 use crate::source::{LoadedGbzSource, PangenomeSource, SourcePathIndex};
 
 pub type ExperimentResult<T> = Result<T, Box<dyn Error + Send + Sync>>;
@@ -55,6 +58,7 @@ pub const DEFAULT_MAX_UNCOMPRESSED_CHUNK_BYTES: u64 = 8 * 1024 * 1024;
 pub const DEFAULT_MIN_WINDOW_SIZE: u64 = 1024;
 pub const DEFAULT_MAX_QUEUED_BYTES: u64 = 256 * 1024 * 1024;
 pub const DEFAULT_PROGRESS_INTERVAL_MS: u64 = 5_000;
+pub const DEFAULT_PATH_LOCATE_MAX_LF_STEPS: usize = 1_000_000;
 const MAX_DECODED_OCCURRENCES_PER_TILE: u64 = 16 * 1024 * 1024;
 const DEFAULT_DIRECTORY_CACHE_BYTES: usize = 1024 * 1024;
 
@@ -93,6 +97,10 @@ pub struct ArchiveBuildOptions {
     pub annotation_sample: Option<String>,
     pub annotation_feature_types: Vec<String>,
     pub archive_metadata: Option<ArchiveMetadata>,
+    pub path_membership_summary: Option<PathBuf>,
+    pub path_membership_catalog: Option<PathBuf>,
+    pub path_membership: bool,
+    pub path_locate_max_lf_steps: usize,
     #[cfg(test)]
     pub test_reverse_worker_completion: bool,
 }
@@ -114,6 +122,10 @@ impl Default for ArchiveBuildOptions {
             annotation_sample: None,
             annotation_feature_types: Vec::new(),
             archive_metadata: None,
+            path_membership_summary: None,
+            path_membership_catalog: None,
+            path_membership: false,
+            path_locate_max_lf_steps: DEFAULT_PATH_LOCATE_MAX_LF_STEPS,
             #[cfg(test)]
             test_reverse_worker_completion: false,
         }
@@ -432,6 +444,18 @@ pub struct ArchiveBuildMetrics {
     pub named_locus_descriptor_wall_ms: f64,
     pub summary_series: u64,
     pub summary_bins: u64,
+    pub path_membership_catalog_records: u64,
+    pub path_membership_catalog_pages: u64,
+    pub path_membership_directory_pages: u64,
+    pub path_membership_tile_pages: u64,
+    pub path_membership_groups: u64,
+    pub path_membership_memberships: u64,
+    pub path_membership_page_encoded_bytes: u64,
+    pub path_membership_page_decoded_bytes: u64,
+    pub path_membership_descriptor_encoded_bytes: u64,
+    pub path_membership_located_positions: u64,
+    pub path_membership_maximum_lf_steps: u64,
+    pub path_membership_locate_wall_ms: f64,
     pub peak_queued_raw_bytes: u64,
     pub peak_queued_compressed_bytes: u64,
     pub peak_queued_total_bytes: u64,
@@ -2194,6 +2218,21 @@ pub fn build_fixed_archive_from_source_with_options(
     config: &FixedArchiveConfig,
     options: &ArchiveBuildOptions,
 ) -> ExperimentResult<ArchiveBuildMetrics> {
+    if options.path_membership_summary.is_some() != options.path_membership_catalog.is_some() {
+        return Err(invalid_input(
+            "experimental path membership requires both summary and catalog",
+        )
+        .into());
+    }
+    if options.path_membership && options.path_membership_summary.is_some() {
+        return Err(invalid_input(
+            "--path-membership cannot be combined with prepared membership inputs",
+        )
+        .into());
+    }
+    if options.path_membership && options.path_locate_max_lf_steps == 0 {
+        return Err(invalid_input("path locate LF-step limit must be nonzero").into());
+    }
     if config.window_size == 0 {
         return Err(invalid_input("window size must be greater than zero").into());
     }
@@ -2279,6 +2318,11 @@ pub fn build_fixed_archive_from_source_with_options(
     let extension_count = 1_usize
         .checked_add(usize::from(options.annotations.is_some()))
         .and_then(|count| count.checked_add(usize::from(options.archive_metadata.is_some())))
+        .and_then(|count| {
+            count.checked_add(usize::from(
+                options.path_membership_summary.is_some() || options.path_membership,
+            ))
+        })
         .ok_or_else(|| invalid_data("extension directory length overflow"))?;
     let extension_directory_len = EXTENSION_DIRECTORY_HEADER_BYTES
         .checked_add(
@@ -2627,7 +2671,7 @@ pub fn build_fixed_archive_from_source_with_options(
         "writing default feature indexes and backfilling archive metadata",
     );
     let finalization_started = Instant::now();
-    let (extensions, feature_metrics) = write_default_feature_extensions(
+    let (mut extensions, mut feature_metrics) = write_default_feature_extensions(
         &mut archive_temp.file,
         &manifests,
         summary_base_bin_span,
@@ -2640,6 +2684,67 @@ pub fn build_fixed_archive_from_source_with_options(
         },
         data_offset,
     )?;
+    let path_membership_result = if options.path_membership {
+        archive_temp.file.flush()?;
+        Some(write_direct_path_membership_extension(
+            &mut archive_temp.file,
+            &archive_temp.path,
+            source,
+            &manifests,
+            &bucket_entries,
+            options.path_locate_max_lf_steps,
+            data_offset,
+        )?)
+    } else if let (Some(summary), Some(catalog)) = (
+        options.path_membership_summary.as_deref(),
+        options.path_membership_catalog.as_deref(),
+    ) {
+        Some(write_path_membership_extension(
+            &mut archive_temp.file,
+            &manifests,
+            &bucket_entries,
+            summary,
+            catalog,
+            data_offset,
+        )?)
+    } else {
+        None
+    };
+    if let Some((entry, path_metrics)) = path_membership_result {
+        feature_metrics.path_membership_catalog_records = path_metrics.catalog_records;
+        feature_metrics.path_membership_catalog_pages = path_metrics.catalog_pages;
+        feature_metrics.path_membership_directory_pages = path_metrics.directory_pages;
+        feature_metrics.path_membership_tile_pages = path_metrics.tile_pages;
+        feature_metrics.path_membership_groups = path_metrics.groups;
+        feature_metrics.path_membership_memberships = path_metrics.memberships;
+        feature_metrics.path_membership_page_encoded_bytes = path_metrics.page_encoded_bytes;
+        feature_metrics.path_membership_page_decoded_bytes = path_metrics.page_decoded_bytes;
+        feature_metrics.path_membership_descriptor_encoded_bytes =
+            path_metrics.descriptor_encoded_bytes;
+        feature_metrics.path_membership_located_positions = path_metrics.located_positions;
+        feature_metrics.path_membership_maximum_lf_steps = path_metrics.maximum_lf_steps;
+        feature_metrics.path_membership_locate_wall_ms = path_metrics.locate_wall_ms;
+        feature_metrics.extension_encoded_bytes = feature_metrics
+            .extension_encoded_bytes
+            .checked_add(
+                path_metrics
+                    .page_encoded_bytes
+                    .checked_add(path_metrics.descriptor_encoded_bytes)
+                    .ok_or_else(|| invalid_data("extension encoded byte count overflow"))?,
+            )
+            .ok_or_else(|| invalid_data("extension encoded byte count overflow"))?;
+        feature_metrics.extension_decoded_bytes = feature_metrics
+            .extension_decoded_bytes
+            .checked_add(
+                path_metrics
+                    .page_decoded_bytes
+                    .checked_add(path_metrics.descriptor_encoded_bytes)
+                    .ok_or_else(|| invalid_data("extension decoded byte count overflow"))?,
+            )
+            .ok_or_else(|| invalid_data("extension decoded byte count overflow"))?;
+        extensions.push(entry);
+        extensions.sort_by_key(|entry| entry.type_id);
+    }
     let extension_directory = format_encode_extension_directory(&extensions)?;
     if extension_directory.len() != extension_directory_len {
         return Err(invalid_data("default extension directory length changed").into());
@@ -2792,6 +2897,19 @@ pub fn build_fixed_archive_from_source_with_options(
         named_locus_descriptor_wall_ms: feature_metrics.named_locus_descriptor_wall_ms,
         summary_series: feature_metrics.summary_series,
         summary_bins: feature_metrics.summary_bins,
+        path_membership_catalog_records: feature_metrics.path_membership_catalog_records,
+        path_membership_catalog_pages: feature_metrics.path_membership_catalog_pages,
+        path_membership_directory_pages: feature_metrics.path_membership_directory_pages,
+        path_membership_tile_pages: feature_metrics.path_membership_tile_pages,
+        path_membership_groups: feature_metrics.path_membership_groups,
+        path_membership_memberships: feature_metrics.path_membership_memberships,
+        path_membership_page_encoded_bytes: feature_metrics.path_membership_page_encoded_bytes,
+        path_membership_page_decoded_bytes: feature_metrics.path_membership_page_decoded_bytes,
+        path_membership_descriptor_encoded_bytes: feature_metrics
+            .path_membership_descriptor_encoded_bytes,
+        path_membership_located_positions: feature_metrics.path_membership_located_positions,
+        path_membership_maximum_lf_steps: feature_metrics.path_membership_maximum_lf_steps,
+        path_membership_locate_wall_ms: feature_metrics.path_membership_locate_wall_ms,
         peak_queued_raw_bytes: writer.peak_queued_raw_bytes,
         peak_queued_compressed_bytes: writer.peak_queued_compressed_bytes,
         peak_queued_total_bytes: writer.peak_queued_total_bytes,

@@ -1,0 +1,284 @@
+{
+  "benchmark": {
+    "archive_bytes": 5071,
+    "archive_sha256": "763c3aa86dbd704abc60cc28786eb0bc20a965de0b0d317c2949002d4c42b125",
+    "branch": "experiment/named-path-membership",
+    "browser_decode": {
+      "browser": "chromium",
+      "corpus_bytes": 68,
+      "groups": 4,
+      "iterations": 1000,
+      "per_corpus_ms": 0.004,
+      "wall_ms": 4.0
+    },
+    "correctness": {
+      "anonymous_weight_equals_membership_multiplicity_sum": true,
+      "complete_expected_occurrence_map_rows": 56,
+      "fast_locate_equals_brute_force": true,
+      "rust_ordinary_locate_exact_expected_rows": 56
+    },
+    "dataset": "synthetic",
+    "gbwt_bytes": 1344,
+    "gbwt_commit": "c2e0199694fe41ec46c61c201c6ae0cd7dd08783",
+    "identity_extraction_peak_rss_bytes": 5091328,
+    "identity_extraction_wall_seconds": 0.0,
+    "membership_encoding_wall_ms": 0.047552,
+    "r_index_bytes": 401,
+    "r_index_construction_wall_seconds": null,
+    "repository_commit": "b273ed19cc75cd6e82f8cccf26e2f3b98a22abb5",
+    "schema_version": 1,
+    "sdsl_commit": "a4c77d4ee040344ee8c0cd185b1d26a3c3a95436",
+    "source": "experiments/path-membership-oracle/tests/synthetic.gfa",
+    "source_occurrences": 56,
+    "source_paths": 5,
+    "stored_sequences": 10,
+    "temporary_disk_bytes": 0,
+    "vg_version": "v1.76.1"
+  },
+  "catalog": {
+    "columnar_bytes": 154,
+    "contig_count": 1,
+    "deduplicated_string_table_bytes": 65,
+    "front_coded_bytes": 154,
+    "integer_metadata_column_bytes": 30,
+    "path_count": 5,
+    "plain_utf8_bytes": 220,
+    "sample_count": 5
+  },
+  "correctness": {
+    "anonymous_weight_equals_membership_multiplicity_sum": true,
+    "rust_ordinary_locate_exact_expected_rows": 56,
+    "source_identity_locate_results": 10
+  },
+  "manifest": {
+    "archive": "/tmp/pangenome-range-path-membership-synth-debug/synthetic-v1.pngr",
+    "archive_bytes": 5071,
+    "contig": "chr1",
+    "end": 20,
+    "graph_query_bytes": 5071,
+    "graph_query_ranges": 1,
+    "sample": "REF",
+    "schema_version": 1,
+    "start": 0,
+    "tiles": [
+      {
+        "core_end": 20,
+        "core_start": 0,
+        "decoded_graph_bytes": 896,
+        "encoded_graph_bytes": 245,
+        "payload_path": "/tmp/pangenome-range-path-membership-synth-debug/payloads/tile-0-20-a9cc02e90173ad48.raw"
+      }
+    ]
+  },
+  "membership": {
+    "adaptive_bytes": 20,
+    "catalog_bytes": 154,
+    "encoding_wall_ms": 0.046965999999999994,
+    "extension_index_bytes": 120,
+    "identity_total_bytes": 294,
+    "overhead_percent": 5.797673042792349
+  },
+  "membership_structure": {
+    "density_relative_to_catalog": {
+      "count": 4,
+      "max": 0.2,
+      "p50": 0.2,
+      "p90": 0.2,
+      "p95": 0.2,
+      "p99": 0.2
+    },
+    "occurrence_weight": {
+      "count": 4,
+      "max": 1,
+      "p50": 1,
+      "p90": 1,
+      "p95": 1,
+      "p99": 1
+    },
+    "path_id_delta": {
+      "count": 4,
+      "max": 4,
+      "p50": 3,
+      "p90": 4,
+      "p95": 4,
+      "p99": 4
+    },
+    "path_id_run_length": {
+      "count": 4,
+      "max": 1,
+      "p50": 1,
+      "p90": 1,
+      "p95": 1,
+      "p99": 1
+    },
+    "unique_path_count": {
+      "count": 4,
+      "max": 1,
+      "p50": 1,
+      "p90": 1,
+      "p95": 1,
+      "p99": 1
+    }
+  },
+  "placement": {
+    "inline": {
+      "additional_dependency_rounds": 0,
+      "additional_range_requests": 0,
+      "base_graph_archive_bytes": 5071,
+      "query_bytes_with_identities": 5245,
+      "query_bytes_without_identities": 5091,
+      "total_identity_aware_bytes": 5245
+    },
+    "same_object_extension": {
+      "additional_dependency_rounds": 1,
+      "additional_range_requests": 2,
+      "base_graph_archive_bytes": 5071,
+      "query_bytes_with_identities": 5245,
+      "query_bytes_without_identities": 5071,
+      "total_identity_aware_bytes": 5365,
+      "type_ids": [
+        "path-catalog-v1-",
+        "tile-members-v1-"
+      ]
+    },
+    "sidecar": {
+      "additional_dependency_rounds": 1,
+      "additional_range_requests": 2,
+      "base_graph_archive_bytes": 5071,
+      "query_bytes_with_identities": 5245,
+      "query_bytes_without_identities": 5071,
+      "requires_archive_digest_binding": true,
+      "sidecar_bytes": 294,
+      "total_identity_aware_bytes": 5365
+    }
+  },
+  "schema_version": 1,
+  "tiles": [
+    {
+      "codecs": [
+        {
+          "adaptive_bytes": 5,
+          "adaptive_codec": "dense-bitset",
+          "complement": 7,
+          "delta_varint": 5,
+          "dense_bitset": 4,
+          "interval_run": 7,
+          "roaring_blocks": 9
+        },
+        {
+          "adaptive_bytes": 5,
+          "adaptive_codec": "dense-bitset",
+          "complement": 7,
+          "delta_varint": 5,
+          "dense_bitset": 4,
+          "interval_run": 7,
+          "roaring_blocks": 9
+        },
+        {
+          "adaptive_bytes": 5,
+          "adaptive_codec": "dense-bitset",
+          "complement": 7,
+          "delta_varint": 5,
+          "dense_bitset": 4,
+          "interval_run": 7,
+          "roaring_blocks": 9
+        },
+        {
+          "adaptive_bytes": 5,
+          "adaptive_codec": "dense-bitset",
+          "complement": 7,
+          "delta_varint": 5,
+          "dense_bitset": 4,
+          "interval_run": 7,
+          "roaring_blocks": 9
+        }
+      ],
+      "core_end": 20,
+      "core_start": 0,
+      "disjoint_partition": true,
+      "distinct_groups": 4,
+      "dominant_group_share": 0.25,
+      "groups": [
+        {
+          "memberships": [
+            {
+              "multiplicity": 1,
+              "path_id": 4,
+              "reversed_relative_to_group": false
+            }
+          ],
+          "occurrence_weight": 1,
+          "traversal": [
+            2,
+            4,
+            6,
+            14,
+            4,
+            6,
+            8,
+            10
+          ],
+          "unique_path_count": 1
+        },
+        {
+          "memberships": [
+            {
+              "multiplicity": 1,
+              "path_id": 2,
+              "reversed_relative_to_group": false
+            }
+          ],
+          "occurrence_weight": 1,
+          "traversal": [
+            2,
+            4,
+            8,
+            10
+          ],
+          "unique_path_count": 1
+        },
+        {
+          "memberships": [
+            {
+              "multiplicity": 1,
+              "path_id": 3,
+              "reversed_relative_to_group": false
+            }
+          ],
+          "occurrence_weight": 1,
+          "traversal": [
+            2,
+            4,
+            9,
+            7,
+            10
+          ],
+          "unique_path_count": 1
+        },
+        {
+          "memberships": [
+            {
+              "multiplicity": 1,
+              "path_id": 1,
+              "reversed_relative_to_group": false
+            }
+          ],
+          "occurrence_weight": 1,
+          "traversal": [
+            2,
+            4,
+            12,
+            6,
+            8,
+            10
+          ],
+          "unique_path_count": 1
+        }
+      ],
+      "paths_in_multiple_groups": 0,
+      "paths_with_multiplicity_gt_one": 0,
+      "total_occurrence_weight": 4,
+      "unique_paths": 4
+    }
+  ]
+}

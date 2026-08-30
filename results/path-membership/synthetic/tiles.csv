@@ -1,0 +1,2 @@
+core_start,core_end,distinct_groups,total_occurrence_weight,unique_paths,paths_in_multiple_groups,paths_with_multiplicity_gt_one,disjoint_partition,dominant_group_share
+0,20,4,4,4,0,0,true,0.25

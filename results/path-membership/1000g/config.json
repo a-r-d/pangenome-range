@@ -1,0 +1,12 @@
+{
+  "schema_version": 1,
+  "dataset": "1000GPlons hs38d1 5,008-haplotype bounded pilot",
+  "status": "not_started_after_hprc_scale_gate_failed",
+  "source_gbz_bytes": 17771541912,
+  "source_gbz_sha256": "10518b259e8ba0b1a7fa586301a7dcea46e5152f53ee09a3e1ad7507efd98063",
+  "standalone_gbwt_bytes": 17051191557,
+  "archive_bytes": 8975880203,
+  "r_index_bytes": null,
+  "whole_source_conversion_authorized": false,
+  "reason": "The HPRC r-index build first exhausted the host. The 1000G pilot was deliberately not launched after that failed prerequisite."
+}

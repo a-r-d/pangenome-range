@@ -48,6 +48,34 @@ Add a searchable gene index with GFF3 annotations:
 pangenome-range encode input.gbz output.pngr --annotations genes.gff3 --annotation-release v50 --annotation-assembly GRCh38.p14
 ```
 
+Add named GBWT source-path identity with `--path-membership`. The disk-backed
+encoder parses the document-array samples embedded in GBWT, performs bounded
+tile-batched LF locate, and writes a paged catalog plus one membership page for
+each graph tile. `--path-locate-max-lf-steps` is a hard per-position guard. Source
+cache v2 persists the authenticated locate support and catalog, so repeated
+encodes do not restream the GBZ. Named membership requires complete GBWT path,
+sample, and contig metadata and fails closed instead of inventing labels. No local
+`gbwt-rs` fork is a dependency.
+
+The browser API reads the optional feature independently from graph queries:
+
+```ts
+const membership = await archive.pathMembership({
+  sample: "GRCh38",
+  contig: "chr6",
+  start: 31_498_145,
+  end: 31_511_124,
+});
+console.log(membership.paths, membership.tiles[0]?.groups);
+```
+
+Each returned path has a real canonical GBWT path ID, structured metadata, and a
+`canonicalName` deterministically reconstructed from that metadata. GBWT does not
+retain the original input spelling of every path name.
+
+Anonymous weighted tile paths remain the default graph semantics. Named memberships
+are tile-local evidence; the reader does not stitch them across tiles.
+
 ## JavaScript decoder
 
 ```ts
@@ -125,6 +153,10 @@ Measured August 27, 2026 over the public network; latency will vary by location 
 | `--dataset-title TEXT` | none | Deterministic archive title. |
 | `--dataset-description TEXT` | none | Deterministic archive description. |
 | `--source-uri URI` | none | Canonical source URI; local paths and `file:` URIs are rejected. |
+| `--experimental-path-membership-summary PATH` | none | Prepared bounded tile-membership JSON; research only and requires the matching catalog. |
+| `--experimental-path-catalog PATH` | none | Complete contiguous path-catalog NDJSON; research only and requires the matching summary. |
+| `--path-membership` | off | Preserve named source-path membership from embedded GBWT DA samples; disk mode only. |
+| `--path-locate-max-lf-steps N` | `1000000` | Hard LF-step limit for each located traversal start. |
 | `--keep-partial` | off | Keep the temporary sibling archive after failure. |
 | `--progress MODE` | terminal: plain; redirected: off | `auto`, `plain`, `json`, or `off`. |
 | `--progress-interval-seconds N` | `5` | Progress update interval. |

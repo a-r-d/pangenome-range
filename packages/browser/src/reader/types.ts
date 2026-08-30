@@ -192,6 +192,7 @@ export interface ArchiveCacheStats {
 export interface ArchiveCapabilities {
   readonly namedLoci: boolean;
   readonly multiscaleSummaries: boolean;
+  readonly pathMembership: boolean;
 }
 
 export interface ArchiveProvenance {
@@ -224,6 +225,10 @@ export interface ArchiveInfo {
   readonly namedLoci: {
     readonly state: "absent" | "present-empty" | "present-populated";
     readonly recordCount: bigint;
+  };
+  readonly pathMembership: {
+    readonly state: "absent" | "present";
+    readonly pathCount: bigint;
   };
   readonly summaries?: {
     readonly baseBinSpan: number;
@@ -338,6 +343,56 @@ export interface SummaryResult {
   readonly trace?: FeatureQueryTrace;
 }
 
+export type PathSense = "unknown" | "generic" | "reference" | "haplotype";
+
+export interface NamedSourcePath {
+  readonly pathId: bigint;
+  /** Deterministic textual rendering reconstructed from GBWT metadata. */
+  readonly canonicalName: string;
+  readonly sample: string;
+  readonly contig: string;
+  readonly haplotype: bigint;
+  readonly fragment: bigint;
+  readonly sense: PathSense;
+}
+
+export interface NamedTraversalMembership {
+  readonly pathId: bigint;
+  readonly multiplicity: bigint;
+  readonly reversedRelativeToGroup: boolean;
+}
+
+export interface NamedTraversalGroup {
+  readonly traversalDigest: Uint8Array;
+  readonly occurrenceWeight: bigint;
+  readonly uniquePathCount: bigint;
+  readonly memberships: readonly NamedTraversalMembership[];
+}
+
+export interface PathMembershipTile {
+  readonly reference: ReferenceDescriptor;
+  readonly coreStart: number;
+  readonly coreEnd: number;
+  readonly groups: readonly NamedTraversalGroup[];
+}
+
+export interface PathMembershipQuery {
+  readonly sample: string;
+  readonly contig: string;
+  readonly start: number;
+  readonly end: number;
+  readonly signal?: AbortSignal;
+  readonly trace?: boolean | ((trace: FeatureQueryTrace) => void);
+}
+
+export interface PathMembershipResult {
+  readonly query: Readonly<PathMembershipQuery>;
+  /** Only catalog records referenced by the selected tile groups. */
+  readonly paths: readonly NamedSourcePath[];
+  readonly tiles: readonly PathMembershipTile[];
+  readonly trace?: FeatureQueryTrace;
+}
+
 export interface PangenomeArchive {
   readonly formatVersion: number;
   readonly semantics: HaplotypeSemantics;
@@ -346,6 +401,7 @@ export interface PangenomeArchive {
   info(options?: { signal?: AbortSignal }): Promise<ArchiveInfo>;
   searchLoci(query: LocusSearch): Promise<LocusSearchResult>;
   summary(query: SummaryQuery): Promise<SummaryResult>;
+  pathMembership(query: PathMembershipQuery): Promise<PathMembershipResult>;
   planRegion(query: RegionQuery): Promise<RegionPlan>;
   query(query: RegionQuery): Promise<RegionResult>;
   /** Streams tiles as decoding completes; progressive event order is intentionally unspecified. */

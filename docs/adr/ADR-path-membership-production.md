@@ -1,0 +1,50 @@
+# ADR: production named source-path membership
+
+Date: 2026-08-29
+
+Status: accepted locally; archives must be regenerated
+
+## Decision
+
+File-format v1 registers optional `path-members-v1-`. The normal graph payload and
+its `anonymous-distinct-weighted-tile-paths` semantics do not change. Encoders emit
+named identity only with `--path-membership`; readers that do not request it may skip
+the extension.
+
+The descriptor owns a paged complete source-path catalog and one compact manifest per
+graph manifest. Fixed 4 KiB membership-directory pages align one-for-one with graph
+directory pages. They address independently compressed membership pages in identical
+tile order. This removes the experiment's root-wide tile list and its 65,536-tile
+limit without adding a row-per-visit index.
+
+The build crate parses embedded GBWT DA support and performs bounded tile-batched LF
+locate. Persistent source-cache v2 stores authenticated DA support and the canonical
+catalog. Neither the format nor browser package depends on GBWT or `gbwt-rs`.
+
+Rust validation reconstructs anonymous regional traversals and requires exact digest
+and occurrence-weight agreement. The TypeScript reader exposes only real catalog IDs
+and tile-local memberships. It does not stitch anonymous traversals across tiles.
+
+## Evidence and exclusions
+
+Fresh production-layout runs passed for rice Xa7 (one tile) and HPRC TERT (four
+tiles), each with one worker, a 64 MiB construction queue, a hard 4 GiB address-space
+limit, and zero swap. HPRC recovered 4,257 memberships across 1,686 traversal groups
+at 659,856 KiB peak RSS; rice recovered 60 memberships across 51 groups at 177,528
+KiB peak RSS. Full Rust reconstruction validation and the public TypeScript reader
+both required occurrence weight to equal membership multiplicity. Exact commands,
+checksums, range-read counts, and limitations are retained in
+`results/path-membership/production/`.
+
+The checked-in `path-membership-v1.pngr` golden fixture is encoded from the checked-in
+MICB/KIR3DL1 GBZ and is decoded by both Rust and TypeScript, including a
+membership-directory corruption rejection. Ephemeral and persistent-cache v2 encodes
+of the synthetic fixture are byte-identical.
+
+The 1000G pilot remains explicitly excluded after the earlier memory failure. No
+1000G named-membership overhead, time, or memory claim is inferred. Archive-wide HPRC
+construction cost also remains an operational measurement, not a correctness blocker.
+
+No change was merged upstream while proving the experiment; this ADR records the
+local productionization decision and the required regeneration of older research
+archives.

@@ -1,0 +1,5 @@
+core_start,core_end,group_index,occurrence_weight,unique_path_count,delta_varint,interval_run,dense_bitset,roaring_blocks,complement,adaptive_codec,adaptive_bytes
+0,20,0,1,1,5,7,4,9,7,dense-bitset,5
+0,20,1,1,1,5,7,4,9,7,dense-bitset,5
+0,20,2,1,1,5,7,4,9,7,dense-bitset,5
+0,20,3,1,1,5,7,4,9,7,dense-bitset,5

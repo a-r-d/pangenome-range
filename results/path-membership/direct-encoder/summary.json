@@ -1,0 +1,72 @@
+{
+  "schema_version": 1,
+  "status": "bounded-direct-encoder-proof",
+  "date": "2026-08-29",
+  "mode": "experimental-direct-path-membership",
+  "address_space_limits_bytes": {
+    "synthetic": 1073741824,
+    "rice": 4294967296,
+    "hprc": 4294967296
+  },
+  "synthetic": {
+    "archive_bytes": 5572,
+    "archive_sha256": "818975d816044b33d5df0cb68b0df1fc7a9f0759647b8cdaa50ebb7c420fcf0c",
+    "prepared_oracle_byte_identical": true,
+    "located_positions": 10,
+    "maximum_lf_steps": 7,
+    "locate_wall_ms": 0.01051,
+    "catalog_records": 5,
+    "tile_pages": 1,
+    "groups": 4,
+    "memberships": 4,
+    "max_rss_kib": 6856,
+    "swaps": 0
+  },
+  "rice": {
+    "archive_bytes": 348394,
+    "archive_sha256": "c8a0c184d3e4ef0469ce0e351eb919c4951f15cae7caab157af2487c7ea5d7e8",
+    "prepared_oracle_byte_identical": true,
+    "located_positions": 122,
+    "maximum_lf_steps": 1017,
+    "locate_wall_ms": 16.431386,
+    "catalog_records": 104959,
+    "tile_pages": 1,
+    "groups": 51,
+    "memberships": 60,
+    "max_rss_kib": 177096,
+    "swaps": 0
+  },
+  "hprc_tert": {
+    "source_gbz_bytes": 5492627216,
+    "interval": {
+      "sample": "GRCh38",
+      "contig": "chr5",
+      "start": 1245184,
+      "end": 1310720
+    },
+    "archive_bytes": 987840,
+    "archive_sha256": "3f8af7f829a21b6c2d787a2eac39cf5015a07425ea9a3e8449b4c8ef71b846ac",
+    "prepared_oracle_byte_identical": true,
+    "source_cache_build_wall_ms": 49075.061926,
+    "path_index_wall_ms": 42630.773922,
+    "construction_wall_ms": 2281.453759,
+    "located_positions": 8522,
+    "maximum_lf_steps": 1023,
+    "locate_wall_ms": 1486.906441,
+    "catalog_records": 53150,
+    "tile_pages": 4,
+    "groups": 1686,
+    "memberships": 4257,
+    "page_encoded_bytes": 734988,
+    "page_decoded_bytes": 1551866,
+    "descriptor_encoded_bytes": 3752,
+    "max_rss_kib": 660332,
+    "swaps": 0
+  },
+  "limitations": [
+    "Persistent source-cache v1 does not retain document-array support.",
+    "The optional extension is unregistered and not exposed by the public TypeScript API.",
+    "No archive-wide HPRC or 1000G membership construction was attempted.",
+    "No normative format change was merged."
+  ]
+}

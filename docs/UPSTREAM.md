@@ -46,6 +46,16 @@ an official borrowed/mmap or section-lazy API so this repository does not have
 to track upstream serialization details. It is now an interoperability and
 maintenance improvement, not a blocker for bounded production encoding.
 
+Named-path research still exposes an upstream opportunity, but it is no longer a
+local dependency. The local `/home/ard/projects/gbwt-rs` fork established the exact
+four-structure DA interpretation and bounded ordinary-locate oracle. The build crate
+now contains a focused construction-only implementation using the released `gbz` and
+`simple-sds` crates. Tiny, rice, and bounded HPRC direct encoder outputs are
+byte-identical to the fork/C++ prepared fixtures. Persistent source-cache v2 retains
+authenticated DA structures and the canonical path catalog. An upstream borrowed or
+owned locate API would reduce local serialization maintenance; it is not required by
+the encoder or decoder.
+
 ## JavaScript benchmark dependencies
 
 The private benchmark package uses `fzstd` 0.1.1 (MIT) through the public

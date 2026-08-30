@@ -35,6 +35,27 @@ pub struct SourceReferenceSeed {
     pub position: Pos,
 }
 
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SourcePathCatalogRecord {
+    pub path_id: u64,
+    #[serde(rename = "rawName")]
+    pub canonical_name: String,
+    pub sample: String,
+    pub contig: String,
+    pub haplotype: u64,
+    pub fragment: u64,
+    pub sense: u8,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct SourceLocatedPosition {
+    pub sequence_id: u64,
+    pub path_id: u64,
+    pub reversed: bool,
+    pub lf_steps: u64,
+}
+
 /// Source-side operations required by the record-preserving encoder.
 ///
 /// Implementations may keep a GBZ in memory or serve these requests from a
@@ -67,6 +88,29 @@ pub trait PangenomeSource: Sync {
     ///
     /// Returns an error for corrupt offsets or source I/O failures.
     fn packed_record(&self, packed_handle: usize) -> io::Result<Option<Vec<u8>>>;
+
+    /// Returns the canonical path-name catalog when source identity support is available.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when source metadata is corrupt or cannot be read.
+    fn path_catalog(&self) -> io::Result<Option<&[SourcePathCatalogRecord]>> {
+        Ok(None)
+    }
+
+    /// Locates a bounded batch of GBWT positions to their source sequence IDs.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error for invalid positions, missing/corrupt DA support, source I/O
+    /// failure, or when a position exceeds the LF-step limit.
+    fn locate_positions(
+        &self,
+        _positions: &[Pos],
+        _max_lf_steps: usize,
+    ) -> io::Result<Option<Vec<SourceLocatedPosition>>> {
+        Ok(None)
+    }
 }
 
 pub struct LoadedGbzSource<'a> {

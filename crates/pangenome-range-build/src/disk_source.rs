@@ -1,7 +1,14 @@
-use crate::source::{PangenomeSource, SourcePathIndex, SourceReferenceSeed};
+use crate::gbwt_locate::GbwtLocate;
+use crate::source::{
+    PangenomeSource, SourceLocatedPosition, SourcePathCatalogRecord, SourcePathIndex,
+    SourceReferenceSeed,
+};
 use gbz::bwt::Record;
 use gbz::headers::{GBWTPayload, GBZPayload, Header, SequencesPayload};
-use gbz::{FullPathName, GENERIC_SAMPLE, Metadata, Orientation, REFERENCE_SAMPLES_KEY, Tags};
+use gbz::{
+    FullPathName, GENERIC_HAPLOTYPE, GENERIC_SAMPLE, Metadata, Orientation, Pos,
+    REFERENCE_SAMPLES_KEY, Tags,
+};
 use sha2::{Digest, Sha256};
 use simple_sds::ops::{BitVec, Select};
 use simple_sds::serialize::Serialize;
@@ -22,9 +29,11 @@ const READ_BLOCK_BYTES: usize = 256 * 1024;
 const READ_CACHE_BYTES_PER_FILE: usize = 16 * 1024 * 1024;
 const READ_CACHE_SHARDS: usize = 16;
 const SOURCE_CACHE_MAGIC: &str = "pangenome-range-source-cache";
-const SOURCE_CACHE_VERSION: u32 = 1;
+const SOURCE_CACHE_VERSION: u32 = 2;
 const SOURCE_CACHE_MANIFEST: &str = "manifest.json";
 const SOURCE_PATH_INDEX_FILE: &str = "source-path-index.bin";
+const SOURCE_DA_SAMPLES_FILE: &str = "gbwt-da-samples.bin";
+const SOURCE_PATH_CATALOG_FILE: &str = "source-path-catalog.json";
 const SOURCE_PATH_INDEX_INTERVAL: usize = 1_000;
 const MAX_SOURCE_CACHE_MANIFEST_BYTES: u64 = 1024 * 1024;
 
@@ -53,6 +62,14 @@ pub struct SourceCacheManifest {
     pub path_index_samples: u64,
     pub path_index_bytes: u64,
     pub path_index_sha256: String,
+    pub da_samples_bytes: Option<u64>,
+    pub da_samples_sha256: Option<String>,
+    #[serde(default)]
+    pub path_catalog_records: u64,
+    #[serde(default)]
+    pub path_catalog_bytes: u64,
+    #[serde(default)]
+    pub path_catalog_sha256: String,
 }
 
 pub struct PersistentSourceCache {
@@ -97,6 +114,8 @@ pub struct DiskGbzSource {
     record_count: usize,
     sequence_count: usize,
     reference_seeds: Vec<SourceReferenceSeed>,
+    da_samples: Option<GbwtLocate>,
+    path_catalog: Vec<SourcePathCatalogRecord>,
     stats: DiskSourceStats,
     serialization_versions: [u32; 3],
     persistent: bool,
@@ -210,7 +229,7 @@ impl DiskGbzSource {
         };
         drop(record_index);
 
-        skip_serialized_u64_vector(&mut reader)?;
+        let da_samples = GbwtLocate::load(&mut reader)?;
         let metadata_elements = usize::load(&mut reader)?;
         if metadata_elements == 0 {
             return Err(invalid_data("GBZ metadata is required"));
@@ -248,6 +267,8 @@ impl DiskGbzSource {
         let first_node = alphabet_offset
             .checked_add(1)
             .ok_or_else(|| invalid_data("GBWT first-node overflow"))?;
+        let path_catalog =
+            build_path_catalog(&metadata, &gbwt_tags, gbwt_header.payload().sequences / 2)?;
         let mut source = Self {
             record_offsets: BlockCache::open(&record_offsets_path)?,
             records: BlockCache::open(&records_path)?,
@@ -258,6 +279,8 @@ impl DiskGbzSource {
             record_count,
             sequence_count,
             reference_seeds: Vec::new(),
+            da_samples,
+            path_catalog,
             stats: DiskSourceStats {
                 cache_directory: cache_directory.to_path_buf(),
                 record_count: usize_to_u64(record_count)?,
@@ -380,6 +403,88 @@ impl DiskGbzSource {
             self.sequence_count,
         )
     }
+
+    fn position_record_id(&self, position: Pos) -> Option<usize> {
+        if position.node == gbz::ENDMARKER {
+            Some(0)
+        } else if position.node >= self.first_node {
+            let record_id = position.node.checked_sub(self.alphabet_offset)?;
+            (record_id < self.record_count).then_some(record_id)
+        } else {
+            None
+        }
+    }
+
+    fn locate_batch(
+        &self,
+        positions: &[Pos],
+        max_lf_steps: usize,
+    ) -> io::Result<Vec<SourceLocatedPosition>> {
+        let da = self.da_samples.as_ref().ok_or_else(|| {
+            invalid_data("GBWT has no parsed document-array samples for path locate")
+        })?;
+        let mut current = positions.to_vec();
+        let mut result = vec![None; positions.len()];
+        for lf_steps in 0..=max_lf_steps {
+            let mut by_record = std::collections::BTreeMap::<usize, Vec<usize>>::new();
+            for (index, position) in current.iter().copied().enumerate() {
+                if result[index].is_some() {
+                    continue;
+                }
+                let record_id = self.position_record_id(position).ok_or_else(|| {
+                    invalid_data(format!(
+                        "invalid GBWT locate position {}:{}",
+                        position.node, position.offset
+                    ))
+                })?;
+                if let Some(sequence_id) = da.try_locate(record_id, position.offset) {
+                    let (path_id, orientation) = gbz::support::decode_path(sequence_id);
+                    result[index] = Some(SourceLocatedPosition {
+                        sequence_id: usize_to_u64(sequence_id)?,
+                        path_id: usize_to_u64(path_id)?,
+                        reversed: orientation == Orientation::Reverse,
+                        lf_steps: usize_to_u64(lf_steps)?,
+                    });
+                } else {
+                    by_record.entry(record_id).or_default().push(index);
+                }
+            }
+            if by_record.is_empty() {
+                return result
+                    .into_iter()
+                    .map(|item| item.ok_or_else(|| invalid_data("missing GBWT locate result")))
+                    .collect();
+            }
+            if lf_steps == max_lf_steps {
+                return Err(invalid_data(format!(
+                    "GBWT locate exceeded the bounded limit of {max_lf_steps} LF steps"
+                )));
+            }
+            for (record_id, indices) in by_record {
+                if record_id == 0 {
+                    return Err(invalid_data(
+                        "unsampled GBWT endmarker reached during path locate",
+                    ));
+                }
+                let bytes = self
+                    .record_by_id(record_id)?
+                    .ok_or_else(|| invalid_data("GBWT locate record is missing"))?;
+                let node = record_id
+                    .checked_add(self.alphabet_offset)
+                    .ok_or_else(|| invalid_data("GBWT locate node overflow"))?;
+                let record = Record::new(node, &bytes)
+                    .ok_or_else(|| invalid_data("GBWT locate record is invalid"))?;
+                let successors = record.decompress();
+                for index in indices {
+                    let offset = current[index].offset;
+                    current[index] = *successors
+                        .get(offset)
+                        .ok_or_else(|| invalid_data("GBWT locate offset is outside its record"))?;
+                }
+            }
+        }
+        unreachable!("bounded LF loop returns on success or limit")
+    }
 }
 
 impl PangenomeSource for DiskGbzSource {
@@ -420,6 +525,18 @@ impl PangenomeSource for DiskGbzSource {
         let record_id = packed_handle - self.alphabet_offset;
         let bytes = self.record_by_id(record_id)?;
         Ok(bytes.filter(|bytes| Record::new(0, bytes).is_some()))
+    }
+
+    fn path_catalog(&self) -> io::Result<Option<&[SourcePathCatalogRecord]>> {
+        Ok((!self.path_catalog.is_empty()).then_some(self.path_catalog.as_slice()))
+    }
+
+    fn locate_positions(
+        &self,
+        positions: &[Pos],
+        max_lf_steps: usize,
+    ) -> io::Result<Option<Vec<SourceLocatedPosition>>> {
+        self.locate_batch(positions, max_lf_steps).map(Some)
     }
 }
 
@@ -539,6 +656,24 @@ fn write_source_cache_manifest(
     let path_index = SourcePathIndex::new(source, SOURCE_PATH_INDEX_INTERVAL)?;
     let path_index_bytes = path_index.encode()?;
     write_new_integrity_file(&temporary.join(SOURCE_PATH_INDEX_FILE), &path_index_bytes)?;
+    let (da_samples_bytes, da_samples_sha256) = if let Some(da_samples) = &source.da_samples {
+        let path = temporary.join(SOURCE_DA_SAMPLES_FILE);
+        let mut writer = IntegrityFileWriter::create(&path)?;
+        da_samples.save(&mut writer)?;
+        writer.finish()?;
+        (
+            Some(fs::metadata(&path)?.len()),
+            Some(hex_digest(&file_sha256(&path)?)),
+        )
+    } else {
+        (None, None)
+    };
+    let path_catalog_path = temporary.join(SOURCE_PATH_CATALOG_FILE);
+    let mut path_catalog_writer = IntegrityFileWriter::create(&path_catalog_path)?;
+    serde_json::to_writer(&mut path_catalog_writer, &source.path_catalog)
+        .map_err(|error| invalid_data(format!("cannot encode source path catalog: {error}")))?;
+    path_catalog_writer.finish()?;
+    let path_catalog_bytes = fs::metadata(&path_catalog_path)?.len();
     let stats = source.stats();
     let manifest = SourceCacheManifest {
         magic: SOURCE_CACHE_MAGIC.into(),
@@ -563,6 +698,11 @@ fn write_source_cache_manifest(
         path_index_samples: usize_to_u64(path_index.sample_count())?,
         path_index_bytes: usize_to_u64(path_index_bytes.len())?,
         path_index_sha256: hex_digest(&sha256_bytes(&path_index_bytes)),
+        da_samples_bytes,
+        da_samples_sha256,
+        path_catalog_records: usize_to_u64(source.path_catalog.len())?,
+        path_catalog_bytes,
+        path_catalog_sha256: hex_digest(&file_sha256(&path_catalog_path)?),
     };
     let manifest_bytes = serde_json::to_vec_pretty(&manifest)
         .map_err(|error| invalid_data(format!("cannot encode source cache manifest: {error}")))?;
@@ -622,6 +762,12 @@ fn read_source_cache_manifest(target: &Path) -> io::Result<SourceCacheManifest> 
     }
     let manifest: SourceCacheManifest = serde_json::from_slice(&fs::read(&manifest_path)?)
         .map_err(|error| invalid_data(format!("cannot decode source cache manifest: {error}")))?;
+    if manifest.cache_format_version != SOURCE_CACHE_VERSION {
+        return Err(invalid_data(format!(
+            "source cache format {} is unsupported; rebuild it as format {}",
+            manifest.cache_format_version, SOURCE_CACHE_VERSION
+        )));
+    }
     validate_manifest_files(target, &manifest)?;
     Ok(manifest)
 }
@@ -686,6 +832,33 @@ fn open_persistent_source_cache_with_manifest(
         .map_err(|_| invalid_data("cached record count does not fit usize"))?;
     let sequence_count = usize::try_from(manifest.sequence_count)
         .map_err(|_| invalid_data("cached sequence count does not fit usize"))?;
+    let da_samples = if manifest.da_samples_bytes.is_some() {
+        let mut reader = BufReader::new(File::open(target.join(SOURCE_DA_SAMPLES_FILE))?);
+        let locate = GbwtLocate::load_cache(&mut reader)?;
+        let mut trailing = [0_u8; 1];
+        if reader.read(&mut trailing)? != 0 {
+            return Err(invalid_data(
+                "cached GBWT document array has trailing bytes",
+            ));
+        }
+        Some(locate)
+    } else {
+        None
+    };
+    let path_catalog: Vec<SourcePathCatalogRecord> = serde_json::from_reader(BufReader::new(
+        File::open(target.join(SOURCE_PATH_CATALOG_FILE))?,
+    ))
+    .map_err(|error| invalid_data(format!("cannot decode cached source path catalog: {error}")))?;
+    if usize_to_u64(path_catalog.len())? != manifest.path_catalog_records
+        || path_catalog
+            .iter()
+            .enumerate()
+            .any(|(index, record)| record.path_id != index as u64)
+    {
+        return Err(invalid_data(
+            "cached source path catalog differs from its manifest",
+        ));
+    }
     let component_open_started = Instant::now();
     let source = DiskGbzSource {
         record_offsets: BlockCache::open(&target.join("records.offsets"))?,
@@ -699,6 +872,8 @@ fn open_persistent_source_cache_with_manifest(
         record_count,
         sequence_count,
         reference_seeds,
+        da_samples,
+        path_catalog,
         stats: DiskSourceStats {
             cache_directory: target.to_path_buf(),
             record_count: manifest.record_count,
@@ -740,8 +915,15 @@ fn validate_manifest_files(target: &Path, manifest: &SourceCacheManifest) -> io:
         || manifest.sequence_count == 0
         || manifest.path_index_interval == 0
         || manifest.path_index_paths == 0
+        || manifest.path_catalog_bytes == 0
         || parse_hex_digest(&manifest.reference_metadata_sha256).is_none()
         || parse_hex_digest(&manifest.path_index_sha256).is_none()
+        || parse_hex_digest(&manifest.path_catalog_sha256).is_none()
+        || manifest.da_samples_bytes.is_some() != manifest.da_samples_sha256.is_some()
+        || manifest
+            .da_samples_sha256
+            .as_deref()
+            .is_some_and(|digest| parse_hex_digest(digest).is_none())
     {
         return Err(invalid_data("invalid persistent source cache manifest"));
     }
@@ -751,6 +933,7 @@ fn validate_manifest_files(target: &Path, manifest: &SourceCacheManifest) -> io:
         ("sequences.offsets", manifest.sequence_offset_bytes),
         ("sequences.data", manifest.sequence_bytes),
         (SOURCE_PATH_INDEX_FILE, manifest.path_index_bytes),
+        (SOURCE_PATH_CATALOG_FILE, manifest.path_catalog_bytes),
     ] {
         if fs::metadata(target.join(name))?.len() != expected {
             return Err(invalid_data(format!(
@@ -767,6 +950,36 @@ fn validate_manifest_files(target: &Path, manifest: &SourceCacheManifest) -> io:
                 "persistent source cache component {name} integrity length mismatch"
             )));
         }
+    }
+    if let Some(expected) = manifest.da_samples_bytes {
+        let path = target.join(SOURCE_DA_SAMPLES_FILE);
+        if fs::metadata(&path)?.len() != expected {
+            return Err(invalid_data(
+                "persistent source cache DA-samples length mismatch",
+            ));
+        }
+        let integrity_path = block_integrity_path(&path)?;
+        let expected_integrity_bytes = expected
+            .div_ceil(usize_to_u64(READ_BLOCK_BYTES)?)
+            .checked_mul(16)
+            .ok_or_else(|| invalid_data("source cache integrity length overflow"))?;
+        if fs::metadata(integrity_path)?.len() != expected_integrity_bytes {
+            return Err(invalid_data(
+                "persistent source cache DA-samples integrity length mismatch",
+            ));
+        }
+        if hex_digest(&file_sha256(&path)?) != manifest.da_samples_sha256.as_deref().unwrap() {
+            return Err(invalid_data(
+                "persistent source cache DA-samples checksum mismatch",
+            ));
+        }
+    }
+    if hex_digest(&file_sha256(&target.join(SOURCE_PATH_CATALOG_FILE))?)
+        != manifest.path_catalog_sha256
+    {
+        return Err(invalid_data(
+            "persistent source cache path-catalog checksum mismatch",
+        ));
     }
     let expected_record_offsets = manifest
         .record_count
@@ -1011,24 +1224,6 @@ fn stream_packed_byte_vector<R: Read>(
     writer.write_all(&output_buffer[..output_len])?;
     writer.finish()?;
     usize_to_u64(len)
-}
-
-fn skip_serialized_u64_vector<R: Read>(reader: &mut BufReader<R>) -> io::Result<()> {
-    let elements = usize::load(reader)?;
-    let bytes = elements
-        .checked_mul(std::mem::size_of::<u64>())
-        .ok_or_else(|| invalid_data("serialized u64 vector length overflow"))?;
-    let copied = io::copy(
-        &mut reader.by_ref().take(usize_to_u64(bytes)?),
-        &mut io::sink(),
-    )?;
-    if copied != usize_to_u64(bytes)? {
-        return Err(io::Error::new(
-            io::ErrorKind::UnexpectedEof,
-            "serialized vector is truncated",
-        ));
-    }
-    Ok(())
 }
 
 fn skip_padding<R: Read>(reader: &mut BufReader<R>, bytes: usize) -> io::Result<()> {
@@ -1406,6 +1601,61 @@ fn invalid_data(message: impl Into<String>) -> io::Error {
     io::Error::new(io::ErrorKind::InvalidData, message.into())
 }
 
+fn build_path_catalog(
+    metadata: &Metadata,
+    tags: &Tags,
+    path_count: usize,
+) -> io::Result<Vec<SourcePathCatalogRecord>> {
+    if !metadata.has_path_names()
+        || !metadata.has_sample_names()
+        || !metadata.has_contig_names()
+        || metadata.paths() != path_count
+    {
+        return Ok(Vec::new());
+    }
+    let references = tags
+        .get(REFERENCE_SAMPLES_KEY)
+        .map_or("", String::as_str)
+        .split_whitespace()
+        .collect::<BTreeSet<_>>();
+    let mut result = Vec::with_capacity(path_count);
+    for path_id in 0..path_count {
+        let name = metadata
+            .path(path_id)
+            .ok_or_else(|| invalid_data(format!("missing metadata for source path {path_id}")))?;
+        let sample = metadata.sample_name(name.sample());
+        let contig = metadata.contig_name(name.contig());
+        let haplotype = if sample == GENERIC_SAMPLE {
+            u64::from(GENERIC_HAPLOTYPE)
+        } else {
+            usize_to_u64(name.phase())?
+        };
+        let fragment = usize_to_u64(name.fragment())?;
+        let mut canonical_name = format!("{sample}#{haplotype}#{contig}");
+        if fragment != 0 {
+            write!(&mut canonical_name, "#fragment={fragment}")
+                .map_err(|_| invalid_data("cannot format source path name"))?;
+        }
+        let sense = if sample == GENERIC_SAMPLE {
+            1
+        } else if references.contains(sample.as_str()) {
+            2
+        } else {
+            3
+        };
+        result.push(SourcePathCatalogRecord {
+            path_id: usize_to_u64(path_id)?,
+            canonical_name,
+            sample,
+            contig,
+            haplotype,
+            fragment,
+            sense,
+        });
+    }
+    Ok(result)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1415,7 +1665,17 @@ mod tests {
     };
     use crate::source::{LoadedGbzSource, SourcePathIndex};
     use crate::test_support::tiny_gbz_fixture;
-    use gbz::GBZ;
+    use gbz::{GBWT, GBZ, MetadataBuilder};
+
+    #[test]
+    fn incomplete_path_metadata_does_not_create_biological_labels() {
+        let metadata = Metadata::from(MetadataBuilder::new());
+        assert!(
+            build_path_catalog(&metadata, &Tags::new(), 1)
+                .unwrap()
+                .is_empty()
+        );
+    }
 
     #[test]
     fn disk_source_matches_loaded_records_sequences_and_references() {
@@ -1454,6 +1714,39 @@ mod tests {
         );
         drop(disk);
         assert!(!cache_directory.exists());
+    }
+
+    #[test]
+    fn bounded_disk_locate_matches_brute_force_sequence_enumeration() {
+        let input = tiny_gbz_fixture();
+        let disk = DiskGbzSource::build(&input, &std::env::temp_dir()).unwrap();
+        let graph: GBZ = simple_sds::serialize::load_from(&input).unwrap();
+        let index: &GBWT = graph.as_ref();
+        let mut positions = Vec::new();
+        let mut expected = Vec::new();
+        for sequence_id in 0..index.sequences() {
+            let mut position = index.start(sequence_id);
+            while let Some(value) = position {
+                positions.push(value);
+                let (path_id, orientation) = gbz::support::decode_path(sequence_id);
+                expected.push(SourceLocatedPosition {
+                    sequence_id: usize_to_u64(sequence_id).unwrap(),
+                    path_id: usize_to_u64(path_id).unwrap(),
+                    reversed: orientation == Orientation::Reverse,
+                    lf_steps: 0,
+                });
+                position = index.forward(value);
+            }
+        }
+        let located = disk.locate_batch(&positions, 1_000_000).unwrap();
+        assert_eq!(located.len(), expected.len());
+        for (actual, expected) in located.iter().zip(&expected) {
+            assert_eq!(actual.sequence_id, expected.sequence_id);
+            assert_eq!(actual.path_id, expected.path_id);
+            assert_eq!(actual.reversed, expected.reversed);
+            assert!(actual.lf_steps <= 1_000_000);
+        }
+        assert!(located.iter().any(|item| item.lf_steps > 0));
     }
 
     #[test]
@@ -1522,6 +1815,10 @@ mod tests {
 
         let reopened = open_persistent_source_cache(&input, &target).unwrap();
         assert_eq!(reopened.manifest.source_gbz_bytes, 73_920);
+        assert!(reopened.manifest.da_samples_bytes.is_some());
+        assert_eq!(reopened.manifest.path_catalog_records, 169);
+        assert!(reopened.source.da_samples.is_some());
+        assert_eq!(reopened.source.path_catalog().unwrap().unwrap().len(), 169);
         assert!(reopened.source.sequence(1).unwrap().is_some());
         drop(reopened);
 

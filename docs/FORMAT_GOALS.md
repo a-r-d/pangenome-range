@@ -23,9 +23,16 @@ Candidate work should pursue and measure:
 - explicit bounds for collapsed graph regions and malformed inputs.
 
 Open research questions include compressed-record sharing, acceptable archive
-expansion, optional sidecars, and the byte/construction/query cost of true sample
-continuation identity. Each answer belongs in a named, correctness-gated
-experiment.
+expansion, optional sidecars, and archive-wide construction/query cost for named
+identity. Each answer belongs in a named, correctness-gated experiment.
+
+Optional named source-path membership is now a registered v1 feature. Direct bounded
+construction, persistent-cache reuse, Rust validation, and the public TypeScript API
+are implemented. Fixed membership-directory pages scale with graph directory pages,
+not a root-wide tile list. The feature preserves tile-local GBWT source identity; it
+does not redefine anonymous graph-query traversals as globally stitchable samples.
+Whole-HPRC construction remains unmeasured and 1000G remains an explicit memory-safety
+exclusion, not an inferred result.
 
 While the project remains pre-release, an incompatible format change replaces
 v1 in place and regenerates all fixtures. It does not add a compatibility
