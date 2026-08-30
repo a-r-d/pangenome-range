@@ -1,5 +1,21 @@
 # Optimization log
 
+## 2026-08-30: bounded Poplar chromosome 19 named-membership proof
+
+The ORNL Populus trichocarpa release supplied a smaller Chr16 canary and a complete
+Chr19 graph with embedded GBWT DA samples. The two-tile canary passed first at 89,784
+KiB peak RSS. A full 16,626,325-base Chr19 encode then produced 1,015 tiles, 2,213
+catalog paths, 97,272 groups, and 183,057 membership records. It peaked at 170,772
+KiB RSS under `MemoryMax=4G` and `MemorySwapMax=0`; full reconstruction passed with a
+512 MiB validation admission budget. Locate took 42.84 s, observed at most 1,023 LF
+steps, and remained below the 8,192-step guard.
+
+The dense demo window `Nisqually-1#Chr19:6291456-6324224` agrees with the source
+oracle and exposes 89 paths across 45 sample labels. Its cold identity add-on is
+38,302 bytes in four actual waves. This is additional plant-genome evidence, not a
+1000G scale substitute. The derived archive remains local because the public source
+does not state redistribution terms.
+
 ## 2026-08-29: production named-membership reader cost
 
 The registered `path-members-v1-` reader adds strict descriptor, aligned-directory,
@@ -20,10 +36,12 @@ Final-layout anonymous/named controls measured a 64-byte graph-only read increme
 from the additional registered extension entry, with identical canonical hashes and
 two dependency rounds. With the source-provenance cross-check included, identity-aware
 rice fetched 12,299 membership/provenance plus 10,586 catalog bytes; HPRC TERT fetched
-50,081 plus 40,105 bytes. The current layout needs
-two serial membership rounds and one catalog round after graph decoding, so it does
-not meet the aspirational single-extra-round target. This is retained as the reason
-the identity API is experimental rather than described as stable.
+50,081 plus 40,105 bytes. Request traces now retain the actual one-based dependency
+group instead of inferring rounds from layer labels. HPRC uses four cold identity
+waves: descriptor plus provenance, membership directory, four parallel tile pages,
+and three parallel catalog pages. Rice uses five because its five catalog pages cross
+the bounded four-page batch limit. Neither meets the aspirational single-extra-round
+target, so the identity API remains experimental.
 
 This log records failed or incomplete performance experiments as first-class
 evidence. A run belongs here when it changes what we believe about the encoder,
@@ -1213,6 +1231,7 @@ wall with no observed peak increase beyond the anonymous run's 653,596 KiB. The
 fixed catalog dominates tiny bounded archives. Dividing those bounded deltas by a
 retained whole archive was rejected as an invalid projection: the mirrored directory
 alone costs one 4 KiB page per graph directory page, before tile membership pages and
-catalog data. Archive-wide named HPRC storage remains unmeasured. The user explicitly
-accepted the 1000G exclusion after the earlier memory failure, and the absence record
-does not infer a 1000G result.
+catalog data. Archive-wide named HPRC storage remains unmeasured. The user made the
+1000G pilot a permanent operational resource-safety exclusion after the earlier HPRC
+`vg` r-index OOM. The current embedded-DA encoder was not attempted on 1000G, and the
+absence record does not infer a direct-encoder result.

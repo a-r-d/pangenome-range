@@ -1,0 +1,35 @@
+{
+  "schema_version": 1,
+  "status": "passed-whole-chromosome-local-not-published",
+  "canary": {
+    "chromosome": "Chr16",
+    "tiles": 2,
+    "catalog_paths": 1111,
+    "groups": 399,
+    "memberships": 780,
+    "peak_rss_kib": 89784,
+    "maximum_lf_steps": 1023
+  },
+  "whole_chr19": {
+    "tiles": 1015,
+    "catalog_paths": 2213,
+    "groups": 97272,
+    "memberships": 183057,
+    "occurrence_weight": 183061,
+    "peak_rss_kib": 170772,
+    "maximum_lf_steps": 1023,
+    "full_validation_passed": true
+  },
+  "demo_interval": {
+    "start": 6291456,
+    "end": 6324224,
+    "source_oracle_passed": true,
+    "canonical_hash": "8fac6dedb14fdca24ed68659997cea9662896033b15e047ecd8a732fdc80e5cd",
+    "identity_extra_bytes": 38302,
+    "identity_dependency_rounds": 4,
+    "unique_paths": 89,
+    "unique_samples": 45
+  },
+  "publication_authorized": false,
+  "population_scale_replacement_claim": false
+}

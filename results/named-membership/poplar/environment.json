@@ -1,0 +1,11 @@
+{
+  "schema_version": 1,
+  "host": "apollo",
+  "os": "Linux 6.17.0-41-generic x86_64",
+  "node": "v24.16.0",
+  "pnpm": "11.24.0",
+  "cargo": "1.97.1",
+  "rustc": "1.97.1",
+  "repository_head": "bb6d68c036b22e76f8a383689a9d63a43ad2baf0",
+  "resource_enforcement": "systemd user transient units with MemoryMax=4G and MemorySwapMax=0"
+}

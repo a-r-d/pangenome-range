@@ -32,6 +32,9 @@ function requestRows(layer, trace) {
     index,
     offset: range.offset.toString(),
     length: range.length,
+    ...(range.dependencyGroup === undefined
+      ? {}
+      : { dependencyGroup: range.dependencyGroup }),
   }));
 }
 

@@ -52,6 +52,7 @@ watch(
     group.value = undefined;
     paths.value = [];
     error.value = "";
+    loading.value = false;
     emit("highlight", undefined);
     if (
       archive === undefined ||

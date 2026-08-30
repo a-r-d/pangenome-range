@@ -48,10 +48,12 @@ multiplicity. Exact controls, checksums, ranges, timings, and limitations are re
 in `results/named-membership/`.
 
 Graph-only canonical hashes and two dependency rounds are unchanged. The additional
-registered extension entry adds 64 fetched bytes. The current lazy identity path
-needs two serial membership rounds followed by one catalog round, missing the
-aspirational single-extra-round target. That measured boundary keeps the feature
-experimental rather than stable.
+registered extension entry adds 64 fetched bytes. Explicit source-observed dependency
+groups show four cold identity waves for HPRC: descriptor plus provenance,
+membership directory, parallel tile pages, and parallel catalog pages. Rice needs a
+second catalog batch and therefore five waves. That measured boundary misses the
+aspirational single-extra-round target and keeps the feature experimental rather than
+stable.
 
 Population, subpopulation, cultivar, country, and phenotype metadata are deliberately
 absent from the core schema. This preview exposes the source sample key for a
@@ -67,9 +69,16 @@ Rust validation and the TypeScript identity reader require archive provenance me
 and reject a source SHA-256 mismatch across the two extensions. Membership decoding
 has a separate 250,000-record per-group and per-tile browser-safety bound.
 
-The user explicitly accepts the 1000G exclusion after the earlier memory failure. No
-1000G named-membership overhead, time, or memory claim is inferred. Archive-wide HPRC
-construction cost also remains an operational measurement, not a correctness blocker.
+The user makes 1000G a permanent operational exclusion after the earlier HPRC `vg`
+r-index OOM. The current embedded-DA encoder was not attempted on 1000G, so no
+5,008-haplotype overhead, time, memory, success, or failure claim is inferred.
+Archive-wide HPRC construction cost also remains an operational measurement, not a
+correctness blocker.
+
+A later local Populus trichocarpa Chr19 run adds whole-chromosome plant evidence:
+1,015 tiles passed full reconstruction under a 4 GiB, zero-swap cap at 170,772 KiB
+peak RSS. It does not replace 1000G scale evidence. Its derived archive remains local
+until upstream redistribution terms are confirmed.
 
 No change was merged upstream while proving the experiment; this ADR records the
 local productionization decision and the required regeneration of older research

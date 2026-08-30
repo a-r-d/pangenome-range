@@ -66,6 +66,12 @@ const riceArchiveUrl =
       | string
       | undefined
   )?.trim() ?? "";
+const poplarArchiveUrl =
+  (
+    import.meta.env.VITE_PANGENOME_RANGE_DEMO_POPLAR_ARCHIVE_URL as
+      | string
+      | undefined
+  )?.trim() ?? "";
 const configuredDefaultLocus =
   (
     import.meta.env.VITE_PANGENOME_RANGE_DEMO_DEFAULT_LOCUS as
@@ -148,6 +154,7 @@ const selectedPatternTile = computed(() => {
 const configuredLabel = "HPRC v2.1 + GENCODE v50 (GRCh38 / CHM13)";
 const populationLabel = "1000 Genomes hs38d1 (NA19239 haplotype 0)";
 const riceLabel = "PPanG rice chromosome 6 (NATELBORO / Xa7)";
+const poplarLabel = "Populus trichocarpa chromosome 19 (Nisqually-1)";
 const demoSources = computed<readonly ArchiveSourceSelection[]>(() => {
   const sources: ArchiveSourceSelection[] = [];
   if (configuredArchiveUrl.length > 0) {
@@ -178,6 +185,16 @@ const demoSources = computed<readonly ArchiveSourceSelection[]>(() => {
       key: `url:${riceArchiveUrl}`,
       description:
         "PPanG Minigraph-Cactus chromosome 6 anchored on NATELBORO, with curated Xa7 search. Traversals are anonymous weighted tile-local patterns, not named accessions.",
+    });
+  }
+  if (poplarArchiveUrl.length > 0) {
+    sources.push({
+      id: "poplar",
+      source: poplarArchiveUrl,
+      label: poplarLabel,
+      key: `url:${poplarArchiveUrl}`,
+      description:
+        "Chromosome 19 graph from 88 phased assemblies across 44 genotypes. Source-path names are available, but no sex phenotype labels are attached.",
     });
   }
   sources.push({
@@ -322,6 +339,21 @@ async function initialRegion(opened: PangenomeArchive): Promise<RegionQuery> {
   const first = references.value[0];
   if (first === undefined)
     throw new Error("Archive contains no reference paths.");
+  if (activeSourceId.value === "poplar") {
+    const poplarReference = references.value.find(
+      (reference) =>
+        reference.sample === "Nisqually-1" && reference.contig === "Chr19",
+    );
+    if (poplarReference !== undefined) {
+      return {
+        sample: poplarReference.sample,
+        contig: poplarReference.contig,
+        start: Math.max(poplarReference.start, 6_291_456),
+        end: Math.min(poplarReference.end, 6_324_224),
+        context: 100,
+      };
+    }
+  }
   if (opened.capabilities().namedLoci) {
     try {
       const result = await opened.searchLoci({
@@ -825,6 +857,7 @@ function sourceFromUrl(): ArchiveSourceSelection {
     demoSources.value.find((source) => source.id === "hprc") ??
     demoSources.value.find((source) => source.id === "1000g") ??
     demoSources.value.find((source) => source.id === "rice") ??
+    demoSources.value.find((source) => source.id === "poplar") ??
     demoSources.value[0];
   if (fallback === undefined)
     throw new Error("No demo archive source is available.");

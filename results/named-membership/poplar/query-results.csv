@@ -1,0 +1,3 @@
+mode,graph_bytes,graph_ranges,graph_rounds,canonical_hash,membership_bytes,membership_ranges,membership_rounds,catalog_bytes,catalog_ranges,catalog_rounds,membership_decode_ms,catalog_decode_ms
+named_graph_only,271835,3,3,8fac6dedb14fdca24ed68659997cea9662896033b15e047ecd8a732fdc80e5cd,0,0,0,0,0,0,0,0
+named_identity,271835,3,3,8fac6dedb14fdca24ed68659997cea9662896033b15e047ecd8a732fdc80e5cd,15413,5,3,22889,3,1,2.771331,8.686585

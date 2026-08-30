@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "source_gbz_bytes": 125422184,
+  "archive_bytes": 75902344,
+  "archive_sha256": "baf33e2e181efa4485f8ea2a253b24e4bda08ef5725c4ddf9585b495ddafe6ae",
+  "source_to_archive_ratio": 0.6051747910879944,
+  "extension_encoded_bytes": 2622392,
+  "extension_decoded_bytes": 4981502,
+  "path_membership_page_encoded_bytes": 2620548,
+  "path_membership_descriptor_encoded_bytes": 336,
+  "anonymous_control_available": false,
+  "named_increment_percentage": null,
+  "publication_authorized": false
+}

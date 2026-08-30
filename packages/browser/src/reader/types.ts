@@ -241,6 +241,8 @@ export interface FeatureRequestRange {
   readonly offset: bigint;
   readonly length: number;
   readonly layer: "extension-descriptor" | "extension-page";
+  /** One-based serial request wave within the enclosing feature operation. */
+  readonly dependencyGroup: number;
 }
 
 export interface FeatureQueryTrace {

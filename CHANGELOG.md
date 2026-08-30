@@ -4,6 +4,18 @@
 
 ### Changed
 
+- Fixed named-membership request-wave accounting and scheduling. Traces now retain
+  the actual dependency group for each range; membership directories, tile pages,
+  and catalog pages use shared bounded batches in `pathMembership()` and
+  `queryWithPathMembership()`. A delayed range-source test observes all same-wave
+  tile reads starting before any completes. The small path-inspector early-return
+  loading-state bug is also fixed. The default locate ceiling is reduced from one
+  million to 8,192 LF steps; callers may explicitly raise it for unusual inputs.
+- Added a memory-capped Populus trichocarpa corpus recipe and local whole-Chr19
+  named-membership evidence. The 1,015-tile archive passed full reconstruction and a
+  source-oracle demo interval at 170,772 KiB peak RSS under 4 GiB/zero-swap limits.
+  Pages wiring is opt-in through `PANGENOME_RANGE_DEMO_POPLAR_ARCHIVE_URL`; the
+  archive is not published because upstream redistribution terms are not stated.
 - Productionized optional named-path membership as registered `path-members-v1-`.
   `--path-membership` performs bounded tile-batched LF locate in the disk encoder;
   scalable fixed 4 KiB membership directories mirror graph directory pages instead
@@ -30,8 +42,9 @@
   establish archive-wide storage overhead. Graph-only hashes and
   dependency rounds were unchanged, with a measured 64-byte extension-directory
   increment. Exact evidence is retained under `results/named-membership/`.
-  The 1000G pilot is an explicit user-accepted resource-safety exclusion after the
-  earlier HPRC `.ri` OOM; no 1000G membership measurement is inferred.
+  The 1000G pilot is a permanent user-accepted operational resource-safety
+  exclusion after the earlier HPRC `vg` r-index OOM. The current embedded-DA
+  encoder was not attempted on 1000G; no 1000G membership result is inferred.
   Source-cache v1 directories are intentionally unsupported and must be rebuilt.
   Cross-extension validation now requires the membership identity-source SHA-256 to
   equal archive provenance, and membership materialization is capped separately at

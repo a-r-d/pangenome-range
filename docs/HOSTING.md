@@ -110,16 +110,24 @@ repository variable to `VITE_PANGENOME_RANGE_DEMO_RICE_ARCHIVE_URL`.
 ## Connect the deployed demo
 
 The checked-in Pages workflow supplies the canonical HPRC, 1000 Genomes, and
-rice URLs. Repository variables named `PANGENOME_RANGE_DEMO_ARCHIVE_URL`,
+rice URLs. Poplar is an opt-in source because its derived-data redistribution
+terms are not yet confirmed. Repository variables named `PANGENOME_RANGE_DEMO_ARCHIVE_URL`,
 `PANGENOME_RANGE_DEMO_1000G_ARCHIVE_URL`, and
-`PANGENOME_RANGE_DEMO_RICE_ARCHIVE_URL` may replace them with other immutable
-HTTPS `.pngr` URLs without a code change. The workflow maps them to:
+`PANGENOME_RANGE_DEMO_RICE_ARCHIVE_URL` may replace the defaults with other immutable
+HTTPS `.pngr` URLs without a code change. `PANGENOME_RANGE_DEMO_POPLAR_ARCHIVE_URL`
+adds the locally validated Chr19 archive only after data-use approval. The workflow
+maps them to:
 
 ```text
 VITE_PANGENOME_RANGE_DEMO_ARCHIVE_URL
 VITE_PANGENOME_RANGE_DEMO_1000G_ARCHIVE_URL
 VITE_PANGENOME_RANGE_DEMO_RICE_ARCHIVE_URL
+VITE_PANGENOME_RANGE_DEMO_POPLAR_ARCHIVE_URL
 ```
+
+The local Poplar candidate is 75,902,344 bytes with SHA-256
+`baf33e2e181efa4485f8ea2a253b24e4bda08ef5725c4ddf9585b495ddafe6ae`.
+Do not copy it to the public origin until the review in `data/poplar/` is resolved.
 
 The deployed demo selects **Configured external archive** by default while
 retaining the deterministic bundled fixture, custom URL, and local-file

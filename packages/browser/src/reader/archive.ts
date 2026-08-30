@@ -274,8 +274,7 @@ interface MutableQueryTrace {
 
 interface MutableFeatureTrace {
   requestRanges: FeatureRequestRange[];
-  dependencyRounds: number;
-  requestedLayers: Set<FeatureRequestRange["layer"]>;
+  dependencyGroups: Set<number>;
   cacheHits: number;
   integrityMs: number;
   integrityIntervals: TimeInterval[];
@@ -294,8 +293,7 @@ interface TimeInterval {
 function featureTraceState(): MutableFeatureTrace {
   return {
     requestRanges: [],
-    dependencyRounds: 0,
-    requestedLayers: new Set(),
+    dependencyGroups: new Set(),
     cacheHits: 0,
     integrityMs: 0,
     integrityIntervals: [],
@@ -309,7 +307,7 @@ function featureTraceState(): MutableFeatureTrace {
 
 function finishFeatureTrace(state: MutableFeatureTrace): FeatureQueryTrace {
   return {
-    dependencyRounds: state.dependencyRounds,
+    dependencyRounds: state.dependencyGroups.size,
     requestRanges: state.requestRanges,
     totalBytes: state.requestRanges.reduce(
       (total, range) => total + range.length,
@@ -325,6 +323,11 @@ function finishFeatureTrace(state: MutableFeatureTrace): FeatureQueryTrace {
     decodeMs: intervalUnionMs(state.decodeIntervals),
     pagesAvoidedByLimit: state.pagesAvoidedByLimit,
   };
+}
+
+function nextFeatureDependencyGroup(trace?: MutableFeatureTrace): number {
+  if (trace === undefined || trace.dependencyGroups.size === 0) return 1;
+  return Math.max(...trace.dependencyGroups) + 1;
 }
 
 function traceState(
@@ -1372,12 +1375,16 @@ class ArchiveReader implements PangenomeArchive {
     const trace = instrument ? featureTraceState() : undefined;
     const descriptor = await this.#loadNamedLociDescriptor(query.signal, trace);
     const candidates = selectLocusPages(descriptor, normalizedQuery, mode);
-    const decodePage = async (page: (typeof candidates)[number]) => {
+    const decodePage = async (
+      page: (typeof candidates)[number],
+      dependencyGroup: number,
+    ) => {
       const raw = await this.#readFeatureDecoded(
         page.storage,
         "extension-page",
         query.signal,
         trace,
+        dependencyGroup,
       );
       const started = performance.now();
       const records = decodeFeature(() => decodeLocusPage(raw));
@@ -1396,12 +1403,19 @@ class ArchiveReader implements PangenomeArchive {
     const hits: LocusHit[] = [];
     let truncated = false;
     let fetchedPages = 0;
+    let dependencyGroup = nextFeatureDependencyGroup(trace);
     outer: while (fetchedPages < candidates.length) {
       const batch = candidates.slice(
         fetchedPages,
         fetchedPages + FEATURE_SEARCH_CONCURRENCY,
       );
-      const decoded = await Promise.all(batch.map(decodePage));
+      const requestCountBefore = trace?.requestRanges.length ?? 0;
+      const decoded = await Promise.all(
+        batch.map((page) => decodePage(page, dependencyGroup)),
+      );
+      if ((trace?.requestRanges.length ?? 0) > requestCountBefore) {
+        dependencyGroup += 1;
+      }
       fetchedPages += batch.length;
       for (const records of decoded) {
         for (const record of records) {
@@ -1504,6 +1518,7 @@ class ArchiveReader implements PangenomeArchive {
         maxBins,
       ),
     );
+    const dependencyGroup = nextFeatureDependencyGroup(trace);
     const pages = await Promise.all(
       selected.map(async (series) => {
         const raw = await this.#readFeatureDecoded(
@@ -1511,6 +1526,7 @@ class ArchiveReader implements PangenomeArchive {
           "extension-page",
           query.signal,
           trace,
+          dependencyGroup,
         );
         const started = performance.now();
         const bins = decodeFeature(() => decodeSummaryPage(raw, series));
@@ -1659,12 +1675,18 @@ class ArchiveReader implements PangenomeArchive {
       trace,
     );
     const matches: ReturnType<typeof namedSourcePath>[] = [];
+    let dependencyGroup = nextFeatureDependencyGroup(trace);
     for (const page of descriptor.catalogPages) {
+      const requestCountBefore = trace?.requestRanges.length ?? 0;
       const records = await this.#loadPathCatalogPage(
         page,
         query.signal,
         trace,
+        dependencyGroup,
       );
+      if ((trace?.requestRanges.length ?? 0) > requestCountBefore) {
+        dependencyGroup += 1;
+      }
       for (const record of records) {
         if (
           (query.sample !== undefined && record.sample !== query.sample) ||
@@ -1699,14 +1721,41 @@ class ArchiveReader implements PangenomeArchive {
     options.signal?.throwIfAborted();
     const instrument = options.trace !== undefined && options.trace !== false;
     const trace = instrument ? featureTraceState() : undefined;
-    const result = await this.#loadTilePathMembership(
-      tile,
+    if (tile.coreStart >= tile.coreEnd)
+      throw corrupt("invalid graph tile interval");
+    const descriptor = await this.#loadPathMembershipDescriptor(
+      options.signal,
+      trace,
+    );
+    this.#validatePathMembershipManifests(descriptor);
+    const candidates = await this.#lookup({
+      sample: tile.reference.sample,
+      contig: tile.reference.contig,
+      start: tile.coreStart,
+      end: tile.coreEnd,
+      ...(options.signal === undefined ? {} : { signal: options.signal }),
+    });
+    const entry = candidates.find(
+      (candidate) =>
+        candidate.start === BigInt(tile.coreStart) &&
+        candidate.end === BigInt(tile.coreEnd) &&
+        candidate.offset === tile.provenance.archiveOffset,
+    );
+    if (entry === undefined)
+      throw corrupt("decoded graph tile is absent from the archive directory");
+    const loaded = await this.#loadPathMembershipTiles(
+      [entry],
+      [tile],
+      descriptor,
       options.signal,
       trace,
     );
     const completedTrace = trace && finishFeatureTrace(trace);
     if (typeof options.trace === "function" && completedTrace !== undefined)
       options.trace(completedTrace);
+    const result = loaded.tiles[0];
+    if (result === undefined)
+      throw corrupt("tile membership result is missing");
     return result.groups;
   }
 
@@ -1720,25 +1769,26 @@ class ArchiveReader implements PangenomeArchive {
       query.trace(region.trace);
     const membershipTrace = featureTraceState();
     const catalogTrace = featureTraceState();
-    const tiles: PathMembershipTile[] = [];
-    const pathIds = new Set<bigint>();
-    for (const tile of region.tiles) {
-      const membershipTile = await this.#loadTilePathMembership(
-        tile,
-        query.signal,
-        membershipTrace,
-      );
-      tiles.push(membershipTile);
-      for (const group of membershipTile.groups) {
-        for (const membership of group.memberships)
-          pathIds.add(membership.pathId);
-      }
-    }
     const descriptor = await this.#loadPathMembershipDescriptor(
       query.signal,
-      catalogTrace,
+      membershipTrace,
     );
-    const sortedPathIds = [...pathIds].sort((left, right) =>
+    this.#validatePathMembershipManifests(descriptor);
+    const selected = await this.#lookup({
+      sample: query.sample,
+      contig: query.contig,
+      start: query.start,
+      end: query.end,
+      ...(query.signal === undefined ? {} : { signal: query.signal }),
+    });
+    const loaded = await this.#loadPathMembershipTiles(
+      selected,
+      region.tiles,
+      descriptor,
+      query.signal,
+      membershipTrace,
+    );
+    const sortedPathIds = [...loaded.referencedPathIds].sort((left, right) =>
       left < right ? -1 : left > right ? 1 : 0,
     );
     const catalogRecords = await this.#pathsByIds(
@@ -1746,6 +1796,7 @@ class ArchiveReader implements PangenomeArchive {
       query.signal,
       catalogTrace,
       descriptor,
+      nextFeatureDependencyGroup(membershipTrace),
     );
     const paths = catalogRecords.map((record) => {
       if (record === undefined)
@@ -1760,7 +1811,7 @@ class ArchiveReader implements PangenomeArchive {
         end: query.end,
       },
       paths,
-      tiles,
+      tiles: loaded.tiles,
     };
     return {
       region,
@@ -1791,205 +1842,30 @@ class ArchiveReader implements PangenomeArchive {
       query.signal,
       trace,
     );
-    if (descriptor.manifests.length !== this.#manifests.length) {
-      throw corrupt("path-membership descriptor does not cover every manifest");
-    }
-    for (let index = 0; index < this.#manifests.length; index += 1) {
-      const graph = this.#manifests[index];
-      const membership = descriptor.manifests[index];
-      if (
-        graph === undefined ||
-        membership === undefined ||
-        membership.manifestIndex !== index ||
-        membership.pageCount !== graph.pageCount ||
-        membership.entryCount !== graph.entryCount
-      ) {
-        throw corrupt("path-membership manifest differs from graph directory");
-      }
-    }
+    this.#validatePathMembershipManifests(descriptor);
     const selected = await this.#lookup(regionQuery);
-    const selectedKeys = new Set(
-      selected.map((entry) =>
-        [
-          this.#manifests.indexOf(entry.manifest),
-          entry.start,
-          entry.end,
-          entry.offset,
-        ].join(":"),
-      ),
+    const loaded = await this.#loadPathMembershipTiles(
+      selected,
+      undefined,
+      descriptor,
+      query.signal,
+      trace,
     );
-    const buckets = new Map<
-      string,
-      { manifestIndex: number; bucketIndex: bigint }
-    >();
-    for (const entry of selected) {
-      const manifestIndex = this.#manifests.indexOf(entry.manifest);
-      if (manifestIndex < 0)
-        throw corrupt("selected directory manifest is unknown");
-      const bucketIndex =
-        (entry.start - entry.manifest.gridStart) / entry.manifest.bucketSpan;
-      buckets.set(`${manifestIndex}:${bucketIndex}`, {
-        manifestIndex,
-        bucketIndex,
-      });
-    }
-    const tiles: PathMembershipTile[] = [];
-    const referencedPathIds = new Set<bigint>();
-    for (const { manifestIndex, bucketIndex } of buckets.values()) {
-      const manifest = this.#manifests[manifestIndex];
-      const membershipManifest = descriptor.manifests[manifestIndex];
-      if (manifest === undefined || membershipManifest === undefined) {
-        throw corrupt("path-membership manifest index is missing");
-      }
-      const graphPage = (
-        await this.#loadDirectoryPages(
-          manifest,
-          bucketIndex,
-          bucketIndex,
-          query.signal,
-        )
-      )[0];
-      if (graphPage === undefined)
-        throw corrupt("graph directory page is missing");
-      const graphEntries = decodeDirectoryPage(
-        graphPage.bytes,
-        manifest,
-        bucketIndex,
-        this.#header.dataOffset,
-        this.#sourceSize,
-        this.#maxChunkBytes,
-      );
-      const membershipOffset = checkedAdd(
-        membershipManifest.firstPageOffset,
-        checkedMultiply(
-          bucketIndex,
-          BigInt(PATH_MEMBERSHIP_DIRECTORY_PAGE_BYTES),
-          "path-membership directory offset",
-        ),
-        "path-membership directory offset",
-      );
-      const membershipPage = await this.#readMembershipDirectoryPage(
-        membershipOffset,
-        query.signal,
-        trace,
-      );
-      const membershipEntries = decodeFeature(() =>
-        decodePathMembershipDirectoryPage(
-          membershipPage,
-          this.#header.dataOffset,
-          this.#sourceSize,
-        ),
-      );
-      if (membershipEntries.length !== graphEntries.length) {
-        throw corrupt("path-membership directory differs from graph directory");
-      }
-      for (let index = 0; index < graphEntries.length; index += 1) {
-        const graphEntry = graphEntries[index];
-        const membershipEntry = membershipEntries[index];
-        if (graphEntry === undefined || membershipEntry === undefined) {
-          throw corrupt("path-membership directory entry is missing");
-        }
-        const key = [
-          manifestIndex,
-          graphEntry.start,
-          graphEntry.end,
-          graphEntry.offset,
-        ].join(":");
-        if (!selectedKeys.has(key)) continue;
-        const raw = await this.#readFeatureDecoded(
-          membershipEntry.storage,
-          "extension-page",
-          query.signal,
-          trace,
-        );
-        const page = decodeFeature(() =>
-          decodeTileMembershipPage(raw, descriptor.pathCount),
-        );
-        if (
-          page.coreStart !== graphEntry.start ||
-          page.coreEnd !== graphEntry.end ||
-          compareBytes(page.regionalPayloadIntegrity, graphEntry.integrity) !==
-            0 ||
-          BigInt(page.groups.length) !== membershipEntry.groupCount
-        ) {
-          throw corrupt(
-            "tile-membership page differs from its directory entry",
-          );
-        }
-        for (const group of page.groups) {
-          for (const membership of group.memberships) {
-            referencedPathIds.add(membership.pathId);
-          }
-        }
-        tiles.push({
-          reference: {
-            sample: manifest.sample,
-            contig: manifest.contig,
-            start: safeNumber(graphEntry.start, "membership tile start"),
-            end: safeNumber(graphEntry.end, "membership tile end"),
-            orientation: "forward",
-          },
-          coreStart: safeNumber(graphEntry.start, "membership tile start"),
-          coreEnd: safeNumber(graphEntry.end, "membership tile end"),
-          groups: page.groups,
-        });
-      }
-    }
-    const catalogPageIndexes = new Set<number>();
-    for (const pathId of referencedPathIds) {
-      let low = 0;
-      let high = descriptor.catalogPages.length;
-      while (low < high) {
-        const middle = low + Math.floor((high - low) / 2);
-        const page = descriptor.catalogPages[middle];
-        if (page === undefined)
-          throw corrupt("path-catalog binary search failed");
-        if (pathId < page.firstPathId) {
-          high = middle;
-        } else if (pathId >= page.firstPathId + page.recordCount) {
-          low = middle + 1;
-        } else {
-          catalogPageIndexes.add(middle);
-          break;
-        }
-      }
-      if (low === high)
-        throw corrupt("membership path ID is absent from the catalog");
-    }
-    const catalogPages = [...catalogPageIndexes]
-      .sort((left, right) => left - right)
-      .map((index) => descriptor.catalogPages[index])
-      .filter((page) => page !== undefined);
-    const catalogRecords: DecodedPathCatalogRecord[] = [];
-    for (const page of catalogPages) {
-      const raw = await this.#readFeatureDecoded(
-        page.storage,
-        "extension-page",
-        query.signal,
-        trace,
-      );
-      const records = decodeFeature(() => decodePathCatalogPage(raw));
-      if (
-        BigInt(records.length) !== page.recordCount ||
-        records[0]?.pathId !== page.firstPathId
-      ) {
-        throw corrupt("path-catalog page differs from its descriptor");
-      }
-      catalogRecords.push(...records);
-    }
-    const paths = catalogRecords
-      .filter((record) => referencedPathIds.has(record.pathId))
-      .map((record) => ({
-        ...record,
-        sense: pathSense(record.sense),
-      }))
-      .sort((left, right) =>
-        left.pathId < right.pathId ? -1 : left.pathId > right.pathId ? 1 : 0,
-      );
-    tiles.sort(
-      (left, right) =>
-        left.coreStart - right.coreStart || left.coreEnd - right.coreEnd,
+    const sortedPathIds = [...loaded.referencedPathIds].sort((left, right) =>
+      left < right ? -1 : left > right ? 1 : 0,
     );
+    const catalogRecords = await this.#pathsByIds(
+      sortedPathIds,
+      query.signal,
+      trace,
+      descriptor,
+      nextFeatureDependencyGroup(trace),
+    );
+    const paths = catalogRecords.map((record) => {
+      if (record === undefined)
+        throw corrupt("membership path ID is absent from the catalog page");
+      return namedSourcePath(record);
+    });
     const completedTrace = trace && finishFeatureTrace(trace);
     if (typeof query.trace === "function" && completedTrace !== undefined)
       query.trace(completedTrace);
@@ -2001,7 +1877,7 @@ class ArchiveReader implements PangenomeArchive {
         end: query.end,
       },
       paths,
-      tiles,
+      tiles: loaded.tiles,
       ...(completedTrace === undefined ? {} : { trace: completedTrace }),
     };
   }
@@ -2194,6 +2070,7 @@ class ArchiveReader implements PangenomeArchive {
   async #loadNamedLociDescriptor(
     signal?: AbortSignal,
     trace?: MutableFeatureTrace,
+    dependencyGroup = 1,
   ): Promise<NamedLociDescriptor> {
     if (this.#namedLociDescriptor !== undefined) {
       return this.#namedLociDescriptor;
@@ -2207,6 +2084,7 @@ class ArchiveReader implements PangenomeArchive {
       "extension-descriptor",
       signal,
       trace,
+      dependencyGroup,
     );
     const started = performance.now();
     const descriptor = decodeFeature(() =>
@@ -2222,6 +2100,7 @@ class ArchiveReader implements PangenomeArchive {
   async #loadPathMembershipDescriptor(
     signal?: AbortSignal,
     trace?: MutableFeatureTrace,
+    dependencyGroup = 1,
   ): Promise<PathMembershipDescriptor> {
     if (this.#pathMembershipDescriptor !== undefined) {
       return this.#pathMembershipDescriptor;
@@ -2236,8 +2115,14 @@ class ArchiveReader implements PangenomeArchive {
       );
     }
     const [raw, metadata] = await Promise.all([
-      this.#readFeatureDecoded(entry, "extension-descriptor", signal, trace),
-      this.#loadArchiveMetadata(signal, trace),
+      this.#readFeatureDecoded(
+        entry,
+        "extension-descriptor",
+        signal,
+        trace,
+        dependencyGroup,
+      ),
+      this.#loadArchiveMetadata(signal, trace, dependencyGroup),
     ]);
     const started = performance.now();
     const descriptor = decodeFeature(() =>
@@ -2268,10 +2153,13 @@ class ArchiveReader implements PangenomeArchive {
     signal?: AbortSignal,
     trace?: MutableFeatureTrace,
     loadedDescriptor?: PathMembershipDescriptor,
+    catalogDependencyGroup?: number,
   ): Promise<readonly (DecodedPathCatalogRecord | undefined)[]> {
     const descriptor =
       loadedDescriptor ??
       (await this.#loadPathMembershipDescriptor(signal, trace));
+    let dependencyGroup =
+      catalogDependencyGroup ?? nextFeatureDependencyGroup(trace);
     const uniqueIds = [...new Set(pathIds)];
     const idsByPage = new Map<
       PathMembershipDescriptor["catalogPages"][number],
@@ -2292,12 +2180,21 @@ class ArchiveReader implements PangenomeArchive {
       index += FEATURE_SEARCH_CONCURRENCY
     ) {
       const batch = pages.slice(index, index + FEATURE_SEARCH_CONCURRENCY);
+      const requestCountBefore = trace?.requestRanges.length ?? 0;
       const decoded = await Promise.all(
         batch.map(async ([page, ids]) => ({
           ids,
-          records: await this.#loadPathCatalogPage(page, signal, trace),
+          records: await this.#loadPathCatalogPage(
+            page,
+            signal,
+            trace,
+            dependencyGroup,
+          ),
         })),
       );
+      if ((trace?.requestRanges.length ?? 0) > requestCountBefore) {
+        dependencyGroup += 1;
+      }
       for (const { ids, records } of decoded) {
         for (const record of records) {
           if (ids.has(record.pathId)) recordsById.set(record.pathId, record);
@@ -2334,12 +2231,14 @@ class ArchiveReader implements PangenomeArchive {
     page: PathMembershipDescriptor["catalogPages"][number],
     signal?: AbortSignal,
     trace?: MutableFeatureTrace,
+    dependencyGroup = 2,
   ): Promise<DecodedPathCatalogRecord[]> {
     const raw = await this.#readFeatureDecoded(
       page.storage,
       "extension-page",
       signal,
       trace,
+      dependencyGroup,
     );
     const started = performance.now();
     const records = decodeFeature(() => decodePathCatalogPage(raw));
@@ -2354,116 +2253,252 @@ class ArchiveReader implements PangenomeArchive {
     return records;
   }
 
-  async #loadTilePathMembership(
-    tile: RegionTile,
+  #validatePathMembershipManifests(descriptor: PathMembershipDescriptor): void {
+    if (descriptor.manifests.length !== this.#manifests.length) {
+      throw corrupt("path-membership descriptor does not cover every manifest");
+    }
+    for (let index = 0; index < this.#manifests.length; index += 1) {
+      const graph = this.#manifests[index];
+      const membership = descriptor.manifests[index];
+      if (
+        graph === undefined ||
+        membership === undefined ||
+        membership.manifestIndex !== index ||
+        membership.pageCount !== graph.pageCount ||
+        membership.entryCount !== graph.entryCount
+      ) {
+        throw corrupt("path-membership manifest differs from graph directory");
+      }
+    }
+  }
+
+  async #loadPathMembershipTiles(
+    selected: readonly DirectoryEntry[],
+    graphTiles: readonly RegionTile[] | undefined,
+    descriptor: PathMembershipDescriptor,
     signal?: AbortSignal,
     trace?: MutableFeatureTrace,
-  ): Promise<PathMembershipTile> {
-    if (tile.coreStart >= tile.coreEnd)
-      throw corrupt("invalid graph tile interval");
-    const descriptor = await this.#loadPathMembershipDescriptor(signal, trace);
-    const candidates = await this.#lookup({
-      sample: tile.reference.sample,
-      contig: tile.reference.contig,
-      start: tile.coreStart,
-      end: tile.coreEnd,
-      ...(signal === undefined ? {} : { signal }),
-    });
-    const entry = candidates.find(
-      (candidate) =>
-        candidate.start === BigInt(tile.coreStart) &&
-        candidate.end === BigInt(tile.coreEnd) &&
-        candidate.offset === tile.provenance.archiveOffset,
+  ): Promise<{
+    tiles: PathMembershipTile[];
+    referencedPathIds: Set<bigint>;
+  }> {
+    type MembershipDirectoryEntry = ReturnType<
+      typeof decodePathMembershipDirectoryPage
+    >[number];
+    const entryKey = (entry: DirectoryEntry): string =>
+      [entry.start, entry.end, entry.offset].join(":");
+    const tileKey = (tile: RegionTile): string =>
+      [tile.coreStart, tile.coreEnd, tile.provenance.archiveOffset].join(":");
+    const graphTileByEntry = new Map(
+      (graphTiles ?? []).map((tile) => [tileKey(tile), tile] as const),
     );
-    if (entry === undefined)
-      throw corrupt("decoded graph tile is absent from the archive directory");
-    const manifestIndex = this.#manifests.indexOf(entry.manifest);
-    const membershipManifest = descriptor.manifests[manifestIndex];
-    if (
-      manifestIndex < 0 ||
-      membershipManifest === undefined ||
-      membershipManifest.manifestIndex !== manifestIndex ||
-      membershipManifest.pageCount !== entry.manifest.pageCount ||
-      membershipManifest.entryCount !== entry.manifest.entryCount
-    ) {
-      throw corrupt("path-membership manifest differs from graph directory");
+    const buckets = new Map<
+      string,
+      {
+        manifestIndex: number;
+        bucketIndex: bigint;
+        entries: DirectoryEntry[];
+      }
+    >();
+    for (const entry of selected) {
+      const manifestIndex = this.#manifests.indexOf(entry.manifest);
+      if (manifestIndex < 0)
+        throw corrupt("selected directory manifest is unknown");
+      const bucketIndex =
+        (entry.start - entry.manifest.gridStart) / entry.manifest.bucketSpan;
+      const key = `${manifestIndex}:${bucketIndex}`;
+      const bucket = buckets.get(key);
+      if (bucket === undefined) {
+        buckets.set(key, { manifestIndex, bucketIndex, entries: [entry] });
+      } else {
+        bucket.entries.push(entry);
+      }
     }
-    const bucketIndex =
-      (entry.start - entry.manifest.gridStart) / entry.manifest.bucketSpan;
-    const graphPage = (
-      await this.#loadDirectoryPages(
-        entry.manifest,
-        bucketIndex,
-        bucketIndex,
-        signal,
-      )
-    )[0];
-    if (graphPage === undefined)
-      throw corrupt("graph directory page is missing");
-    const graphEntries = decodeDirectoryPage(
-      graphPage.bytes,
-      entry.manifest,
-      bucketIndex,
-      this.#header.dataOffset,
-      this.#sourceSize,
-      this.#maxChunkBytes,
-    );
-    const entryIndex = graphEntries.findIndex(
-      (candidate) =>
-        candidate.start === entry.start &&
-        candidate.end === entry.end &&
-        candidate.offset === entry.offset,
-    );
-    if (entryIndex < 0) throw corrupt("graph tile directory entry is missing");
-    const membershipOffset = checkedAdd(
-      membershipManifest.firstPageOffset,
-      checkedMultiply(
-        bucketIndex,
-        BigInt(PATH_MEMBERSHIP_DIRECTORY_PAGE_BYTES),
-        "path-membership directory offset",
-      ),
-      "path-membership directory offset",
-    );
-    const membershipDirectoryPage = await this.#readMembershipDirectoryPage(
-      membershipOffset,
-      signal,
-      trace,
-    );
-    const directoryDecodeStarted = performance.now();
-    const membershipDirectory = decodeFeature(() =>
-      decodePathMembershipDirectoryPage(
-        membershipDirectoryPage,
-        this.#header.dataOffset,
-        this.#sourceSize,
-      ),
-    );
-    if (trace !== undefined)
-      recordDecodeInterval(trace, directoryDecodeStarted, performance.now());
-    if (membershipDirectory.length !== graphEntries.length)
-      throw corrupt("path-membership directory differs from graph directory");
-    const membershipEntry = membershipDirectory[entryIndex];
-    if (membershipEntry === undefined)
-      throw corrupt("path-membership directory entry is missing");
-    const raw = await this.#readFeatureDecoded(
-      membershipEntry.storage,
-      "extension-page",
-      signal,
-      trace,
-    );
-    const tileDecodeStarted = performance.now();
-    const page = decodeFeature(() =>
-      decodeTileMembershipPage(raw, descriptor.pathCount),
-    );
-    if (trace !== undefined)
-      recordDecodeInterval(trace, tileDecodeStarted, performance.now());
-    if (
-      page.coreStart !== entry.start ||
-      page.coreEnd !== entry.end ||
-      compareBytes(page.regionalPayloadIntegrity, entry.integrity) !== 0 ||
-      BigInt(page.groups.length) !== membershipEntry.groupCount
+
+    let dependencyGroup = nextFeatureDependencyGroup(trace);
+    const membershipPlans: Array<{
+      entry: DirectoryEntry;
+      membershipEntry: MembershipDirectoryEntry;
+    }> = [];
+    const bucketPlans = [...buckets.values()];
+    for (
+      let index = 0;
+      index < bucketPlans.length;
+      index += FEATURE_SEARCH_CONCURRENCY
     ) {
-      throw corrupt("tile-membership page differs from its graph tile");
+      const batch = bucketPlans.slice(
+        index,
+        index + FEATURE_SEARCH_CONCURRENCY,
+      );
+      const requestCountBefore = trace?.requestRanges.length ?? 0;
+      const decoded = await Promise.all(
+        batch.map(async (bucket) => {
+          const manifest = this.#manifests[bucket.manifestIndex];
+          const membershipManifest = descriptor.manifests[bucket.manifestIndex];
+          if (manifest === undefined || membershipManifest === undefined) {
+            throw corrupt("path-membership manifest index is missing");
+          }
+          const graphPage = (
+            await this.#loadDirectoryPages(
+              manifest,
+              bucket.bucketIndex,
+              bucket.bucketIndex,
+              signal,
+            )
+          )[0];
+          if (graphPage === undefined)
+            throw corrupt("graph directory page is missing");
+          const graphEntries = decodeDirectoryPage(
+            graphPage.bytes,
+            manifest,
+            bucket.bucketIndex,
+            this.#header.dataOffset,
+            this.#sourceSize,
+            this.#maxChunkBytes,
+          );
+          const membershipOffset = checkedAdd(
+            membershipManifest.firstPageOffset,
+            checkedMultiply(
+              bucket.bucketIndex,
+              BigInt(PATH_MEMBERSHIP_DIRECTORY_PAGE_BYTES),
+              "path-membership directory offset",
+            ),
+            "path-membership directory offset",
+          );
+          const raw = await this.#readMembershipDirectoryPage(
+            membershipOffset,
+            signal,
+            trace,
+            dependencyGroup,
+          );
+          const started = performance.now();
+          const membershipEntries = decodeFeature(() =>
+            decodePathMembershipDirectoryPage(
+              raw,
+              this.#header.dataOffset,
+              this.#sourceSize,
+            ),
+          );
+          if (trace !== undefined)
+            recordDecodeInterval(trace, started, performance.now());
+          if (membershipEntries.length !== graphEntries.length) {
+            throw corrupt(
+              "path-membership directory differs from graph directory",
+            );
+          }
+          return { bucket, graphEntries, membershipEntries };
+        }),
+      );
+      if ((trace?.requestRanges.length ?? 0) > requestCountBefore) {
+        dependencyGroup += 1;
+      }
+      for (const { bucket, graphEntries, membershipEntries } of decoded) {
+        for (const entry of bucket.entries) {
+          const entryIndex = graphEntries.findIndex(
+            (candidate) =>
+              candidate.start === entry.start &&
+              candidate.end === entry.end &&
+              candidate.offset === entry.offset,
+          );
+          const membershipEntry = membershipEntries[entryIndex];
+          if (entryIndex < 0 || membershipEntry === undefined) {
+            throw corrupt("path-membership directory entry is missing");
+          }
+          membershipPlans.push({ entry, membershipEntry });
+        }
+      }
     }
+
+    const tiles: PathMembershipTile[] = [];
+    const referencedPathIds = new Set<bigint>();
+    for (
+      let index = 0;
+      index < membershipPlans.length;
+      index += FEATURE_SEARCH_CONCURRENCY
+    ) {
+      const batch = membershipPlans.slice(
+        index,
+        index + FEATURE_SEARCH_CONCURRENCY,
+      );
+      const requestCountBefore = trace?.requestRanges.length ?? 0;
+      const decoded = await Promise.all(
+        batch.map(async ({ entry, membershipEntry }) => {
+          const raw = await this.#readFeatureDecoded(
+            membershipEntry.storage,
+            "extension-page",
+            signal,
+            trace,
+            dependencyGroup,
+          );
+          const started = performance.now();
+          const page = decodeFeature(() =>
+            decodeTileMembershipPage(raw, descriptor.pathCount),
+          );
+          if (trace !== undefined)
+            recordDecodeInterval(trace, started, performance.now());
+          if (
+            page.coreStart !== entry.start ||
+            page.coreEnd !== entry.end ||
+            compareBytes(page.regionalPayloadIntegrity, entry.integrity) !==
+              0 ||
+            BigInt(page.groups.length) !== membershipEntry.groupCount
+          ) {
+            throw corrupt(
+              "tile-membership page differs from its directory entry",
+            );
+          }
+          return { entry, page };
+        }),
+      );
+      if ((trace?.requestRanges.length ?? 0) > requestCountBefore) {
+        dependencyGroup += 1;
+      }
+      for (const { entry, page } of decoded) {
+        const graphTile = graphTileByEntry.get(entryKey(entry));
+        if (graphTiles !== undefined && graphTile === undefined) {
+          throw corrupt("decoded graph tile is absent from the selected query");
+        }
+        const groups =
+          graphTile === undefined
+            ? page.groups
+            : this.#bindMembershipGroupsToGraphTile(
+                entry,
+                graphTile,
+                page.groups,
+              );
+        for (const group of groups) {
+          for (const membership of group.memberships) {
+            referencedPathIds.add(membership.pathId);
+          }
+        }
+        tiles.push({
+          reference:
+            graphTile?.reference ??
+            ({
+              sample: entry.manifest.sample,
+              contig: entry.manifest.contig,
+              start: safeNumber(entry.start, "membership tile start"),
+              end: safeNumber(entry.end, "membership tile end"),
+              orientation: "forward",
+            } as const),
+          coreStart: safeNumber(entry.start, "membership tile start"),
+          coreEnd: safeNumber(entry.end, "membership tile end"),
+          groups,
+        });
+      }
+    }
+    tiles.sort(
+      (left, right) =>
+        left.coreStart - right.coreStart || left.coreEnd - right.coreEnd,
+    );
+    return { tiles, referencedPathIds };
+  }
+
+  #bindMembershipGroupsToGraphTile(
+    entry: DirectoryEntry,
+    tile: RegionTile,
+    groups: readonly NamedTraversalGroup[],
+  ): NamedTraversalGroup[] {
     const expected = new Map<
       string,
       { weight: bigint; orientedNodes: BigUint64Array }
@@ -2488,9 +2523,9 @@ class ArchiveReader implements PangenomeArchive {
         throw corrupt("duplicate traversal hash exists in the graph tile");
       expected.set(key, { weight, orientedNodes });
     }
-    if (expected.size !== page.groups.length)
+    if (expected.size !== groups.length)
       throw corrupt("membership traversal count differs from graph tile");
-    const groups = page.groups.map((group) => {
+    return groups.map((group) => {
       const matched = expected.get(hex(group.traversalDigest));
       if (matched === undefined)
         throw corrupt("membership traversal hash has no regional match");
@@ -2498,18 +2533,13 @@ class ArchiveReader implements PangenomeArchive {
         throw corrupt("membership occurrence weight differs from graph tile");
       return { ...group, orientedNodes: matched.orientedNodes };
     });
-    return {
-      reference: tile.reference,
-      coreStart: tile.coreStart,
-      coreEnd: tile.coreEnd,
-      groups,
-    };
   }
 
   async #readMembershipDirectoryPage(
     offset: bigint,
     signal?: AbortSignal,
     trace?: MutableFeatureTrace,
+    dependencyGroup = 2,
   ): Promise<Uint8Array> {
     const length = PATH_MEMBERSHIP_DIRECTORY_PAGE_BYTES;
     const key = `${offset}:${length}`;
@@ -2534,7 +2564,13 @@ class ArchiveReader implements PangenomeArchive {
         safeNumber(end, "membership directory bootstrap end"),
       );
     } else {
-      this.#recordFeatureRequest(offset, length, "extension-page", trace);
+      this.#recordFeatureRequest(
+        offset,
+        length,
+        "extension-page",
+        trace,
+        dependencyGroup,
+      );
       bytes = await this.#source.read(offset, length, signalOptions(signal));
     }
     if (bytes.byteLength !== length) {
@@ -2547,6 +2583,7 @@ class ArchiveReader implements PangenomeArchive {
   async #loadArchiveMetadata(
     signal?: AbortSignal,
     trace?: MutableFeatureTrace,
+    dependencyGroup = 1,
   ): Promise<DecodedArchiveMetadata> {
     if (this.#archiveMetadata !== undefined) return this.#archiveMetadata;
     const entry = this.#extension(ARCHIVE_METADATA_TYPE_ID);
@@ -2558,6 +2595,7 @@ class ArchiveReader implements PangenomeArchive {
       "extension-descriptor",
       signal,
       trace,
+      dependencyGroup,
     );
     const metadata = decodeFeature(() => decodeArchiveMetadata(raw));
     this.#archiveMetadata = metadata;
@@ -2567,6 +2605,7 @@ class ArchiveReader implements PangenomeArchive {
   async #loadSummaryDescriptor(
     signal?: AbortSignal,
     trace?: MutableFeatureTrace,
+    dependencyGroup = 1,
   ): Promise<SummaryPyramidDescriptor> {
     if (this.#summaryDescriptor !== undefined) return this.#summaryDescriptor;
     const entry = this.#extension(SUMMARY_PYRAMID_TYPE_ID);
@@ -2580,6 +2619,7 @@ class ArchiveReader implements PangenomeArchive {
       "extension-descriptor",
       signal,
       trace,
+      dependencyGroup,
     );
     const started = performance.now();
     const descriptor = decodeFeature(() =>
@@ -2604,6 +2644,7 @@ class ArchiveReader implements PangenomeArchive {
     layer: FeatureRequestRange["layer"],
     signal?: AbortSignal,
     trace?: MutableFeatureTrace,
+    dependencyGroup = 1,
   ): Promise<Uint8Array> {
     const key = `${storage.offset}:${storage.encodedLength}`;
     const decodedKey = `${key}:${storage.decodedLength}:${storage.codec}`;
@@ -2632,7 +2673,13 @@ class ArchiveReader implements PangenomeArchive {
           safeNumber(end, "extension bootstrap end"),
         );
       } else if (storage.offset >= bootstrapEnd) {
-        this.#recordFeatureRequest(storage.offset, length, layer, trace);
+        this.#recordFeatureRequest(
+          storage.offset,
+          length,
+          layer,
+          trace,
+          dependencyGroup,
+        );
         encoded = await this.#source.read(
           storage.offset,
           length,
@@ -2646,7 +2693,13 @@ class ArchiveReader implements PangenomeArchive {
           end - bootstrapEnd,
           "extension suffix length",
         );
-        this.#recordFeatureRequest(bootstrapEnd, suffixLength, layer, trace);
+        this.#recordFeatureRequest(
+          bootstrapEnd,
+          suffixLength,
+          layer,
+          trace,
+          dependencyGroup,
+        );
         const suffix = await this.#source.read(
           bootstrapEnd,
           suffixLength,
@@ -2698,13 +2751,11 @@ class ArchiveReader implements PangenomeArchive {
     length: number,
     layer: FeatureRequestRange["layer"],
     trace?: MutableFeatureTrace,
+    dependencyGroup = 1,
   ): void {
     if (trace === undefined) return;
-    trace.requestRanges.push({ offset, length, layer });
-    if (!trace.requestedLayers.has(layer)) {
-      trace.requestedLayers.add(layer);
-      trace.dependencyRounds += 1;
-    }
+    trace.requestRanges.push({ offset, length, layer, dependencyGroup });
+    trace.dependencyGroups.add(dependencyGroup);
   }
 
   async #lookup(

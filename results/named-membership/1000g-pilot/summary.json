@@ -1,7 +1,9 @@
 {
   "schema_version": 1,
-  "status": "accepted-1000g-exclusion",
+  "status": "accepted-permanent-1000g-operational-exclusion",
   "experiment_gate_effect": "The user explicitly declared EXPERIMENT_COMPLETE_WITH_1000G_EXCLUSION equivalent to GO_EXTENSION.",
+  "prior_failure": "HPRC vg r-index construction exhausted host memory.",
+  "current_direct_encoder_attempted": false,
   "measurements": null,
   "inference": null
 }

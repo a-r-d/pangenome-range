@@ -34,7 +34,13 @@ The rice demo explores chromosome 6 from the PPanG rice pangenome, using NATELBO
 
 - [Rice Xa7 — bacterial-blight-resistance locus](https://a-r-d.github.io/pangenome-range/demo?archive=rice&locus=Xa7&zoom=2.856&center=0.600576&vscale=1.45)
 
-Demo URLs can select `archive=hprc`, `archive=1000g`, `archive=rice`, or `archive=fixture`; select a named `locus` or an exact `sample`/`contig`/`start`/`end` interval; and restore horizontal `zoom`, normalized `center`, and vertical `vscale`. Local file selections cannot be restored from a link because browsers do not grant URLs access to local files.
+An additional Populus trichocarpa Chr19 archive has passed local whole-chromosome
+named-path validation. Its source does not yet state a redistribution license, so it
+is not deployed. Once permission is confirmed, setting
+`PANGENOME_RANGE_DEMO_POPLAR_ARCHIVE_URL` activates the source-menu entry and this
+view: `archive=poplar&sample=Nisqually-1&contig=Chr19&start=6291456&end=6324224&zoom=0.35&center=0.5&vscale=1`.
+
+Demo URLs can select `archive=hprc`, `archive=1000g`, `archive=rice`, `archive=poplar`, or `archive=fixture`; select a named `locus` or an exact `sample`/`contig`/`start`/`end` interval; and restore horizontal `zoom`, normalized `center`, and vertical `vscale`. Local file selections cannot be restored from a link because browsers do not grant URLs access to local files.
 
 ## Encoder
 
@@ -179,7 +185,7 @@ Measured August 27, 2026 over the public network; latency will vary by location 
 | `--experimental-path-membership-summary PATH` | none | Prepared bounded tile-membership JSON; research only and requires the matching catalog. |
 | `--experimental-path-catalog PATH` | none | Complete contiguous path-catalog NDJSON; research only and requires the matching summary. |
 | `--path-membership` | off | Preserve named source-path membership from embedded GBWT DA samples; disk mode only. |
-| `--path-locate-max-lf-steps N` | `1000000` | Hard LF-step limit for each located traversal start. |
+| `--path-locate-max-lf-steps N` | `8192` | Hard LF-step limit for each located traversal start. |
 | `--keep-partial` | off | Keep the temporary sibling archive after failure. |
 | `--progress MODE` | terminal: plain; redirected: off | `auto`, `plain`, `json`, or `off`. |
 | `--progress-interval-seconds N` | `5` | Progress update interval. |

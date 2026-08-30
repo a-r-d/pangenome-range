@@ -21,6 +21,8 @@ import {
   HttpRangeSource,
   MemoryRangeSource,
   openPangenome,
+  type RangeReadOptions,
+  type RangeSource,
   type RegionTile,
   RemoteObjectChangedError,
   TracingRangeSource,
@@ -175,6 +177,62 @@ const pathMembershipArchiveFixture = new Uint8Array(
     ),
   ),
 );
+
+class DelayedMemoryRangeSource implements RangeSource {
+  readonly #source: MemoryRangeSource;
+  readonly #delayMs: number;
+  readonly events: Array<{
+    offset: bigint;
+    length: number;
+    startedOrder: number;
+    completedOrder: number | undefined;
+  }> = [];
+  #order = 0;
+
+  constructor(bytes: Uint8Array, delayMs = 5) {
+    this.#source = new MemoryRangeSource(bytes);
+    this.#delayMs = delayMs;
+  }
+
+  clear(): void {
+    this.events.length = 0;
+    this.#order = 0;
+  }
+
+  size(signal?: AbortSignal): Promise<bigint> {
+    return this.#source.size(signal);
+  }
+
+  async read(
+    offset: bigint,
+    length: number,
+    options?: RangeReadOptions,
+  ): Promise<Uint8Array> {
+    const event = {
+      offset,
+      length,
+      startedOrder: ++this.#order,
+      completedOrder: undefined as number | undefined,
+    };
+    this.events.push(event);
+    await new Promise<void>((resolve, reject) => {
+      const timeout = setTimeout(resolve, this.#delayMs);
+      options?.signal?.addEventListener(
+        "abort",
+        () => {
+          clearTimeout(timeout);
+          reject(options.signal?.reason);
+        },
+        { once: true },
+      );
+    });
+    try {
+      return await this.#source.read(offset, length, options);
+    } finally {
+      event.completedOrder = ++this.#order;
+    }
+  }
+}
 
 function mismatchedPathMembershipProvenance(): Uint8Array {
   const bytes = pathMembershipArchiveFixture.slice();
@@ -982,10 +1040,6 @@ describe("reader contract validation", () => {
       new MemoryRangeSource(pathMembershipArchiveFixture),
     );
     expect(archive.capabilities().pathMembership).toBe(true);
-    expect((await archive.info()).pathMembership).toEqual({
-      state: "present",
-      pathCount: BigInt(pathMembershipExpected.catalogPathCount),
-    });
     const result = await archive.pathMembership({
       ...pathMembershipExpected.query,
       trace: true,
@@ -1016,7 +1070,18 @@ describe("reader contract validation", () => {
       fragment: first?.fragment.toString(),
       sense: first?.sense,
     }).toEqual(pathMembershipExpected.firstReferencedPath);
-    expect(result.trace?.requestRanges.length).toBeGreaterThan(0);
+    expect(result.trace?.dependencyRounds).toBe(4);
+    expect(
+      new Set(
+        result.trace?.requestRanges.map(
+          ({ dependencyGroup }) => dependencyGroup,
+        ),
+      ),
+    ).toEqual(new Set([1, 2, 3, 4]));
+    expect((await archive.info()).pathMembership).toEqual({
+      state: "present",
+      pathCount: BigInt(pathMembershipExpected.catalogPathCount),
+    });
     expect(await archive.pathCatalogInfo()).toEqual({
       pathCount: BigInt(pathMembershipExpected.catalogPathCount),
       recordsPerPage: 1_024,
@@ -1068,10 +1133,8 @@ describe("reader contract validation", () => {
       pathMembershipExpected.tiles,
     );
     expect(combined.trace.graph).toBeDefined();
-    expect(combined.trace.membership.dependencyRounds).toBeGreaterThanOrEqual(
-      0,
-    );
-    expect(combined.trace.catalog.dependencyRounds).toBeGreaterThanOrEqual(0);
+    expect(combined.trace.membership.dependencyRounds).toBe(0);
+    expect(combined.trace.catalog.dependencyRounds).toBe(0);
     await archive.close();
 
     const corruptBytes = pathMembershipArchiveFixture.slice();
@@ -1105,6 +1168,54 @@ describe("reader contract validation", () => {
       /differs from archive provenance/,
     );
     await provenanceMismatch.close();
+  });
+
+  it("batches named-membership request waves and traces their real dependency groups", async () => {
+    const source = new DelayedMemoryRangeSource(pathMembershipArchiveFixture);
+    const archive = await openPangenome(source);
+    await archive.query(pathMembershipExpected.query);
+    source.clear();
+
+    const result = await archive.queryWithPathMembership(
+      pathMembershipExpected.query,
+    );
+    expect(result.trace.membership.dependencyRounds).toBe(3);
+    expect(result.trace.catalog.dependencyRounds).toBe(1);
+    expect(
+      new Set(
+        result.trace.membership.requestRanges.map(
+          ({ dependencyGroup }) => dependencyGroup,
+        ),
+      ),
+    ).toEqual(new Set([1, 2, 3]));
+    expect(
+      new Set(
+        result.trace.catalog.requestRanges.map(
+          ({ dependencyGroup }) => dependencyGroup,
+        ),
+      ),
+    ).toEqual(new Set([4]));
+
+    const tileRanges = result.trace.membership.requestRanges.filter(
+      ({ dependencyGroup }) => dependencyGroup === 3,
+    );
+    expect(tileRanges.length).toBeGreaterThan(1);
+    const tileEvents = tileRanges.map((range) => {
+      const event = source.events.find(
+        (candidate) =>
+          candidate.offset === range.offset &&
+          candidate.length === range.length,
+      );
+      expect(event).toBeDefined();
+      return event as (typeof source.events)[number];
+    });
+    const firstCompletion = Math.min(
+      ...tileEvents.map(({ completedOrder }) => completedOrder ?? Infinity),
+    );
+    expect(
+      tileEvents.every(({ startedOrder }) => startedOrder < firstCompletion),
+    ).toBe(true);
+    await archive.close();
   });
 
   it("enforces bounded path-membership decoding and preserves dual orientations", () => {

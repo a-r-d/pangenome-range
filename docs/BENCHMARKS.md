@@ -435,5 +435,9 @@ directory body and require digest rejection.
 The synthetic direct encode through ephemeral and persistent source-cache v2 remains
 the cache-path determinism gate. Final-layout anonymous/named controls, validation,
 query bytes, and memory evidence are retained under `results/named-membership/`.
-Rice and four-tile HPRC remain the largest bounded named-membership evidence. The
-1000G exclusion is explicit and no result is inferred.
+Rice and four-tile HPRC retain anonymous controls. A later local Populus trichocarpa
+Chr19 run expands the named-only construction proof to 1,015 tiles and full
+reconstruction under a 4 GiB, zero-swap cap; it has no anonymous size-control run and
+is not published pending data-use review. The permanent 1000G operational exclusion
+is explicit, the current direct encoder was not attempted there, and no result is
+inferred.

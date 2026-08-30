@@ -7,6 +7,7 @@ export const DEFAULT_DEMO_1000G_ARCHIVE_URL =
   "https://archives.ard.ninja/pangenome-range/sha256/71730fab7aad0dbbef81cf7c74b4fa8dbacbb3aad5bab0a797349120b18f6afb/1000gplons-hs38d1-na19239-h0-v1-t8-zstd3.pngr";
 export const DEFAULT_DEMO_RICE_ARCHIVE_URL =
   "https://archives.ard.ninja/pangenome-range/sha256/c91768e6e98d32ff6467732a26e32def5058f4c15d247a0ac6a252a4403e134c/rice-chr06-mc-xa7-anonymous.pngr";
+export const DEFAULT_DEMO_POPLAR_ARCHIVE_URL = "";
 
 export function docsDevEnvironment(environment = process.env) {
   return {
@@ -20,6 +21,9 @@ export function docsDevEnvironment(environment = process.env) {
     VITE_PANGENOME_RANGE_DEMO_RICE_ARCHIVE_URL:
       environment.VITE_PANGENOME_RANGE_DEMO_RICE_ARCHIVE_URL?.trim() ||
       DEFAULT_DEMO_RICE_ARCHIVE_URL,
+    VITE_PANGENOME_RANGE_DEMO_POPLAR_ARCHIVE_URL:
+      environment.VITE_PANGENOME_RANGE_DEMO_POPLAR_ARCHIVE_URL?.trim() ??
+      DEFAULT_DEMO_POPLAR_ARCHIVE_URL,
   };
 }
 

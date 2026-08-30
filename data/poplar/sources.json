@@ -1,0 +1,33 @@
+{
+  "schema_version": 1,
+  "dataset": "Populus trichocarpa pangenome graphs release v1.0",
+  "upstream_graph_tools": {
+    "cactus": "2.9.9",
+    "minigraph": "0.21-r606"
+  },
+  "reference": "Populus trichocarpa Nisqually-1 v4",
+  "assemblies": 88,
+  "genotypes": 44,
+  "project_url": "https://labkey.ornl.gov/labkey/CBI/Jacobson/PUBLIC_DATA/poplar_pangenome/pan_genome_graph/project-begin.view",
+  "data_use_status": "PUBLIC_DERIVED_REDISTRIBUTION_NOT_CONFIRMED",
+  "files": [
+    {
+      "role": "canary",
+      "name": "Chr16.gbz",
+      "url": "https://labkey.ornl.gov/labkey/_webdav/CBI/Jacobson/PUBLIC_DATA/poplar_pangenome/pan_genome_graph/%40files/ptricho_pangenome/doi/Chr16/Chr16.gbz?contentDisposition=attachment",
+      "bytes": 81167536,
+      "sha256": "1d2c0d2d734e0bca0c05b7d880df498e86dcdcee8213644dafc549fcbc159dac",
+      "observed_etag": "W/\"81167536-1772742552101\"",
+      "gbz_serialization_version": 1
+    },
+    {
+      "role": "demo-candidate",
+      "name": "Chr19.gbz",
+      "url": "https://labkey.ornl.gov/labkey/_webdav/CBI/Jacobson/PUBLIC_DATA/poplar_pangenome/pan_genome_graph/%40files/ptricho_pangenome/doi/Chr19/Chr19.gbz?contentDisposition=attachment",
+      "bytes": 125422184,
+      "sha256": "603ccf3a00d589950be95bb7eb65d0b517f837b35b64d6c95674bcff754adab9",
+      "observed_etag": "W/\"125422184-1772742374786\"",
+      "gbz_serialization_version": 1
+    }
+  ]
+}

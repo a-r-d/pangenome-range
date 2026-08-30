@@ -327,7 +327,7 @@ fn print_help() {
     println!("  --annotation-release ID    user-supplied annotation release identifier");
     println!("  --annotation-assembly ID   user-supplied annotation assembly identifier");
     println!("  --path-membership          preserve named source-path membership");
-    println!("  --path-locate-max-lf-steps N  bounded LF guard (default: 1000000)");
+    println!("  --path-locate-max-lf-steps N  bounded LF guard (default: 8192)");
     println!("  --keep-partial             retain the sibling temp archive on failure");
     println!("  --progress auto|plain|json|off");
     println!("  --progress-interval-seconds N  chunk progress cadence (default: 5)");
