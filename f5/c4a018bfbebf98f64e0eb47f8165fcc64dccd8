@@ -1,0 +1,19 @@
+docs/test/pages-smoke.mjs
+  s_2ec244cc8606c0::t_d0634ee3b2cc0d 846-849
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.0",
+  "base_commit_sha": "f5c4a018bfbebf98f64e0eb47f8165fcc64dccd8",
+  "prompts": {},
+  "sessions": {
+    "s_2ec244cc8606c0": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a048bd-ab38-7a82-b1d9-eb0f59af00f9",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "aaron decker <aaron@ard.ninja>"
+    }
+  }
+}
