@@ -1,0 +1,26 @@
+packages/browser/test/launcher.node-test.mjs
+  s_d5c1dbd3fe6449::t_b1d33d30212567 86-88
+  s_d5c1dbd3fe6449::t_b9bde11f3bf25c 89
+docs/DISTRIBUTION.md
+  s_d5c1dbd3fe6449::t_314e77c55de3ab 61,70-76,81,150
+packages/browser/package.json
+  s_d5c1dbd3fe6449::t_b1d33d30212567 75
+packages/browser/README.md
+  s_d5c1dbd3fe6449::t_dcc4b892701a86 30-34
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.0",
+  "base_commit_sha": "fd465ed332d50b19d8a09decfa36dbcce93ccbaa",
+  "prompts": {},
+  "sessions": {
+    "s_d5c1dbd3fe6449": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a0594b-15f7-7882-8953-57dad5a22850",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "aaron decker <aaron@ard.ninja>"
+    }
+  }
+}
