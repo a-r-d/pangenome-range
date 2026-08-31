@@ -1,0 +1,23 @@
+README.md
+  s_2ec244cc8606c0::t_45bb185cc1534f 6-7,9,13-15,17,19,21-25,27,29-30,33-34,36-37,39-41,43-47,50,55,59-74,88-95,129-131,133-136
+  s_2ec244cc8606c0::t_9d2e7fa30889a3 31-32
+docs/test/docs.test.mjs
+  s_2ec244cc8606c0::t_45bb185cc1534f 110,112-117,123,126-130
+  s_2ec244cc8606c0::t_9c8476ebdafa8b 131-134
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.0",
+  "base_commit_sha": "035a0593f2031ad72c80d4bd6bd507f360ebe120",
+  "prompts": {},
+  "sessions": {
+    "s_2ec244cc8606c0": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a048bd-ab38-7a82-b1d9-eb0f59af00f9",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "aaron decker <aaron@ard.ninja>"
+    }
+  }
+}
