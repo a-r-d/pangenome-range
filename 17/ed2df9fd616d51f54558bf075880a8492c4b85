@@ -1,0 +1,123 @@
+scripts/docs-dev.mjs
+  s_2ec244cc8606c0::t_db1f2a0b377d18 5
+crates/pangenome-range-build/src/fixed.rs
+  s_2ec244cc8606c0::t_ac3f77a8751f44 2772-2780
+  s_2ec244cc8606c0::t_afe3de087f9ac4 48-49,302-305,312-314,319-329,333-352
+  s_2ec244cc8606c0::t_bae6e3c8d4d567 2770-2771,2781-2790,2800-2802
+  s_2ec244cc8606c0::t_864bc12445ee4a 266-298
+  s_2ec244cc8606c0::t_7defffef988d0a 310
+  s_2ec244cc8606c0::t_3293d58acfe0e0 306
+  s_6006332bb8a489::t_f5d8ddc55eeb92 264-265,299-301
+README.md
+  s_2ec244cc8606c0::t_dfd92938b8bee6 6-7,9,11,13,15-17,19,21-46,48-49,51-52,59,61-63
+  s_2ec244cc8606c0::t_db1f2a0b377d18 47
+results/path-membership/hprc-finalizer-performance-2026-08-31/REPORT.md
+  s_2ec244cc8606c0::t_cc4bd5d3d0245b 1-52
+CHANGELOG.md
+  s_2ec244cc8606c0::t_b7c20b51073176 22-23
+  s_2ec244cc8606c0::t_4bd188efdb4d5b 24-27
+  s_2ec244cc8606c0::t_198edb23972588 14-21
+  s_2ec244cc8606c0::t_dbb091ed89616d 7-13
+docs/OPTIMIZATION_LOG.md
+  s_2ec244cc8606c0::t_84f128ae5d87cc 1238-1256
+  s_2ec244cc8606c0::t_eab22e36f64c4f 1257-1280
+  s_2ec244cc8606c0::t_485e176829949e 1281-1285
+docs/FORMAT_RELEASE_CHECKLIST.md
+  s_2ec244cc8606c0::t_db1f2a0b377d18 135
+experiments/hprc-v2.1-named-membership-workload.json
+  s_2ec244cc8606c0::t_f940a25bc58e3a 1-65
+docs/BENCHMARKS.md
+  s_2ec244cc8606c0::t_0c5d4fccc37c71 133-138
+crates/pangenome-range-format/src/path_membership.rs
+  s_2ec244cc8606c0::t_11ace85df99e94 734,753,1268,1279-1280,1297
+docs/test/docs.test.mjs
+  s_2ec244cc8606c0::t_3f29a635d17677 112
+  s_2ec244cc8606c0::t_dfd92938b8bee6 110,117
+  s_2ec244cc8606c0::t_25f73b3a5cd8ce 54-57
+  s_2ec244cc8606c0::t_db1f2a0b377d18 89
+  s_2ec244cc8606c0::t_e4c754a454b20a 120
+docs/test/pages-smoke.mjs
+  s_2ec244cc8606c0::t_3f29a635d17677 846-849
+  s_2ec244cc8606c0::t_dfd92938b8bee6 834-845,872
+crates/pangenome-range-build/src/path_membership.rs
+  s_2ec244cc8606c0::t_ee36fb96d5a5bc 62,725-805,807-816,820,822,880-888,894-925,931-963,966-970,974-980,1001-1006,1008,1012,1014,1016,1018-1020,1022,1026-1027,1029-1036,1039-1096,1101,1103,1105-1113
+  s_2ec244cc8606c0::t_8180415855e623 1127-1129,1188-1201
+  s_2ec244cc8606c0::t_e46c079f9eaf4b 964,971,973,987,990-991,996,998,1007,1009-1011,1013,1015,1017,1021,1023-1025,1028,1097-1100,1102,1104
+  s_2ec244cc8606c0::t_7ee561c09b7df9 821,823,835,843,847
+  s_2ec244cc8606c0::t_c274ea01c9d186 806,817-818
+  s_2ec244cc8606c0::t_7defffef988d0a 867
+  s_2ec244cc8606c0::t_8c753ad7b90b71 836-842
+  s_2ec244cc8606c0::t_3293d58acfe0e0 889-893,926-930,981-982,984-986,988-989,992-995,997,999-1000,1037-1038
+  s_2ec244cc8606c0::t_5ca122180e0f9a 819,824-834,844-846,848-866,868-879
+  s_2ec244cc8606c0::t_e7c9b0a46c7314 965
+  s_2ec244cc8606c0::t_be1057e90d3387 972,983
+  s_2ec244cc8606c0::t_727b6f97a6c989 20,43-61
+  s_2ec244cc8606c0::t_7b095e89078102 63
+results/path-membership/hprc-finalizer-performance-2026-08-31/config.json
+  s_2ec244cc8606c0::t_cc4bd5d3d0245b 1-22
+crates/pangenome-range-format/src/validation.rs
+  s_2ec244cc8606c0::t_6e799395017715 515,550,1277,1298-1299
+  s_2ec244cc8606c0::t_748d1ab4f843a4 1079-1082
+  s_2ec244cc8606c0::t_677cbee3960e97 1354-1380,1385-1390,1392-1395,1409-1410
+  s_2ec244cc8606c0::t_0d0079cc130259 1381-1384
+  s_2ec244cc8606c0::t_e629275f03f9b6 60-62,95-97,119-127,129-139,147
+  s_2ec244cc8606c0::t_4b1470adc292e4 727,750-752,1246-1248,1258-1276,1278-1297,1300-1318
+  s_2ec244cc8606c0::t_41ef349f4b8991 981,983-991,1014-1021,1023-1055,1057-1078,1083-1087,1324
+  s_2ec244cc8606c0::t_3508fe2302e770 659-660,667-672,676,684-685,687,714,722-723
+  s_2ec244cc8606c0::t_e1e049c28000f9 274-276,431-437,489-493,497-514,516,521-527,529-534,536,539-549,551-613
+  s_2ec244cc8606c0::t_e8f46dd85790c1 775,850,852-855,859-866,868-869,872-873,878-879,884-885,892
+  s_2ec244cc8606c0::t_804c550e7b71fa 128,517-520,528,535,537-538,614-618,774,803-812,851,982,992-1013,1022,1056
+  s_2ec244cc8606c0::t_ca26d3da7f6c0d 1391,1398
+  s_2ec244cc8606c0::t_900721a099c8ae 1396-1397,1399-1408
+  s_2ec244cc8606c0::t_1551ef371c62f4 1319-1323
+  s_2ec244cc8606c0::t_64ca4b222c21c0 1325
+  s_2ec244cc8606c0::t_b04be90f516f94 1353
+results/path-membership/hprc-finalizer-performance-2026-08-31/summary.json
+  s_2ec244cc8606c0::t_cc4bd5d3d0245b 1-45
+crates/pangenome-range-build/src/disk_source.rs
+  s_2ec244cc8606c0::t_0123c079bc75cd 8,41-83,521
+.github/workflows/pages.yml
+  s_2ec244cc8606c0::t_db1f2a0b377d18 21
+scripts/hprc/build-hprc-named.sh
+  s_2ec244cc8606c0::t_af3239eee31a7f 21
+  s_2ec244cc8606c0::t_b4550b5d70e13f 22,167-169
+  s_2ec244cc8606c0::t_68243f686f0bba 24-25,48-57,62-65,71-77
+  s_2ec244cc8606c0::t_ac3f77a8751f44 129
+  s_2ec244cc8606c0::t_3fcd62a6549fe2 175
+  s_2ec244cc8606c0::t_0150f7f564cec8 69
+  s_2ec244cc8606c0::t_f940a25bc58e3a 1-12,16-18,26-39,58-61,66-68,70,78-90,97,109-110,127-128,130-138,152-153,165,173,179
+  s_2ec244cc8606c0::t_22d2dd0fb2bcfd 20,125,139-140
+  s_2ec244cc8606c0::t_25f73b3a5cd8ce 13-15,19,40-47,91-96,98-108,111-123,126,141-151,154-164,166,172,174,176-178,180
+  s_2ec244cc8606c0::t_9970b9b3700f26 170-171
+  s_2ec244cc8606c0::t_d4044987466f66 124
+  s_2ec244cc8606c0::t_d8808811197308 23
+docs/components/browser/PangenomeBrowser.vue
+  s_2ec244cc8606c0::t_dfd92938b8bee6 415-423,953,1092-1094
+  s_2ec244cc8606c0::t_db1f2a0b377d18 209,211-216
+docs/HOSTING.md
+  s_2ec244cc8606c0::t_db1f2a0b377d18 75,78,81,84,90,93-97
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.0",
+  "base_commit_sha": "17ed2df9fd616d51f54558bf075880a8492c4b85",
+  "prompts": {},
+  "sessions": {
+    "s_2ec244cc8606c0": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a048bd-ab38-7a82-b1d9-eb0f59af00f9",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "aaron decker <aaron@ard.ninja>"
+    },
+    "s_6006332bb8a489": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a05804-95c7-75f0-96dc-4721bc9862f0",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "aaron decker <aaron@ard.ninja>"
+    }
+  }
+}
