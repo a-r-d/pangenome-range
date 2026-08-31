@@ -107,17 +107,31 @@ test("Pages defaults to the content-addressed whole-genome demo archive", async 
   assert.doesNotMatch(source, /PANGENOME_RANGE_DEMO_POPLAR_ARCHIVE_URL/);
 });
 
-test("README leads with the validated preset and retains secondary demo links", async () => {
+test("README leads with the four project parts and useful demo links", async () => {
   const source = await readFile(readmeUrl, "utf8");
+  assert.match(source, /## What is in this repository/);
+  assert.match(source, /\*\*The `\.pngr` file format\*\*/);
+  assert.match(source, /\*\*A Rust encoder\*\*/);
+  assert.match(source, /\*\*A TypeScript reader\*\*/);
+  assert.match(source, /\*\*A browser viewer\*\*/);
+  assert.match(source, /## Live demos/);
   assert.match(source, /archive=chicken&preset=chicken-igll1-ucd312-deletion/);
   assert.match(source, /archive=hprc&locus=HLA-B/);
   assert.match(source, /archive=hprc&locus=KIR3DL1/);
   assert.match(source, /archive=1000g&sample=NA19239&contig=1/);
   assert.match(source, /archive=rice&locus=Xa7/);
-  assert.match(source, /Named paths and published preset/);
+  assert.match(source, /A published deletion and the named source paths/);
   assert.doesNotMatch(source, /archive=poplar/);
   assert.match(source, /zoom=[^&]+&center=[^&]+&vscale=/);
-  assert.match(source, /Local files cannot be restored\s+from a URL/);
+  assert.match(source, /Local files still require you to choose the file/);
+
+  const demos = source.indexOf("## Live demos");
+  const rawPathId = source.indexOf("UCD312#2#h2tg000050l#fragment=1251366");
+  assert.ok(demos >= 0);
+  assert.ok(
+    rawPathId > demos,
+    "the raw GBWT path ID should follow the demo table",
+  );
 });
 
 test("npm docs:dev injects all public archives while preserving overrides", async () => {

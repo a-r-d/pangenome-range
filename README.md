@@ -3,31 +3,63 @@
 [![CI](https://img.shields.io/github/actions/workflow/status/a-r-d/pangenome-range/ci.yml?branch=main&style=for-the-badge&logo=githubactions&logoColor=white&label=CI)](https://github.com/a-r-d/pangenome-range/actions/workflows/ci.yml)
 [![MIT](https://img.shields.io/badge/license-MIT-blue?style=for-the-badge)](LICENSE)
 
-Open population-scale pangenome graphs directly in the browser from one static
-file. No query server.
+Open a region of a large pangenome graph in the browser without downloading the
+whole graph or running a query server.
 
-[Explore the published UCD312 deletion →](https://a-r-d.github.io/pangenome-range/demo?archive=chicken&preset=chicken-igll1-ucd312-deletion) · [Format specification](docs/FILE_FORMAT_V1.md) · [Distribution guide](docs/DISTRIBUTION.md)
+[Try the chicken pangenome demo →](https://a-r-d.github.io/pangenome-range/demo?archive=chicken&preset=chicken-igll1-ucd312-deletion)
 
 ![Published UCD312 chicken example](results/2026-08-30-chicken-merge-hardening/chicken-published-example.png)
 
-**1.50 GB remote archive · 120.7 KB cold read · 10 HTTP ranges · exact UCD312 source path**
+This view comes from a **1.50 GB chicken pangenome**. The browser fetched just
+**120.7 KB in 10 requests** to show the IGLL1 region and a published 5,184-base
+deletion.
 
-The demo opens a whole-reference-genome archive derived from the published
-30-assembly chicken pangenome. It searches IGLL1, highlights a validated
-5,184-base deletion, and resolves the traversal to the exact named GBWT path:
+## What is in this repository
 
-`UCD312#2#h2tg000050l#fragment=1251366`
+There are four main pieces:
 
-The browser keeps that source observation separate from the paper's biological
-interpretation and makes no phenotype, breed, ancestry, or allele-frequency
-claim. See the [chicken demo evidence](docs/CHICKEN_DEMO.md).
+- **The `.pngr` file format** stores a graph so small regions can be fetched on
+  demand.
+- **A Rust encoder** converts GBZ graphs into `.pngr` files.
+- **A TypeScript reader** opens local or remote archives and returns graph data.
+- **A browser viewer** draws the selected region and its local paths.
 
-`pangenome-range` provides:
+## Live demos
 
-- the `.pngr` range-readable file-format specification;
-- a Rust GBZ → `.pngr` encoder;
-- a TypeScript range reader;
-- a lightweight tube-map viewer.
+| Demo | Data | What it shows |
+| --- | --- | --- |
+| [Chicken IGLL1](https://a-r-d.github.io/pangenome-range/demo?archive=chicken&preset=chicken-igll1-ucd312-deletion) | 1.50 GB chicken graph | A published deletion and the named source paths that contain it |
+| [HPRC HLA-B](https://a-r-d.github.io/pangenome-range/demo?archive=hprc&locus=HLA-B&zoom=0.32&center=0.5&vscale=1.3) | 10.84 GB human graph | Human variation, gene search, and named source paths |
+| [Rice Xa7](https://a-r-d.github.io/pangenome-range/demo?archive=rice&locus=Xa7&zoom=2.856&center=0.600576&vscale=1.45) | Rice chromosome 6 | A crop pangenome and gene search |
+| [1000G NA19239](https://a-r-d.github.io/pangenome-range/demo?archive=1000g&sample=NA19239&contig=1&start=0&end=32768&zoom=0.35&center=0.5&vscale=1) | Whole population graph | One sample in a large human population graph |
+
+<details>
+<summary>What the chicken example checks</summary>
+
+The archive comes from the published 30-assembly chicken pangenome. The selected
+traversal is present on one UCD312 haplotype, whose exact GBWT path identifier is
+`UCD312#2#h2tg000050l#fragment=1251366`.
+
+That identifies the source path; it does not by itself establish a phenotype,
+breed, ancestry, or allele frequency. [How the chicken example was
+checked](docs/CHICKEN_DEMO.md).
+
+</details>
+
+<details>
+<summary>More HPRC examples</summary>
+
+- [MICB — MHC class I-related variation](https://a-r-d.github.io/pangenome-range/demo?archive=hprc&locus=MICB&zoom=0.38&center=0.5&vscale=1.2)
+- [KIR3DL1 — structurally complex immune locus](https://a-r-d.github.io/pangenome-range/demo?archive=hprc&locus=KIR3DL1&zoom=0.3&center=0.5&vscale=1.25)
+- [CHAD — compact alternate paths and node labels](https://a-r-d.github.io/pangenome-range/demo?archive=hprc&locus=CHAD&zoom=0.45&center=0.5&vscale=1.2)
+- [CRISP1 — dense graph and display controls](https://a-r-d.github.io/pangenome-range/demo?archive=hprc&locus=CRISP1&zoom=0.25&center=0.5&vscale=1)
+
+</details>
+
+Demo links can open a particular archive, gene, coordinate range, or saved view.
+Local files still require you to choose the file in the browser.
+
+## Read a region in TypeScript
 
 ```ts
 import { openPangenome } from "pangenome-range";
@@ -41,27 +73,6 @@ console.log(result.graph.nodes.ids.length, result.tiles.length);
 await archive.close();
 ```
 
-| Demo | Scope | Identity |
-| --- | --- | --- |
-| [Chicken IGLL1](https://a-r-d.github.io/pangenome-range/demo?archive=chicken&preset=chicken-igll1-ucd312-deletion) | 1.50 GB whole reference genome | Named paths and published preset |
-| [HPRC HLA-B](https://a-r-d.github.io/pangenome-range/demo?archive=hprc&locus=HLA-B&zoom=0.32&center=0.5&vscale=1.3) | 10.84 GB whole human graph | Named paths and gene search |
-| [Rice Xa7](https://a-r-d.github.io/pangenome-range/demo?archive=rice&locus=Xa7&zoom=2.856&center=0.600576&vscale=1.45) | Chromosome 6 | Anonymous currently |
-| [1000G NA19239](https://a-r-d.github.io/pangenome-range/demo?archive=1000g&sample=NA19239&contig=1&start=0&end=32768&zoom=0.35&center=0.5&vscale=1) | Whole population graph | Graph-only |
-
-<details>
-<summary>More HPRC demonstration loci</summary>
-
-- [MICB — MHC class I-related variation](https://a-r-d.github.io/pangenome-range/demo?archive=hprc&locus=MICB&zoom=0.38&center=0.5&vscale=1.2)
-- [KIR3DL1 — structurally complex immune locus](https://a-r-d.github.io/pangenome-range/demo?archive=hprc&locus=KIR3DL1&zoom=0.3&center=0.5&vscale=1.25)
-- [CHAD — compact alternate paths and node labels](https://a-r-d.github.io/pangenome-range/demo?archive=hprc&locus=CHAD&zoom=0.45&center=0.5&vscale=1.2)
-- [CRISP1 — dense graph and display-budget controls](https://a-r-d.github.io/pangenome-range/demo?archive=hprc&locus=CRISP1&zoom=0.25&center=0.5&vscale=1)
-
-</details>
-
-Demo URLs can select an archive, named locus, exact coordinate interval, or
-validated preset, and restore viewport state. Local files cannot be restored
-from a URL because browsers require an explicit user file selection.
-
 ## Encoder
 
 ```bash
@@ -74,14 +85,14 @@ Add a searchable gene index with GFF3 annotations:
 pangenome-range encode input.gbz output.pngr --annotations genes.gff3 --annotation-release v50 --annotation-assembly GRCh38.p14
 ```
 
-Add named GBWT source-path identity with `--path-membership`. The disk-backed
-encoder parses the document-array samples embedded in GBWT, performs bounded
-tile-batched LF locate, and writes a paged catalog plus one membership page for
-each graph tile. `--path-locate-max-lf-steps` is a hard per-position guard. Source
-cache v2 persists the authenticated locate support and catalog, so repeated
-encodes do not restream the GBZ. Named membership requires complete GBWT path,
-sample, and contig metadata and fails closed instead of inventing labels. No local
-`gbwt-rs` fork is a dependency.
+Use `--path-membership` when the archive should preserve the real GBWT paths
+behind each local traversal. This adds a path catalog and per-tile membership
+data. Encoding stops with a clear error if the GBWT does not contain the path,
+sample, and contig information needed to name those paths.
+
+The encoder reads this information in bounded batches and can save it in the
+source cache for later runs. It does not depend on a local `gbwt-rs` fork. Use
+`--path-locate-max-lf-steps` to limit the work spent locating any one traversal.
 
 The browser API reads the optional feature independently from graph queries:
 
@@ -115,32 +126,14 @@ const combined = await archive.queryWithPathMembership({
 console.log(combined.trace.graph, combined.trace.membership, combined.trace.catalog);
 ```
 
-Each returned path has a real canonical GBWT path ID, structured metadata, and a
-`canonicalName` deterministically reconstructed from that metadata. GBWT does not
-retain the original input spelling of every path name.
+Each result has a real GBWT path ID, its metadata, and a consistent
+`canonicalName` built from that metadata. GBWT does not retain the original
+spelling of every input path name.
 
-Anonymous weighted tile paths remain the default graph semantics. Named memberships
-are tile-local evidence; the reader does not stitch them across tiles.
-Catalog batches deduplicate requested IDs, fetch distinct catalog pages with bounded
-concurrency, and preserve requested ID order. Decoding is capped at 250,000
-membership records per group and per tile, independently of occurrence weight.
-
-## JavaScript decoder
-
-```ts
-import { openPangenome } from "pangenome-range";
-
-const archive = await openPangenome("https://example.org/graph.pngr");
-const region = await archive.query({
-  sample: "GRCh38",
-  contig: "chr6",
-  start: 31_498_145,
-  end: 31_511_124,
-});
-
-console.log(region.graph.nodes.ids.length, region.tiles.length);
-await archive.close();
-```
+Named-path results belong to individual tiles; the reader does not pretend they
+continue across tile boundaries. The unnamed weighted paths remain available when
+named membership is not included. Catalog reads are deduplicated and bounded, and
+the decoder accepts at most 250,000 membership records per group or tile.
 
 ## Encoder performance
 
