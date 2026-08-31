@@ -3,7 +3,9 @@
 [![CI](https://img.shields.io/github/actions/workflow/status/a-r-d/pangenome-range/ci.yml?branch=main&style=for-the-badge&logo=githubactions&logoColor=white&label=CI)](https://github.com/a-r-d/pangenome-range/actions/workflows/ci.yml)
 [![MIT](https://img.shields.io/badge/license-MIT-blue?style=for-the-badge)](LICENSE)
 
-## [Open the live demo →](https://a-r-d.github.io/pangenome-range/demo)
+## [Explore named chicken paths →](https://a-r-d.github.io/pangenome-range/demo?archive=chicken&locus=IGLL1)
+
+### [Open the large human pangenome →](https://a-r-d.github.io/pangenome-range/demo?archive=hprc&locus=HLA-B)
 
 `pangenome-range` is four things:
 
@@ -34,7 +36,24 @@ The rice demo explores chromosome 6 from the PPanG rice pangenome, using NATELBO
 
 - [Rice Xa7 — bacterial-blight-resistance locus](https://a-r-d.github.io/pangenome-range/demo?archive=rice&locus=Xa7&zoom=2.856&center=0.600576&vscale=1.45)
 
-Demo URLs can select `archive=hprc`, `archive=1000g`, `archive=rice`, or `archive=fixture`; select a named `locus` or an exact `sample`/`contig`/`start`/`end` interval; and restore horizontal `zoom`, normalized `center`, and vertical `vscale`. Local file selections cannot be restored from a link because browsers do not grant URLs access to local files.
+The default demo opens a whole-reference-genome archive derived from the
+published 30-assembly chicken graph at the chromosome 15 IGLL1 locus. The
+1.50 GB object includes
+searchable GRCg7b genes and exact named GBWT source-path membership:
+
+- [Chicken IGLL1 — named paths through an immune-gene locus](https://a-r-d.github.io/pangenome-range/demo?archive=chicken&locus=IGLL1&zoom=0.35&center=0.5&vscale=1.2)
+
+The paper-backed **Published example** control resolves the exact 5,184-base
+reference skip to two fragment-aware tile groups and one UCD312 source path.
+The browser keeps that source observation separate from the paper's biological
+interpretation and makes no phenotype or allele-frequency claim. See the
+[chicken demo evidence](docs/CHICKEN_DEMO.md).
+
+Demo URLs can select `archive=hprc`, `archive=1000g`, `archive=rice`,
+`archive=chicken`, or `archive=fixture`; select a named `locus` or an exact
+`sample`/`contig`/`start`/`end` interval; and restore horizontal `zoom`,
+normalized `center`, and vertical `vscale`. Local file selections cannot be
+restored from a link because browsers do not grant URLs access to local files.
 
 ## Encoder
 
@@ -47,6 +66,57 @@ Add a searchable gene index with GFF3 annotations:
 ```bash
 pangenome-range encode input.gbz output.pngr --annotations genes.gff3 --annotation-release v50 --annotation-assembly GRCh38.p14
 ```
+
+Add named GBWT source-path identity with `--path-membership`. The disk-backed
+encoder parses the document-array samples embedded in GBWT, performs bounded
+tile-batched LF locate, and writes a paged catalog plus one membership page for
+each graph tile. `--path-locate-max-lf-steps` is a hard per-position guard. Source
+cache v2 persists the authenticated locate support and catalog, so repeated
+encodes do not restream the GBZ. Named membership requires complete GBWT path,
+sample, and contig metadata and fails closed instead of inventing labels. No local
+`gbwt-rs` fork is a dependency.
+
+The browser API reads the optional feature independently from graph queries:
+
+```ts
+const membership = await archive.pathMembership({
+  sample: "GRCh38",
+  contig: "chr6",
+  start: 31_498_145,
+  end: 31_511_124,
+});
+console.log(membership.paths, membership.tiles[0]?.groups);
+
+const region = await archive.query({
+  sample: "GRCh38",
+  contig: "chr6",
+  start: 31_498_145,
+  end: 31_511_124,
+});
+const groups = await archive.tilePathMemberships(region.tiles[0]);
+const sourcePath = await archive.pathById(groups[0].memberships[0].pathId);
+const sourcePaths = await archive.pathsByIds(
+  groups[0].memberships.map(({ pathId }) => pathId),
+);
+
+const combined = await archive.queryWithPathMembership({
+  sample: "GRCh38",
+  contig: "chr6",
+  start: 31_498_145,
+  end: 31_511_124,
+});
+console.log(combined.trace.graph, combined.trace.membership, combined.trace.catalog);
+```
+
+Each returned path has a real canonical GBWT path ID, structured metadata, and a
+`canonicalName` deterministically reconstructed from that metadata. GBWT does not
+retain the original input spelling of every path name.
+
+Anonymous weighted tile paths remain the default graph semantics. Named memberships
+are tile-local evidence; the reader does not stitch them across tiles.
+Catalog batches deduplicate requested IDs, fetch distinct catalog pages with bounded
+concurrency, and preserve requested ID order. Decoding is capped at 250,000
+membership records per group and per tile, independently of occurrence weight.
 
 ## JavaScript decoder
 
@@ -125,6 +195,10 @@ Measured August 27, 2026 over the public network; latency will vary by location 
 | `--dataset-title TEXT` | none | Deterministic archive title. |
 | `--dataset-description TEXT` | none | Deterministic archive description. |
 | `--source-uri URI` | none | Canonical source URI; local paths and `file:` URIs are rejected. |
+| `--experimental-path-membership-summary PATH` | none | Prepared bounded tile-membership JSON; research only and requires the matching catalog. |
+| `--experimental-path-catalog PATH` | none | Complete contiguous path-catalog NDJSON; research only and requires the matching summary. |
+| `--path-membership` | off | Preserve named source-path membership from embedded GBWT DA samples; disk mode only. |
+| `--path-locate-max-lf-steps N` | `8192` | Hard LF-step limit for each located traversal start. |
 | `--keep-partial` | off | Keep the temporary sibling archive after failure. |
 | `--progress MODE` | terminal: plain; redirected: off | `auto`, `plain`, `json`, or `off`. |
 | `--progress-interval-seconds N` | `5` | Progress update interval. |
@@ -152,5 +226,7 @@ This project is possible because research groups made large pangenome resources 
 - The [GENCODE project](https://www.gencodegenes.org/) for the Human Release 50 gene annotations that power named-locus search in the HPRC demo ([exact GFF3 source](https://ftp.ebi.ac.uk/pub/databases/gencode/Gencode_human/release_50/gencode.v50.annotation.gff3.gz)).
 - The [1000 Genomes Project](https://www.internationalgenome.org/) and the [UCSC Computational Genomics Lab](https://cgl.gi.ucsc.edu/data/giraffe/mapping/graphs/for-NA19239/1000gplons/hs38d1/) for the 1000GPlons `hs38d1` graph used by the NA19239 demo.
 - The [PPanG team at SJTU-CGM](https://cgm.sjtu.edu.cn/PPanG/) for the rice Minigraph-Cactus graphs and Xa7 locus context ([source repository](https://github.com/SJTU-CGM/PPanG), [paper](https://doi.org/10.1186/s12864-024-10302-5)).
+- Rice et al. for the [30-chicken pangenome graph](https://zenodo.org/records/10018222) and its [BMC Biology article](https://doi.org/10.1186/s12915-023-01758-0). The source graph is CC BY 4.0.
+- [NCBI RefSeq](https://www.ncbi.nlm.nih.gov/datasets/genome/GCF_016699485.2/) for the GRCg7b gene annotations used by the chicken demo.
 
 The demo archives are derived, range-addressable representations. Please credit and follow the terms of the original data providers when using them; the repository's MIT license covers the `pangenome-range` software, not a replacement license for every upstream dataset.

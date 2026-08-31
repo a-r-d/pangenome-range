@@ -1,0 +1,13 @@
+{
+  "schema_version": 2,
+  "anonymous_bytes": 249036,
+  "named_bytes": 991718,
+  "bounded_delta_bytes": 742682,
+  "bounded_delta_percent": 298.222747,
+  "retained_whole_hprc_archive_bytes": 8832749949,
+  "retained_whole_hprc_graph_directory_pages": 11559,
+  "fixed_membership_directory_bytes_if_full_archive": 47345664,
+  "fixed_membership_directory_minimum_percent": 0.53602405,
+  "archive_wide_storage_overhead_established": false,
+  "note": "The bounded four-tile delta cannot be divided by the whole archive to project storage. The fixed directory alone would add 47,345,664 bytes before membership tile pages, the catalog, descriptor, compression, and metadata."
+}

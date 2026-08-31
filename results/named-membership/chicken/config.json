@@ -1,0 +1,51 @@
+{
+  "schema_version": 1,
+  "dataset": "Chicken pangenome chromosome 15 named-membership demo",
+  "date": "2026-08-30",
+  "format_policy": "optional-path-members-v1-extension",
+  "source": {
+    "name": "pangenome.gfa.gz",
+    "bytes": 2358369558,
+    "sha256": "609230aa36071690bfde02445a7d0693f75e512a79276f60a3b5d04361c2600d",
+    "url": "https://zenodo.org/records/10018222",
+    "license": "CC-BY-4.0"
+  },
+  "derived_source": {
+    "component": "chr15",
+    "gfa_bytes": 143961984,
+    "gfa_sha256": "8d3ae4d2d6091e4ceaa3e9e973dfbf97baa79238d4360c15f6417e725cbba87b",
+    "gbz_bytes": 14848720,
+    "gbz_sha256": "3c9f21afa2d57909a3bd8b0d48c947e770faab514223dbbb2a0869717ecf0cf7",
+    "vg_version": "1.76.1"
+  },
+  "annotation": {
+    "assembly": "GCF_016699485.2",
+    "release": "106",
+    "source_sha256": "d298f52807d16a467068a18dcf384b331b823d0861837731cc77a331e07fef72",
+    "subset_sha256": "3ab30066097b88a9c31f4f24c64f2b875903d6016508db2a91bf09f1e91d87f9"
+  },
+  "reference": {
+    "sample": "bGalGal1b",
+    "contig": "chr15",
+    "bases": 12703657
+  },
+  "demo_interval": {
+    "locus": "IGLL1",
+    "start": 7913472,
+    "end": 7979008,
+    "tiles": 4
+  },
+  "limits": {
+    "full_gfa_vg_conversion_prohibited": true,
+    "component_extraction_memory_max_bytes": 402653184,
+    "vg_component_conversion_memory_max_bytes": 2147483648,
+    "encode_memory_max_bytes": 1073741824,
+    "validation_memory_max_bytes": 1073741824,
+    "swap_max_bytes": 0,
+    "threads": 1,
+    "encode_max_queued_bytes": 67108864,
+    "validation_max_queued_bytes": 536870912,
+    "path_locate_max_lf_steps": 8192
+  },
+  "publication_authorized": true
+}

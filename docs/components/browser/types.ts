@@ -1,5 +1,6 @@
 import type {
   ArchiveInfo,
+  FeatureQueryTrace,
   LocusHit,
   QueryTrace,
   RegionPlan,
@@ -36,6 +37,7 @@ export type DemoArchiveId =
   | "hprc"
   | "1000g"
   | "rice"
+  | "chicken"
   | "fixture"
   | "custom"
   | "local";
@@ -50,6 +52,11 @@ export interface BrowserMetrics {
   readonly completeMs?: number;
   readonly layoutMs?: number;
   readonly svgElements?: number;
+}
+
+export interface PatternEvidence {
+  readonly membership: FeatureQueryTrace;
+  readonly catalog: FeatureQueryTrace;
 }
 
 export interface BrowserStateSnapshot {
@@ -69,4 +76,21 @@ export interface ArchiveSourceSelection {
   readonly label: string;
   readonly key: string;
   readonly description?: string;
+  readonly group:
+    | "Research demonstration"
+    | "Large human demonstration"
+    | "Additional cross-species demonstration"
+    | "Offline";
+  readonly badges: readonly (
+    | "Named paths"
+    | "Gene search"
+    | "Whole genome"
+    | "Graph only"
+    | "Experimental identity"
+  )[];
+  readonly scope: "whole genome" | "partial" | "fixture";
+  readonly attribution?: {
+    readonly label: string;
+    readonly url: string;
+  };
 }

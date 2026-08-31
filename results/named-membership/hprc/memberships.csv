@@ -1,0 +1,5 @@
+scope,groups,membership_records,occurrence_weight,multiplicity_sum,unique_referenced_paths,unique_samples,largest_group_weight,largest_group_unique_paths
+tert_four_tiles,1686,4257,4257,4257,464,232,168,168
+retained_hla_b_two_tiles,405,926,926,926,463,232,,
+retained_micb_two_tiles,404,926,926,926,463,232,,
+retained_kir3dl1_two_tiles,359,,1849,1849,465,233,,

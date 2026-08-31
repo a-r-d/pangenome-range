@@ -1,0 +1,7 @@
+*
+!.gitignore
+!README.md
+!LICENSE_REVIEW.md
+!sources.json
+!demo-presets.json
+!vg-tool-manifest.json

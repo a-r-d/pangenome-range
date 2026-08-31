@@ -1,7 +1,7 @@
 <script setup lang="ts">
 // biome-ignore-all lint/correctness/noUnusedVariables: Vue template bindings are consumed outside the script AST.
 import type { ArchiveInfo } from "pangenome-range/reader";
-import { ref, watch } from "vue";
+import { computed, ref, watch } from "vue";
 import type { ArchiveSourceSelection } from "./types";
 
 const props = defineProps<{
@@ -18,6 +18,18 @@ const emit = defineEmits<{
 const customUrl = ref("");
 const fileInput = ref<HTMLInputElement>();
 const selectedPreset = ref("");
+const selectedSource = computed(() =>
+  props.presets.find((source) => source.id === selectedPreset.value),
+);
+const groups = computed(
+  () =>
+    [
+      "Research demonstration",
+      "Large human demonstration",
+      "Additional cross-species demonstration",
+      "Offline",
+    ] as const,
+);
 
 watch(
   () => [props.open, props.activeId, props.presets] as const,
@@ -46,6 +58,9 @@ function openCustom(): void {
     source: value,
     label: "Custom remote archive",
     key: `url:${value}`,
+    group: "Offline",
+    badges: [],
+    scope: "partial",
   });
 }
 
@@ -57,6 +72,9 @@ function chooseFile(event: Event): void {
     source: file,
     label: file.name,
     key: `file:${file.name}:${file.size}`,
+    group: "Offline",
+    badges: [],
+    scope: "partial",
   });
 }
 </script>
@@ -64,9 +82,18 @@ function chooseFile(event: Event): void {
 <template>
   <div v-if="open" class="archive-menu" role="dialog" aria-label="Archive source">
     <header><div><span>Archive source</span><h2>Static .pngr object</h2></div><button type="button" aria-label="Close archive source" @click="emit('close')">×</button></header>
-    <div class="archive-menu__active"><strong>{{ activeLabel }}</strong><span>{{ info ? `${Number(info.archiveBytes / 1024n / 1024n).toLocaleString()} MiB · format v${info.formatVersion}` : 'Opening…' }}</span></div>
-    <label><span>Demo archive</span><select v-model="selectedPreset" aria-label="Demo archive"><option v-for="preset in presets" :key="preset.id" :value="preset.id">{{ preset.label }}</option></select></label>
-    <p v-if="presets.find((source) => source.id === selectedPreset)?.description" class="archive-menu__note">{{ presets.find((source) => source.id === selectedPreset)?.description }}</p>
+    <div class="archive-menu__active"><strong>{{ activeLabel }}</strong><span>{{ info ? `${(Number(info.archiveBytes) / 1e9).toFixed(2)} GB · format v${info.formatVersion}` : 'Opening…' }}</span></div>
+    <dl v-if="info" class="archive-menu__facts">
+      <div><dt>Scope</dt><dd>{{ presets.find((source) => source.id === activeId)?.scope ?? 'user supplied' }}</dd></div>
+      <div><dt>Named-locus search</dt><dd>{{ info.namedLoci.recordCount.toLocaleString() }} records</dd></div>
+      <div><dt>Path membership</dt><dd>{{ info.pathMembership.state === 'present' ? 'available' : 'absent' }}</dd></div>
+      <div><dt>Path catalog</dt><dd>{{ info.pathMembership.pathCount.toLocaleString() }} source-path records</dd></div>
+      <div><dt>Reference assembly</dt><dd>{{ info.provenance?.referenceAssembly ?? 'not declared' }}</dd></div>
+    </dl>
+    <p v-if="presets.find((source) => source.id === activeId)?.attribution" class="archive-menu__note">Source: <a :href="presets.find((source) => source.id === activeId)?.attribution?.url" target="_blank" rel="noreferrer">{{ presets.find((source) => source.id === activeId)?.attribution?.label }}</a></p>
+    <label><span>Demo archive</span><select v-model="selectedPreset" aria-label="Demo archive"><optgroup v-for="group in groups" :key="group" :label="group"><option v-for="preset in presets.filter((source) => source.group === group)" :key="preset.id" :value="preset.id">{{ preset.label }}</option></optgroup></select></label>
+    <div v-if="selectedSource" class="archive-badges"><span v-for="badge in selectedSource.badges" :key="badge">{{ badge }}</span></div>
+    <p v-if="selectedSource?.description" class="archive-menu__note">{{ selectedSource.description }}</p>
     <button type="button" :disabled="selectedPreset.length === 0 || selectedPreset === activeId" @click="openPreset">{{ selectedPreset === activeId ? 'Currently open' : 'Open selected demo' }}</button>
     <label><span>Remote .pngr URL</span><input v-model="customUrl" type="url" placeholder="https://…/archive.pngr" /></label>
     <button type="button" @click="openCustom">Open remote URL</button>

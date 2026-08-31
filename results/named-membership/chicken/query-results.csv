@@ -1,0 +1,6 @@
+query_id,query_class,start,end,tiles,nodes,canonical_hash,correctness,haplotype_tiles_correct,total_bytes_fetched,dependency_rounds
+chr15-start,fixed-boundary-start,0,65536,4,2615,36ffff229229e1d9c3947868648fe82b6d130a1c39e5c17e8b93c6d4f8e4a4f2,true,true,81801,2
+chr15-quarter,fixed-seeded-interval,3276800,3342336,4,1741,7d573800757b182753977984e901ca43e92852d931d6050468029d81114122d3,true,true,64093,2
+chr15-middle,fixed-seeded-interval,6291456,6356992,4,2244,8b22a944ad3b04f48d92d3617fd13949291028d65c5e1c765d2075e92567391a,true,true,73161,2
+igll1,fixed-biological-igll1,7913472,7979008,4,4539,d21b5f3495521359e06afd365c951247f10379a08ec49ad5e4bd310d857df7c3,true,true,122719,2
+chr15-end,fixed-boundary-end,12632064,12703657,5,1379,5de56a267d8736b9f463fc368b9992df8327e2ff50fbbfd57c3e9e0895512142,true,true,50154,2

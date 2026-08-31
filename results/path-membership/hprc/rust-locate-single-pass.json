@@ -1,0 +1,49 @@
+{
+  "schema_version": 1,
+  "implementation": "local gbwt-rs typed DA samples with single-pass GBWT load",
+  "gbwt_rs_fork": "https://github.com/a-r-d/gbwt-rs",
+  "gbwt_rs_branch": "experiment/da-samples-locate",
+  "gbwt_rs_base_commit": "a0d72bc3bd261fc433e59de64b2706f5f45708ad",
+  "gbwt_rs_worktree_uncommitted": true,
+  "gbwt_bytes": 4051134848,
+  "gbwt_sha256": "97e49520e93d343e0ba7b99952d9b8bf99a3aae6562ff1c4122488d38c8f01a7",
+  "stored_sequences": 106300,
+  "gbwt_records": 425853421,
+  "sampled_records": 60101209,
+  "da_samples": 75060674,
+  "da_serialized_bytes": 390336312,
+  "requested_positions": 64,
+  "sampling": {
+    "seed": 20260828,
+    "max_forward_walk_steps": 100000,
+    "oracle": "positions reached by forward traversal from known GBWT sequence starts",
+    "oracle_walk_wall_ms": 192.092524
+  },
+  "correctness": {
+    "exact_sequence_matches": 64,
+    "mismatches": 0
+  },
+  "max_lf_steps_limit": 100000,
+  "total_lf_steps": 21620,
+  "lf_steps": {
+    "p50": 204,
+    "p90": 906,
+    "p95": 986,
+    "p99": 994,
+    "max": 994
+  },
+  "gbwt_loads": 1,
+  "load_wall_ms": 3883.614684,
+  "locate_wall_ms": 6.800996,
+  "process_wall_seconds": 4.31,
+  "peak_rss_bytes": 4919664640,
+  "address_space_limit_bytes": 12884901888,
+  "process_swaps": 0,
+  "used_r_index": false,
+  "used_vg": false,
+  "environment": {
+    "kernel": "Linux 6.17.0-41-generic x86_64",
+    "rustc": "1.97.1 (8bab26f4f 2026-07-14)",
+    "cargo": "1.97.1 (c980f4866 2026-06-30)"
+  }
+}

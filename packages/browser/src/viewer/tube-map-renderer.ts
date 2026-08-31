@@ -3,6 +3,7 @@ import type { TubeMapLayout } from "./tube-map-layout.js";
 export interface TubeMapRenderOptions {
   readonly selectedNodeKey?: string;
   readonly selectedPatternId?: string;
+  readonly highlightedPatternIds?: readonly string[];
   readonly showTileBoundaries?: boolean;
   readonly onNodeSelect?: (nodeKey: string) => void;
   readonly onPatternSelect?: (patternId: string) => void;
@@ -80,9 +81,15 @@ export function renderTubeMapSvg(
     class: "pngr-patterns",
     "aria-label": "Anonymous local traversal patterns",
   });
+  const highlightedPatterns = new Set(options.highlightedPatternIds ?? []);
   for (const [index, pattern] of layout.patterns.entries()) {
     const selected = options.selectedPatternId === pattern.id;
-    const muted = options.selectedPatternId !== undefined && !selected;
+    const highlighted = highlightedPatterns.has(pattern.id);
+    const emphasized = selected || highlighted;
+    const muted =
+      (options.selectedPatternId !== undefined ||
+        highlightedPatterns.size > 0) &&
+      !emphasized;
     const selectedThickness = emphasizedThickness(pattern.thickness);
     const color = PATTERN_COLORS[index % PATTERN_COLORS.length] ?? "#a855f7";
     const hitPath = svgElement("path", {
@@ -97,9 +104,9 @@ export function renderTubeMapSvg(
     });
     const path = svgElement("path", {
       d: pattern.path,
-      class: `pngr-pattern${selected ? " is-selected" : ""}${muted ? " is-muted" : ""}`,
+      class: `pngr-pattern${emphasized ? " is-selected" : ""}${muted ? " is-muted" : ""}`,
       stroke: color,
-      "stroke-width": selected ? selectedThickness : pattern.thickness,
+      "stroke-width": emphasized ? selectedThickness : pattern.thickness,
       "aria-hidden": "true",
     });
     const select = (): void => options.onPatternSelect?.(pattern.id);
@@ -120,7 +127,7 @@ export function renderTubeMapSvg(
     );
     label.setAttribute(
       "class",
-      `pngr-pattern-label${selected ? " is-selected" : ""}${muted ? " is-muted" : ""}`,
+      `pngr-pattern-label${emphasized ? " is-selected" : ""}${muted ? " is-muted" : ""}`,
     );
     label.setAttribute("fill", color);
     patterns.append(label);
@@ -179,14 +186,19 @@ export function renderTubeMapSvg(
   });
   for (const [index, pattern] of layout.patterns.entries()) {
     const selected = options.selectedPatternId === pattern.id;
-    const muted = options.selectedPatternId !== undefined && !selected;
+    const highlighted = highlightedPatterns.has(pattern.id);
+    const emphasized = selected || highlighted;
+    const muted =
+      (options.selectedPatternId !== undefined ||
+        highlightedPatterns.size > 0) &&
+      !emphasized;
     const selectedThickness = emphasizedThickness(pattern.portThickness);
     patternPorts.append(
       svgElement("path", {
         d: pattern.portPath,
-        class: `pngr-pattern-port${selected ? " is-selected" : ""}${muted ? " is-muted" : ""}`,
+        class: `pngr-pattern-port${emphasized ? " is-selected" : ""}${muted ? " is-muted" : ""}`,
         stroke: PATTERN_COLORS[index % PATTERN_COLORS.length] ?? "#a855f7",
-        "stroke-width": selected ? selectedThickness : pattern.portThickness,
+        "stroke-width": emphasized ? selectedThickness : pattern.portThickness,
         "data-pattern-port-id": pattern.id,
       }),
     );

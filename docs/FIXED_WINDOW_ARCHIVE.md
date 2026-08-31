@@ -15,7 +15,7 @@ variable root manifest
 versioned extension directory with summary and provenance descriptors
 contiguous fixed 4 KiB arithmetic directory pages
 independently compressed PNGRGN01 regional payloads
-optional independently compressed named-locus pages and summary pages
+optional independently compressed named-locus, summary, and named-path membership pages
 ```
 
 Each reference manifest records its real sample and contig, coordinate span,
@@ -51,6 +51,15 @@ one independently compressed/checksummed series page. Counters are exact sums
 of accepted core tiles: covered bases, tile and byte counts, and tile-local
 node, edge, packed-record, and occurrence totals. They are not sample
 frequencies or globally unique graph counts.
+
+`--path-membership` enables the optional registered `path-members-v1-` extension.
+It pages a complete path catalog and stores multiplicity-bearing named membership
+for every encoded tile. Fixed 4 KiB membership directories mirror the graph
+directories, avoiding an archive-wide tile list in the root descriptor. Rust
+validation binds every membership group to its manifest, core bounds, regional
+payload digest, and anonymous traversal reconstructed from that payload. TypeScript
+exposes lazy catalog, per-tile, compatibility, and combined query APIs. Readers that
+do not need named identity may skip the extension.
 
 ## Regional representation
 
@@ -135,5 +144,10 @@ intentionally unsupported and must be regenerated.
 - The current regional occurrence safety limit is 16,777,216 per tile; adaptive
   splitting must keep tiles below it.
 - Anonymous haplotypes have no cross-tile sample identity.
+- Named membership has bounded synthetic, rice, and four-tile HPRC evidence, plus
+  a checked-in Rust/TypeScript golden fixture. Archive-wide HPRC construction cost
+  and storage overhead remain unmeasured; bounded tile deltas are not whole-archive
+  projections. The 1000G pilot is explicitly excluded after the earlier
+  memory failure; no 1000G named-membership scale claim is made.
 - Whole-genome validation remains an explicit opt-in measurement, never a CI
   task.

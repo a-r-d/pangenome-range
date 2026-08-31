@@ -1,0 +1,32 @@
+{
+  "schema_version": 1,
+  "status": "passed-whole-corpus-published",
+  "full_gfa_to_gbz": {
+    "status": "passed",
+    "wall_seconds": 458.05,
+    "peak_rss_kib": 24355120,
+    "memory_max_bytes": 45097156608,
+    "swap_bytes": 0
+  },
+  "whole_archive": {
+    "reference_paths": 207,
+    "reference_bases": 1052949595,
+    "tiles": 64371,
+    "catalog_paths": 12237,
+    "groups": 717130,
+    "memberships": 1850732,
+    "occurrence_weight": 1850762,
+    "encoder_peak_rss_kib": 173668,
+    "maximum_lf_steps": 1023,
+    "full_validation_passed": true,
+    "oracle_queries_passed": 8
+  },
+  "igll1_regression": {
+    "source_oracle_passed": true,
+    "canonical_hash": "d21b5f3495521359e06afd365c951247f10379a08ec49ad5e4bd310d857df7c3",
+    "matches_chromosome_15_archive": true
+  },
+  "public_origin_contract_passed": true,
+  "publication_authorized": true,
+  "license": "CC-BY-4.0"
+}

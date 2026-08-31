@@ -1,0 +1,11 @@
+{
+  "schema_version": 12,
+  "identity_source": "embedded-gbwt-da-bounded-lf-v1",
+  "identity_source_sha256": "11d6047f79575ffb83757462484bad134ed20928bd2c8171ec52e35a54976e2b",
+  "anonymous": { "sha256": "6975038284974e53da3ce59294370c56ea44eea0d6cd099d1c36c0102dc948f5", "wall_ms": 98758.4877, "max_rss_kib": 653596, "swaps": 0 },
+  "named": { "sha256": "86112090c97f96b2ab087e6a7facc4153790faf6cc250e6a9724dff29ef8a97c", "wall_ms": 101299.308824, "max_rss_kib": 653416, "swaps": 0 },
+  "overhead": { "wall_ms": 2540.821124, "wall_percent": 2.572762, "observed_max_rss_kib": 653596, "persistent_cache_bytes": 0 },
+  "ephemeral_source_cache_bytes_each_mode": 11922586123,
+  "membership": { "catalog_paths": 53150, "groups": 1686, "records": 4257, "occurrence_total": 4257, "group_unique_path_count_sum": 4257, "delta_groups": 1686, "run_groups": 0 },
+  "full_validation": "passed"
+}

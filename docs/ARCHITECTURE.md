@@ -53,6 +53,23 @@ atomically renamed. `validate --mode full` additionally reconstructs every
 physical tile traversal; `verify` remains the independent selected-query source
 oracle. Failed temporary objects are removed unless `--keep-partial` is set.
 
+An opt-in production path can append `path-members-v1-` pages to the same temporary
+object. `--path-membership` parses the four Simple-SDS
+document-array structures embedded in GBWT, builds the catalog from source metadata,
+and locates one completed tile's traversal starts at a time. Each LF round groups
+positions by GBWT record, reads and decodes that record once, then releases it. The
+catalog is front-coded in 1,024-ID pages. The extension descriptor records the
+identity-source implementation, authenticated GBZ SHA-256, catalog/group/occurrence
+totals, the sum of each group's distinct-path count, and codec distribution. Fixed
+4 KiB membership-directory pages
+align one-for-one with graph directory pages; each entry addresses one multiplicity-
+and orientation-bearing tile page. Its traversal digest includes manifest identity,
+core bounds, the regional payload BLAKE3-128, and canonical oriented nodes. Before
+rename, validation requires exact digest, occurrence-weight, unique-count,
+multiplicity, catalog-bound, and regional-integrity reconciliation.
+The paired prepared summary/catalog mode remains an independent byte-for-byte oracle;
+normal archives are unaffected.
+
 The encoder computes exact total selected reference bases before payload work.
 Progress snapshots report current reference/coordinate, accepted and physical
 chunks, processed/total bases, global and per-reference percentage, observed
@@ -93,7 +110,8 @@ source cache is removed on exit and is independent of the atomic `.pngr`
 temporary sibling.
 
 An explicit persistent source cache stores the same four indexed data files
-plus a deterministic serialized `SourcePathIndex` and an atomic versioned JSON
+plus a deterministic serialized `SourcePathIndex`, GBWT DA locate support, a source
+path catalog, and an atomic versioned JSON
 manifest. Its source byte length/SHA-256, GBZ serialization versions, component
 lengths, reference metadata digest, index interval, counts, bytes, and checksum
 are validated before reuse. Each raw component also has BLAKE3-128 per 256 KiB
@@ -120,6 +138,14 @@ every 1,000 bp using length-only sequence lookup. `LocalSubgraph` performs inter
 context expansion from packed records. Neither is a global haplotype occurrence
 index. `LoadedGbzSource` remains available via `--source-access loaded` as the
 byte-correctness baseline.
+
+`pangenome-range-build::gbwt_locate` owns the small construction-only parser for
+document-array samples already embedded in GBWT. `DiskGbzSource` performs bounded,
+batched LF locate without constructing vg's `.ri`, loading a complete GBWT, or adding
+the local fork as a dependency. The format and decoder crates remain independent of
+GBWT. Persistent source-cache v2 serializes the parsed DA structures and canonical
+catalog in authenticated files, so named-path encoding works identically through
+ephemeral and reusable cache paths.
 
 Some population GBWTs contain only named sample haplotypes and omit the
 `reference_samples` tag. For an explicitly coordinate-relative research
@@ -157,6 +183,24 @@ traversal, and weighted tile-local paths, then produce identical canonical
 hashes. A bounded progressive Canvas 2D viewer consumes only `queryTiles()` and
 the query trace contract. A public-network browser benchmark corpus remains
 explicitly unimplemented.
+
+Named identity is a separate lazy reader capability. `pathCatalogInfo()`,
+`pathById()`, `pathsByIds()`, and `searchPaths()` page the catalog without loading
+it wholesale.
+`tilePathMemberships()` reconciles one already-decoded graph tile, while
+`queryWithPathMembership()` returns graph, membership, and catalog traces separately.
+The compatibility `pathMembership()` performs
+graph-directory lookup, reads the aligned membership-directory pages, fetches only
+selected tile pages, and then fetches only catalog pages containing referenced path
+IDs. It returns tile-local group membership and real source-path records without
+changing `query()` results or loading GBWT/native code. The documentation tube-map
+inspector loads named paths on demand, filters and copies names, and highlights only
+the same canonical path ID in currently loaded tiles.
+
+Named identity fails closed unless `archive-meta-v1-` is present and its source GBZ
+SHA-256 exactly matches the identity-source SHA-256 in `path-members-v1-`. Browser
+decoding separately caps materialized membership records at 250,000 per group and
+per tile; large multiplicities remain scalar weights rather than expanded objects.
 
 The benchmark package wraps the public reader with a versioned workload, Node
 and Playwright runners, a strict/fault-injectable local range origin, immutable

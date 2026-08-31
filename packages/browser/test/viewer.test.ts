@@ -408,7 +408,11 @@ function delayedArchive(): PangenomeArchive {
     formatVersion: 1,
     semantics: "anonymous-distinct-weighted-tile-paths",
     references: () => [],
-    capabilities: () => ({ namedLoci: false, multiscaleSummaries: false }),
+    capabilities: () => ({
+      namedLoci: false,
+      multiscaleSummaries: false,
+      pathMembership: false,
+    }),
     info: async () => ({
       formatVersion: 1,
       haplotypeSemantics: "anonymous-distinct-weighted-tile-paths",
@@ -416,11 +420,33 @@ function delayedArchive(): PangenomeArchive {
       references: [],
       extensions: [],
       namedLoci: { state: "absent", recordCount: 0n },
+      pathMembership: { state: "absent", pathCount: 0n },
     }),
     searchLoci: async () => {
       throw new Error("not implemented by viewer test archive");
     },
     summary: async () => {
+      throw new Error("not implemented by viewer test archive");
+    },
+    pathCatalogInfo: async () => {
+      throw new Error("not implemented by viewer test archive");
+    },
+    pathById: async () => {
+      throw new Error("not implemented by viewer test archive");
+    },
+    pathsByIds: async () => {
+      throw new Error("not implemented by viewer test archive");
+    },
+    searchPaths: async () => {
+      throw new Error("not implemented by viewer test archive");
+    },
+    tilePathMemberships: async () => {
+      throw new Error("not implemented by viewer test archive");
+    },
+    pathMembership: async () => {
+      throw new Error("not implemented by viewer test archive");
+    },
+    queryWithPathMembership: async () => {
       throw new Error("not implemented by viewer test archive");
     },
     planRegion: async (region) => ({

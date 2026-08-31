@@ -25,6 +25,7 @@ const props = defineProps<{
   options: GraphOptions;
   selection?: BrowserSelection;
   viewport?: GraphViewport;
+  highlightedPatternIds?: readonly string[];
 }>();
 const emit = defineEmits<{
   select: [selection?: BrowserSelection];
@@ -88,6 +89,7 @@ async function paint(): Promise<void> {
       props.selection?.kind === "pattern"
         ? props.selection.pattern.id
         : undefined,
+    highlightedPatternIds: props.highlightedPatternIds,
     showTileBoundaries: props.options.showTileBoundaries,
     onNodeSelect: (key) => {
       const node = model.nodes.find((candidate) => candidate.key === key);

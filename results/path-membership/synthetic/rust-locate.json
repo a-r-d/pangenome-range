@@ -1,0 +1,24 @@
+{
+  "schema_version": 1,
+  "implementation": "experimental Rust ordinary GBWT locate from embedded DA samples",
+  "gbwt_bytes": 1344,
+  "da_serialized_bytes": 304,
+  "sampled_records": 2,
+  "da_samples": 10,
+  "requested_positions": 56,
+  "expected_mapping": "experiments/path-membership-oracle/tests/expected-node-da.tsv",
+  "exact_matches": 56,
+  "max_lf_steps_limit": 10000,
+  "total_lf_steps": 138,
+  "lf_steps": {
+    "p50": 2,
+    "p90": 5,
+    "p95": 6,
+    "p99": 7,
+    "max": 7
+  },
+  "load_wall_ms": 0.0647,
+  "locate_wall_ms": 0.054182,
+  "peak_rss_bytes": 3067904,
+  "used_r_index": false
+}

@@ -1,0 +1,24 @@
+{
+  "schema_version": 1,
+  "dataset": "Populus trichocarpa chromosome 19 whole-chromosome named-membership demo candidate",
+  "date": "2026-08-30",
+  "format_policy": "optional-path-members-v1-extension",
+  "source": {
+    "name": "Chr19.gbz",
+    "bytes": 125422184,
+    "sha256": "603ccf3a00d589950be95bb7eb65d0b517f837b35b64d6c95674bcff754adab9",
+    "url": "https://labkey.ornl.gov/labkey/_webdav/CBI/Jacobson/PUBLIC_DATA/poplar_pangenome/pan_genome_graph/%40files/ptricho_pangenome/doi/Chr19/Chr19.gbz",
+    "data_use_status": "PUBLIC_DERIVED_REDISTRIBUTION_NOT_CONFIRMED"
+  },
+  "reference": { "sample": "Nisqually-1", "contig": "Chr19", "bases": 16626325 },
+  "demo_interval": { "start": 6291456, "end": 6324224, "tiles": 2 },
+  "limits": {
+    "memory_max_bytes": 4294967296,
+    "swap_max_bytes": 0,
+    "threads": 2,
+    "encode_max_queued_bytes": 134217728,
+    "validation_max_queued_bytes": 536870912,
+    "path_locate_max_lf_steps": 8192
+  },
+  "publication_authorized": false
+}

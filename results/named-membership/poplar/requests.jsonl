@@ -1,0 +1,11 @@
+{"layer":"graph","index":0,"offset":"0","length":16384}
+{"layer":"graph","index":1,"offset":"49552","length":4096}
+{"layer":"graph","index":2,"offset":"24964205","length":251355}
+{"layer":"membership","index":0,"offset":"75902008","length":336,"dependencyGroup":1}
+{"layer":"membership","index":1,"offset":"73280879","length":581,"dependencyGroup":1}
+{"layer":"membership","index":2,"offset":"75820088","length":4096,"dependencyGroup":2}
+{"layer":"membership","index":3,"offset":"74144914","length":5415,"dependencyGroup":3}
+{"layer":"membership","index":4,"offset":"74150329","length":4985,"dependencyGroup":3}
+{"layer":"catalog","index":0,"offset":"73281460","length":10473,"dependencyGroup":4}
+{"layer":"catalog","index":1,"offset":"73291933","length":10573,"dependencyGroup":4}
+{"layer":"catalog","index":2,"offset":"73302506","length":1843,"dependencyGroup":4}

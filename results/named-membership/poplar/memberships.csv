@@ -1,0 +1,3 @@
+scope,tiles,groups,memberships,occurrence_weight,membership_multiplicity,unique_paths,unique_samples,largest_group_weight
+whole_chr19,1015,97272,183057,183061,183061,2213,45,
+demo_interval,2,412,886,886,886,89,45,50

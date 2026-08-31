@@ -2,11 +2,12 @@
 // biome-ignore-all lint/correctness/noUnusedVariables: Vue template bindings are consumed outside the script AST.
 import type {
   ArchiveInfo,
+  FeatureQueryTrace,
   QueryTrace,
   RegionPlan,
 } from "pangenome-range/reader";
 import type { TubeMapModel } from "pangenome-range/viewer";
-import type { BrowserMetrics, BrowserPhase } from "./types";
+import type { BrowserMetrics, BrowserPhase, PatternEvidence } from "./types";
 
 defineProps<{
   phase: BrowserPhase;
@@ -16,6 +17,9 @@ defineProps<{
   trace?: QueryTrace;
   model?: TubeMapModel;
   metrics: BrowserMetrics;
+  identityEvidence?: PatternEvidence;
+  highlightEvidence?: FeatureQueryTrace;
+  pathMembershipAvailable: boolean;
 }>();
 
 function bytes(value: bigint | number | undefined): string {
@@ -25,6 +29,36 @@ function bytes(value: bigint | number | undefined): string {
   if (number >= 1024 ** 2) return `${(number / 1024 ** 2).toFixed(1)} MiB`;
   if (number >= 1024) return `${(number / 1024).toFixed(1)} KiB`;
   return `${number} B`;
+}
+
+function fetchedBytes(
+  trace: QueryTrace | undefined,
+  plan: RegionPlan | undefined,
+  evidence: PatternEvidence | undefined,
+  highlight: FeatureQueryTrace | undefined,
+): bigint | number | undefined {
+  const graph = trace?.totalBytes ?? plan?.compressedBytes;
+  if (graph === undefined) return undefined;
+  return (
+    BigInt(graph) +
+    BigInt(evidence?.membership.totalBytes ?? 0) +
+    BigInt(evidence?.catalog.totalBytes ?? 0) +
+    BigInt(highlight?.totalBytes ?? 0)
+  );
+}
+
+function fetchedRanges(
+  trace: QueryTrace | undefined,
+  plan: RegionPlan | undefined,
+  evidence: PatternEvidence | undefined,
+  highlight: FeatureQueryTrace | undefined,
+): number {
+  return (
+    (trace?.requestRanges.length ?? plan?.ranges.length ?? 0) +
+    (evidence?.membership.requestRanges.length ?? 0) +
+    (evidence?.catalog.requestRanges.length ?? 0) +
+    (highlight?.requestRanges.length ?? 0)
+  );
 }
 </script>
 
@@ -38,14 +72,19 @@ function bytes(value: bigint | number | undefined): string {
     :data-complete-ms="metrics.completeMs"
     :data-layout-ms="metrics.layoutMs"
     :data-svg-elements="metrics.svgElements"
+    :data-fetched-bytes="fetchedBytes(trace, plan, identityEvidence, highlightEvidence)"
+    :data-fetched-ranges="fetchedRanges(trace, plan, identityEvidence, highlightEvidence)"
+    :data-highlight-bytes="highlightEvidence?.totalBytes ?? 0"
+    :data-highlight-ranges="highlightEvidence?.requestRanges.length ?? 0"
   >
     <span class="status-dot"></span>
     <strong>{{ message }}</strong>
     <span>{{ model?.counts.tiles ?? 0 }}/{{ plan?.selectedChunks ?? 0 }} tiles</span>
-    <span>{{ bytes(trace?.totalBytes ?? plan?.compressedBytes) }} fetched</span>
-    <span>{{ trace?.requestRanges.length ?? plan?.ranges.length ?? 0 }} ranges</span>
+    <span>{{ bytes(fetchedBytes(trace, plan, identityEvidence, highlightEvidence)) }} read</span>
+    <span>{{ fetchedRanges(trace, plan, identityEvidence, highlightEvidence) }} ranges</span>
     <span>{{ metrics.completeMs === undefined ? '—' : `${metrics.completeMs.toFixed(0)} ms` }}</span>
-    <span>{{ bytes(info?.archiveBytes) }} archive</span>
-    <span>{{ trace ? 'SHA-256 verified' : 'integrity pending' }}</span>
+    <span>{{ info ? `${(Number(info.archiveBytes) / 1e9).toFixed(2)} GB remote` : '— remote' }}</span>
+    <span>{{ pathMembershipAvailable ? 'named paths available' : 'graph-only identity' }}</span>
+    <span>{{ trace ? 'verified' : 'integrity pending' }}</span>
   </footer>
 </template>

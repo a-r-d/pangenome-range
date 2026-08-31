@@ -1,11 +1,14 @@
 use crate::binary::{invalid_data, u64_to_usize, usize_to_u64};
 use crate::{
     ARCHIVE_METADATA_TYPE_ID, ArchiveEntry, DIRECTORY_PAGE_BYTES, FileRangeSource,
-    MAX_DECODED_OCCURRENCES_PER_TILE, NAMED_LOCI_TYPE_ID, RangeSource, RecordRegionalPayload,
-    SUMMARY_PYRAMID_TYPE_ID, bootstrap, decode_archive_metadata, decode_directory_page,
-    decode_locus_page, decode_named_loci_descriptor, decode_summary_descriptor,
-    decode_summary_page, decompress, directory_page_offset, validate_extension_page,
-    validate_extension_payload,
+    MAX_DECODED_OCCURRENCES_PER_TILE, NAMED_LOCI_TYPE_ID, PATH_MEMBERSHIP_DELTA_CODEC,
+    PATH_MEMBERSHIP_DIRECTORY_PAGE_BYTES, PATH_MEMBERSHIP_RUN_CODEC, PATH_MEMBERSHIP_TYPE_ID,
+    RangeSource, RecordRegionalPayload, SUMMARY_PYRAMID_TYPE_ID, bootstrap,
+    decode_archive_metadata, decode_directory_page, decode_locus_page,
+    decode_named_loci_descriptor, decode_path_catalog_page, decode_path_membership_descriptor,
+    decode_path_membership_directory_page, decode_summary_descriptor, decode_summary_page,
+    decode_tile_membership_page, decompress, directory_page_offset, selected_path_membership_codec,
+    traversal_membership_digest, validate_extension_page, validate_extension_payload,
 };
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
@@ -81,6 +84,11 @@ pub struct ArchiveValidationSummary {
     pub extension_entries: u64,
     pub extension_encoded_bytes: u64,
     pub extension_decoded_bytes: u64,
+    pub path_membership_catalog_records: u64,
+    pub path_membership_directory_pages: u64,
+    pub path_membership_tile_pages: u64,
+    pub path_membership_groups: u64,
+    pub path_membership_memberships: u64,
     pub directory_validation_wall_ms: f64,
     pub payload_validation_wall_ms: f64,
     pub payload_read_worker_ms: f64,
@@ -226,6 +234,16 @@ pub fn validate_archive_with_options(
 
     let mut extension_encoded_bytes = 0_u64;
     let mut extension_decoded_bytes = 0_u64;
+    let mut path_membership_catalog_records = 0_u64;
+    let mut path_membership_directory_pages = 0_u64;
+    let mut path_membership_tile_pages = 0_u64;
+    let mut path_membership_groups = 0_u64;
+    let mut path_membership_memberships = 0_u64;
+    let mut path_membership_occurrence_total = 0_u64;
+    let mut path_membership_group_unique_path_count_sum = 0_u64;
+    let mut path_membership_delta_groups = 0_u64;
+    let mut path_membership_run_groups = 0_u64;
+    let mut archive_metadata_source_sha256 = None;
     let mut stored_ranges = entries
         .iter()
         .map(|entry| (entry.offset, entry.compressed_len, "regional payload"))
@@ -245,7 +263,8 @@ pub fn validate_archive_with_options(
             .checked_add(usize_to_u64(decoded.len())?)
             .ok_or_else(|| invalid_data("extension decoded byte count overflow"))?;
         if extension.type_id == ARCHIVE_METADATA_TYPE_ID {
-            decode_archive_metadata(&decoded)?;
+            archive_metadata_source_sha256 =
+                Some(decode_archive_metadata(&decoded)?.source_gbz_sha256);
         } else if extension.type_id == NAMED_LOCI_TYPE_ID {
             let descriptor =
                 decode_named_loci_descriptor(&decoded, header.data_offset, source_len)?;
@@ -330,6 +349,136 @@ pub fn validate_archive_with_options(
             if next_level.contains(&0) {
                 return Err(invalid_data(
                     "summary descriptor does not cover every reference manifest",
+                ));
+            }
+        } else if extension.type_id == PATH_MEMBERSHIP_TYPE_ID {
+            let descriptor =
+                decode_path_membership_descriptor(&decoded, header.data_offset, source_len)?;
+            let source_gbz_sha256 = archive_metadata_source_sha256.ok_or_else(|| {
+                invalid_data("named path membership requires archive provenance metadata")
+            })?;
+            if descriptor.identity_source_sha256 != source_gbz_sha256 {
+                return Err(invalid_data(
+                    "path-membership identity source differs from archive provenance",
+                ));
+            }
+            let mut expected_path_id = 0_u64;
+            for page in &descriptor.catalog_pages {
+                let encoded = source
+                    .read_range(page.storage.offset, u64_to_usize(page.storage.encoded_len)?)?;
+                let decoded = validate_extension_page(&page.storage, &encoded)?;
+                let records = decode_path_catalog_page(&decoded)?;
+                if records.first().map(|record| record.path_id) != Some(page.first_path_id)
+                    || usize_to_u64(records.len())? != page.record_count
+                    || page.first_path_id != expected_path_id
+                {
+                    return Err(invalid_data(
+                        "path catalog page differs from its descriptor",
+                    ));
+                }
+                expected_path_id = expected_path_id
+                    .checked_add(page.record_count)
+                    .ok_or_else(|| invalid_data("path catalog record count overflow"))?;
+                add_extension_page_metrics(
+                    &page.storage,
+                    decoded.len(),
+                    &mut extension_encoded_bytes,
+                    &mut extension_decoded_bytes,
+                    &mut stored_ranges,
+                    "path catalog page",
+                )?;
+            }
+            if expected_path_id != descriptor.path_count {
+                return Err(invalid_data("path catalog descriptor count mismatch"));
+            }
+            path_membership_catalog_records = descriptor.path_count;
+            if descriptor.manifests.len() != bootstrap.root.manifests.len() {
+                return Err(invalid_data(
+                    "path-membership descriptor does not cover every reference manifest",
+                ));
+            }
+            for (manifest, membership_manifest) in
+                bootstrap.root.manifests.iter().zip(&descriptor.manifests)
+            {
+                if membership_manifest.page_count != manifest.page_count
+                    || membership_manifest.entry_count != manifest.entry_count
+                {
+                    return Err(invalid_data(
+                        "path-membership manifest differs from the graph directory",
+                    ));
+                }
+                for bucket_index in 0..manifest.page_count {
+                    let graph_page_offset = directory_page_offset(manifest, bucket_index)?;
+                    let graph_page = source.read_range(graph_page_offset, DIRECTORY_PAGE_BYTES)?;
+                    let graph_entries = decode_directory_page(&graph_page, manifest, bucket_index)?;
+                    let membership_page_offset = membership_manifest
+                        .first_page_offset
+                        .checked_add(
+                            bucket_index
+                                .checked_mul(PATH_MEMBERSHIP_DIRECTORY_PAGE_BYTES as u64)
+                                .ok_or_else(|| {
+                                    invalid_data("path-membership directory offset overflow")
+                                })?,
+                        )
+                        .ok_or_else(|| invalid_data("path-membership directory offset overflow"))?;
+                    let membership_page = source
+                        .read_range(membership_page_offset, PATH_MEMBERSHIP_DIRECTORY_PAGE_BYTES)?;
+                    let membership_entries = decode_path_membership_directory_page(
+                        &membership_page,
+                        header.data_offset,
+                        source_len,
+                    )?;
+                    if membership_entries.len() != graph_entries.len() {
+                        return Err(invalid_data(
+                            "path-membership directory page differs from graph directory",
+                        ));
+                    }
+                    extension_encoded_bytes = extension_encoded_bytes
+                        .checked_add(PATH_MEMBERSHIP_DIRECTORY_PAGE_BYTES as u64)
+                        .ok_or_else(|| invalid_data("extension encoded byte count overflow"))?;
+                    extension_decoded_bytes = extension_decoded_bytes
+                        .checked_add(PATH_MEMBERSHIP_DIRECTORY_PAGE_BYTES as u64)
+                        .ok_or_else(|| invalid_data("extension decoded byte count overflow"))?;
+                    stored_ranges.push((
+                        membership_page_offset,
+                        PATH_MEMBERSHIP_DIRECTORY_PAGE_BYTES as u64,
+                        "path-membership directory page",
+                    ));
+                    path_membership_directory_pages = path_membership_directory_pages
+                        .checked_add(1)
+                        .ok_or_else(|| {
+                            invalid_data("path-membership directory page count overflow")
+                        })?;
+                    for (entry, membership_entry) in graph_entries.iter().zip(&membership_entries) {
+                        validate_tile_membership(
+                            source.as_ref(),
+                            descriptor.path_count,
+                            manifest,
+                            entry,
+                            membership_entry,
+                            &mut extension_encoded_bytes,
+                            &mut extension_decoded_bytes,
+                            &mut stored_ranges,
+                            &mut path_membership_tile_pages,
+                            &mut path_membership_groups,
+                            &mut path_membership_memberships,
+                            &mut path_membership_occurrence_total,
+                            &mut path_membership_group_unique_path_count_sum,
+                            &mut path_membership_delta_groups,
+                            &mut path_membership_run_groups,
+                        )?;
+                    }
+                }
+            }
+            if path_membership_groups != descriptor.group_count
+                || path_membership_occurrence_total != descriptor.occurrence_total
+                || path_membership_group_unique_path_count_sum
+                    != descriptor.group_unique_path_count_sum
+                || path_membership_delta_groups != descriptor.delta_group_count
+                || path_membership_run_groups != descriptor.run_group_count
+            {
+                return Err(invalid_data(
+                    "path-membership descriptor provenance totals differ from tile pages",
                 ));
             }
         }
@@ -423,7 +572,7 @@ pub fn validate_archive_with_options(
         &mut emit,
     )?;
     Ok(ArchiveValidationSummary {
-        schema_version: 2,
+        schema_version: 4,
         archive_version: header.version,
         archive_path: path.to_path_buf(),
         archive_bytes: source_len,
@@ -441,6 +590,11 @@ pub fn validate_archive_with_options(
         extension_entries: usize_to_u64(bootstrap.extensions.len())?,
         extension_encoded_bytes,
         extension_decoded_bytes,
+        path_membership_catalog_records,
+        path_membership_directory_pages,
+        path_membership_tile_pages,
+        path_membership_groups,
+        path_membership_memberships,
         directory_validation_wall_ms,
         payload_validation_wall_ms,
         payload_read_worker_ms: aggregate.read_ms,
@@ -450,6 +604,136 @@ pub fn validate_archive_with_options(
         reconstruction_worker_ms: aggregate.reconstruction_ms,
         validation_wall_ms: started.elapsed().as_secs_f64() * 1_000.0,
     })
+}
+
+#[allow(
+    clippy::too_many_arguments,
+    clippy::too_many_lines,
+    reason = "the complete tile-to-regional-payload reconciliation remains contiguous and auditable"
+)]
+fn validate_tile_membership(
+    source: &FileRangeSource,
+    path_count: u64,
+    manifest: &crate::ReferenceManifest,
+    entry: &ArchiveEntry,
+    membership_entry: &crate::PathMembershipDirectoryEntry,
+    extension_encoded_bytes: &mut u64,
+    extension_decoded_bytes: &mut u64,
+    stored_ranges: &mut Vec<(u64, u64, &'static str)>,
+    path_membership_tile_pages: &mut u64,
+    path_membership_groups: &mut u64,
+    path_membership_memberships: &mut u64,
+    path_membership_occurrence_total: &mut u64,
+    path_membership_group_unique_path_count_sum: &mut u64,
+    path_membership_delta_groups: &mut u64,
+    path_membership_run_groups: &mut u64,
+) -> io::Result<()> {
+    let encoded = source.read_range(
+        membership_entry.storage.offset,
+        u64_to_usize(membership_entry.storage.encoded_len)?,
+    )?;
+    let decoded = validate_extension_page(&membership_entry.storage, &encoded)?;
+    let (core_start, core_end, regional_payload_integrity, groups) =
+        decode_tile_membership_page(&decoded, path_count)?;
+    if core_start != entry.start
+        || core_end != entry.end
+        || regional_payload_integrity != entry.integrity
+        || usize_to_u64(groups.len())? != membership_entry.group_count
+        || groups
+            .windows(2)
+            .any(|pair| pair[0].traversal_digest >= pair[1].traversal_digest)
+    {
+        return Err(invalid_data(
+            "tile-membership page differs from its directory entry or ordering",
+        ));
+    }
+    let regional_encoded = source.read_range(entry.offset, u64_to_usize(entry.compressed_len)?)?;
+    if blake3::hash(&regional_encoded).as_bytes()[..16] != entry.integrity {
+        return Err(invalid_data(
+            "path-membership regional payload integrity mismatch",
+        ));
+    }
+    let regional_raw = decompress(entry.codec, &regional_encoded, entry.uncompressed_len)?;
+    let payload = RecordRegionalPayload::decode(&regional_raw)?;
+    if payload.reference_sample != manifest.sample
+        || payload.reference_contig != manifest.contig
+        || payload.core_start != entry.start
+        || payload.core_end != entry.end
+    {
+        return Err(invalid_data(
+            "path-membership tile provenance differs from regional payload",
+        ));
+    }
+    let mut anonymous = payload
+        .reconstruct_traversals()?
+        .anonymous
+        .into_iter()
+        .map(|group| {
+            (
+                traversal_membership_digest(
+                    &manifest.sample,
+                    &manifest.contig,
+                    entry.start,
+                    entry.end,
+                    &entry.integrity,
+                    &group.handles,
+                ),
+                group.weight,
+            )
+        })
+        .collect::<Vec<_>>();
+    anonymous.sort_unstable();
+    let expected = groups
+        .iter()
+        .map(|group| (group.traversal_digest, group.occurrence_weight))
+        .collect::<Vec<_>>();
+    if anonymous != expected {
+        return Err(invalid_data(
+            "named memberships differ from anonymous regional traversal groups",
+        ));
+    }
+    *path_membership_tile_pages = path_membership_tile_pages
+        .checked_add(1)
+        .ok_or_else(|| invalid_data("path-membership tile count overflow"))?;
+    *path_membership_groups = path_membership_groups
+        .checked_add(usize_to_u64(groups.len())?)
+        .ok_or_else(|| invalid_data("path-membership group count overflow"))?;
+    *path_membership_memberships = path_membership_memberships
+        .checked_add(groups.iter().try_fold(0_u64, |total, group| {
+            total
+                .checked_add(usize_to_u64(group.memberships.len())?)
+                .ok_or_else(|| invalid_data("path-membership count overflow"))
+        })?)
+        .ok_or_else(|| invalid_data("path-membership count overflow"))?;
+    for group in &groups {
+        *path_membership_occurrence_total = path_membership_occurrence_total
+            .checked_add(group.occurrence_weight)
+            .ok_or_else(|| invalid_data("path-membership occurrence total overflow"))?;
+        *path_membership_group_unique_path_count_sum = path_membership_group_unique_path_count_sum
+            .checked_add(group.unique_path_count)
+            .ok_or_else(|| invalid_data("path-membership unique path-count sum overflow"))?;
+        match selected_path_membership_codec(&group.memberships)? {
+            PATH_MEMBERSHIP_DELTA_CODEC => {
+                *path_membership_delta_groups = path_membership_delta_groups
+                    .checked_add(1)
+                    .ok_or_else(|| invalid_data("path-membership codec count overflow"))?;
+            }
+            PATH_MEMBERSHIP_RUN_CODEC => {
+                *path_membership_run_groups = path_membership_run_groups
+                    .checked_add(1)
+                    .ok_or_else(|| invalid_data("path-membership codec count overflow"))?;
+            }
+            _ => return Err(invalid_data("unknown selected path-membership codec")),
+        }
+    }
+    add_extension_page_metrics(
+        &membership_entry.storage,
+        decoded.len(),
+        extension_encoded_bytes,
+        extension_decoded_bytes,
+        stored_ranges,
+        "tile-membership page",
+    )
 }
 
 fn add_extension_page_metrics(
@@ -718,6 +1002,66 @@ mod tests {
         assert_eq!(summary.directory_pages, 1);
         assert_eq!(summary.directory_entries, 1);
         assert_eq!(summary.physical_payloads, 1);
+    }
+
+    #[test]
+    fn validates_the_named_path_membership_golden_fixture() {
+        let path = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../test-data/golden/path-membership-v1.pngr");
+        let summary = validate_archive(&path).unwrap();
+        assert_eq!(summary.path_membership_catalog_records, 169);
+        assert_eq!(summary.path_membership_directory_pages, 1);
+        assert_eq!(summary.path_membership_tile_pages, 2);
+        assert_eq!(summary.path_membership_groups, 79);
+        assert_eq!(summary.path_membership_memberships, 180);
+    }
+
+    #[test]
+    fn rejects_named_membership_from_a_different_provenance_source() {
+        let fixture = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../test-data/golden/path-membership-v1.pngr");
+        let mut bytes = std::fs::read(fixture).unwrap();
+        let extension_offset =
+            usize::try_from(u64::from_le_bytes(bytes[48..56].try_into().unwrap())).unwrap();
+        let extension_count = usize::try_from(u64::from_le_bytes(
+            bytes[extension_offset + 16..extension_offset + 24]
+                .try_into()
+                .unwrap(),
+        ))
+        .unwrap();
+        let metadata_entry = (0..extension_count)
+            .map(|index| extension_offset + 32 + index * 64)
+            .find(|offset| bytes[*offset..*offset + 16] == ARCHIVE_METADATA_TYPE_ID)
+            .unwrap();
+        assert_eq!(bytes[metadata_entry + 20], crate::ChunkCodec::None.code());
+        let payload_offset = usize::try_from(u64::from_le_bytes(
+            bytes[metadata_entry + 24..metadata_entry + 32]
+                .try_into()
+                .unwrap(),
+        ))
+        .unwrap();
+        let payload_len = usize::try_from(u64::from_le_bytes(
+            bytes[metadata_entry + 32..metadata_entry + 40]
+                .try_into()
+                .unwrap(),
+        ))
+        .unwrap();
+        bytes[payload_offset + 24] ^= 1;
+        let digest = blake3::hash(&bytes[payload_offset..payload_offset + payload_len]);
+        bytes[metadata_entry + 48..metadata_entry + 64].copy_from_slice(&digest.as_bytes()[..16]);
+
+        let path = std::env::temp_dir().join(format!(
+            "pangenome-range-provenance-mismatch-{}",
+            std::process::id()
+        ));
+        std::fs::write(&path, bytes).unwrap();
+        let error = validate_archive(&path).unwrap_err();
+        std::fs::remove_file(path).unwrap();
+        assert!(
+            error
+                .to_string()
+                .contains("differs from archive provenance")
+        );
     }
 
     #[test]

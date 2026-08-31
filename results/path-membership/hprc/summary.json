@@ -1,0 +1,27 @@
+{
+  "schema_version": 1,
+  "status": "blocked_by_r_index_oom",
+  "correctness": {
+    "identity_results_exist": false,
+    "anonymous_weight_equals_membership_multiplicity_sum": null
+  },
+  "benchmark": {
+    "base_graph_archive_bytes": 8832749949,
+    "path_catalog_bytes": null,
+    "membership_bytes": null,
+    "total_identity_aware_bytes": null,
+    "percentage_overhead": null,
+    "r_index_bytes": 0,
+    "r_index_construction_wall_seconds": null,
+    "identity_extraction_wall_seconds": null,
+    "membership_encoding_wall_seconds": null,
+    "peak_rss_bytes": null,
+    "temporary_disk_bytes": 0,
+    "query_bytes_without_identities": null,
+    "query_bytes_with_identities": null,
+    "additional_range_requests": null,
+    "additional_dependency_rounds": null,
+    "browser_decode_time_ms": null
+  },
+  "failure": "vg 1.76.1 r-index construction exhausted host memory after the standalone 4,051,134,848-byte GBWT was extracted successfully; the final time/RSS record and .ri were not produced."
+}

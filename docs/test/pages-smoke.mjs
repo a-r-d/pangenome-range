@@ -21,8 +21,15 @@ const indexedFixturePath = join(
   "golden",
   "record-archive-v1.pngr",
 );
+const namedFixturePath = join(
+  repository,
+  "test-data",
+  "golden",
+  "path-membership-v1.pngr",
+);
 const fixture = await readFile(fixturePath);
 const indexedFixture = await readFile(indexedFixturePath);
+const namedFixture = await readFile(namedFixturePath);
 const etag = `"sha256-${createHash("sha256").update(fixture).digest("hex")}"`;
 const requests = [];
 const configuredArchiveUrl =
@@ -31,6 +38,8 @@ const populationArchiveUrl =
   process.env.VITE_PANGENOME_RANGE_DEMO_1000G_ARCHIVE_URL ?? "";
 const riceArchiveUrl =
   process.env.VITE_PANGENOME_RANGE_DEMO_RICE_ARCHIVE_URL ?? "";
+const chickenArchiveUrl =
+  process.env.VITE_PANGENOME_RANGE_DEMO_CHICKEN_ARCHIVE_URL ?? "";
 const screenshotBase =
   process.env.PANGENOME_RANGE_DEMO_SCREENSHOT ??
   "/tmp/pangenome-range-demo.png";
@@ -63,6 +72,10 @@ const server = createServer(async (request, response) => {
   }
   if (url.pathname.endsWith("/record.pngr")) {
     serveArchive(request, response, indexedFixture, false);
+    return;
+  }
+  if (url.pathname.endsWith("/named.pngr")) {
+    serveArchive(request, response, namedFixture, false);
     return;
   }
   if (url.pathname.endsWith(".pngr")) {
@@ -226,13 +239,19 @@ try {
   assert.match(await search.inputValue(), /PNGRTEST/);
   const pattern = page.locator("[data-pattern-id]").first();
   if ((await pattern.count()) > 0) {
+    const requestsBeforeInspector = requests.length;
     const patternId = await pattern.getAttribute("data-pattern-id");
     await pattern.focus();
     await pattern.press("Enter");
     await page
       .getByRole("complementary", { name: "Pattern inspector" })
-      .getByText(/not a named person/i)
+      .getByText(/anonymous tile-local evidence only/i)
       .waitFor();
+    assert.equal(
+      requests.length,
+      requestsBeforeInspector,
+      "anonymous inspector unexpectedly requested named membership",
+    );
     assert.equal(
       await page
         .locator(".pngr-pattern-port.is-selected")
@@ -245,6 +264,42 @@ try {
     );
     await page.getByRole("button", { name: "Close inspector" }).click();
   }
+
+  await page.getByRole("button", { name: "Source" }).click();
+  await page
+    .getByPlaceholder("https://…/archive.pngr")
+    .fill(`${baseUrl}/named.pngr`);
+  await page.getByRole("button", { name: "Open remote URL" }).click();
+  await waitForReady(page, "named-membership archive");
+  const namedPattern = page.locator("[data-pattern-id]").first();
+  await namedPattern.focus();
+  await namedPattern.press("Enter");
+  const namedInspector = page.getByRole("complementary", {
+    name: "Pattern inspector",
+  });
+  await namedInspector
+    .getByRole("heading", { name: "Named source paths" })
+    .waitFor();
+  await namedInspector.getByText("Unique named paths").waitFor();
+  const firstNamedRecord = namedInspector.locator("li").first();
+  await firstNamedRecord.waitFor();
+  const firstSample = (
+    await firstNamedRecord.locator("strong").textContent()
+  )?.trim();
+  assert(firstSample, "named path record did not resolve a sample");
+  const pathFilter = namedInspector.getByRole("searchbox", {
+    name: "Filter named source paths",
+  });
+  await pathFilter.fill(firstSample);
+  assert((await namedInspector.locator("li").count()) > 0);
+  await pathFilter.fill("no-such-source-path");
+  assert.equal(await namedInspector.locator("li").count(), 0);
+  await pathFilter.fill("");
+  await firstNamedRecord
+    .getByRole("button", { name: "Highlight path" })
+    .click();
+  await page.getByRole("button", { name: "Close inspector" }).click();
+  await page.locator(".pngr-pattern-port.is-selected").first().waitFor();
 
   const requestCountBeforeLocal = requests.length;
   await page.getByRole("button", { name: "Source" }).click();
@@ -297,6 +352,10 @@ try {
   if (riceArchiveUrl.length > 0) {
     riceArchive = await exerciseRiceArchive(browser, baseUrl);
   }
+  let chickenArchive;
+  if (chickenArchiveUrl.length > 0) {
+    chickenArchive = await exerciseChickenArchive(browser, baseUrl);
+  }
   assert.deepEqual(pageErrors, []);
   console.log(
     JSON.stringify(
@@ -313,6 +372,7 @@ try {
         configuredArchive,
         populationArchive,
         riceArchive,
+        chickenArchive,
         fixtureScreenshot: screenshotPath("fixture"),
         goldenScreenshot: screenshotPath("golden"),
         searchScreenshot: screenshotPath("search"),
@@ -339,6 +399,10 @@ async function exerciseConfiguredArchive(browser, baseUrl) {
       `${baseUrl}/demo?archive=hprc&locus=HLA-B&zoom=0.32&center=0.5&vscale=1.3`,
     );
     await waitForReady(page, "configured HLA-B", 45_000);
+    assert.equal(
+      await page.getByRole("button", { name: "Published example" }).count(),
+      0,
+    );
     const search = page.getByRole("textbox", {
       name: "Search gene or coordinate",
     });
@@ -594,6 +658,207 @@ async function exerciseRiceArchive(browser, baseUrl) {
   }
 }
 
+async function exerciseChickenArchive(browser, baseUrl) {
+  const page = await browser.newPage({
+    viewport: { width: 1600, height: 1000 },
+  });
+  const errors = [];
+  page.on("pageerror", (error) => errors.push(error.message));
+  try {
+    await page.goto(`${baseUrl}/demo`);
+    await waitForReady(page, "chicken IGLL1 view", 45_000);
+    assert.equal(new URL(page.url()).searchParams.get("archive"), "chicken");
+    assert.equal(
+      await page
+        .getByRole("textbox", { name: "Search gene or coordinate" })
+        .inputValue(),
+      "IGLL1",
+    );
+    assert.match(
+      await page.locator(".reference-track__heading").innerText(),
+      /bGalGal1b.*chr15/,
+    );
+    assert((await page.locator("[data-node-key]").count()) > 0);
+    await page.getByTestId("named-path-hint").waitFor();
+    await assertNoPageOverflow(page, "default chicken view");
+    await page.screenshot({
+      path: screenshotPath("chicken-default-igll1"),
+      fullPage: true,
+    });
+    const defaultPattern = page.locator("[data-pattern-id]").first();
+    await defaultPattern.focus();
+    await defaultPattern.press("Enter");
+    const defaultInspector = page.getByRole("complementary", {
+      name: "Pattern inspector",
+    });
+    await defaultInspector
+      .getByRole("heading", { name: "Named source paths" })
+      .waitFor();
+    assert.match(
+      await defaultInspector.innerText(),
+      /Occurrence weight is tile-local and is not an allele frequency.*not stitched across tiles/s,
+    );
+    const status = page.locator(".browser-status");
+    const beforeHighlightBytes = Number(
+      await status.getAttribute("data-fetched-bytes"),
+    );
+    const beforeHighlightRanges = Number(
+      await status.getAttribute("data-fetched-ranges"),
+    );
+    await defaultInspector
+      .getByRole("button", { name: "Highlight path" })
+      .first()
+      .click();
+    await page.waitForFunction(() => {
+      const value = document
+        .querySelector(".browser-status")
+        ?.getAttribute("data-highlight-ranges");
+      return Number(value) > 0;
+    });
+    const highlightBytes = Number(
+      await status.getAttribute("data-highlight-bytes"),
+    );
+    const highlightRanges = Number(
+      await status.getAttribute("data-highlight-ranges"),
+    );
+    assert(highlightBytes > 0, "named-path highlight read no recorded bytes");
+    assert(highlightRanges > 0, "named-path highlight read no recorded ranges");
+    const afterHighlightBytes = Number(
+      await status.getAttribute("data-fetched-bytes"),
+    );
+    const afterHighlightRanges = Number(
+      await status.getAttribute("data-fetched-ranges"),
+    );
+    assert.equal(
+      afterHighlightBytes,
+      beforeHighlightBytes + highlightBytes,
+      "displayed bytes omitted named-path highlight reads",
+    );
+    assert.equal(
+      afterHighlightRanges,
+      beforeHighlightRanges + highlightRanges,
+      "displayed ranges omitted named-path highlight reads",
+    );
+    await page.getByRole("button", { name: "Close inspector" }).click();
+    await page.getByRole("button", { name: "Source" }).click();
+    const sourceDialog = page.getByRole("dialog", { name: "Archive source" });
+    assert.equal(
+      await sourceDialog.getByLabel("Demo archive").inputValue(),
+      "chicken",
+    );
+    assert.match(
+      await sourceDialog.innerText(),
+      /exact named GBWT source-path/i,
+    );
+    assert.match(await sourceDialog.innerText(), /whole genome/i);
+    assert.match(await sourceDialog.innerText(), /Path catalog.*[1-9]/s);
+    assert.doesNotMatch(
+      await sourceDialog.innerText(),
+      /chromosome 15 archive/i,
+    );
+    await page.screenshot({
+      path: screenshotPath("chicken-source-menu"),
+      fullPage: true,
+    });
+    await sourceDialog
+      .getByRole("button", { name: "Close archive source" })
+      .click();
+    const publishedExampleButton = page.getByRole("button", {
+      name: "Published example",
+    });
+    assert.equal(await publishedExampleButton.isEnabled(), true);
+    await publishedExampleButton.click();
+    const inspector = page.getByRole("complementary", {
+      name: "Pattern inspector",
+    });
+    await inspector
+      .getByRole("heading", { name: "Named source paths" })
+      .waitFor();
+    await inspector.getByText("Unique named paths").waitFor();
+    assert.equal(await inspector.locator("li").count(), 1);
+    assert.match(await inspector.locator("li").first().innerText(), /UCD312/);
+    assert.match(
+      await inspector.locator("li").first().innerText(),
+      /multiplicity/,
+    );
+    await page.getByTestId("published-example").waitFor();
+    assert.match(
+      await page.getByTestId("published-example").innerText(),
+      /Published example.*Observed here/s,
+    );
+    await page.screenshot({
+      path: screenshotPath("chicken-published-example"),
+      fullPage: true,
+    });
+    assert.equal(await page.getByTestId("named-path-hint").count(), 0);
+    const filter = inspector.getByRole("searchbox", {
+      name: "Filter named source paths",
+    });
+    await filter.fill("UCD312");
+    assert.equal(await inspector.locator("li").count(), 1);
+    await inspector.getByRole("button", { name: "Highlight path" }).click();
+
+    const tsvDownloadPromise = page.waitForEvent("download");
+    await inspector.getByTestId("download-path-list").click();
+    const tsvDownload = await tsvDownloadPromise;
+    const tsvPath = await tsvDownload.path();
+    assert(tsvPath !== null);
+    const tsv = await readFile(tsvPath, "utf8");
+    assert.match(tsv, /^traversal digest\ttile sample\ttile contig\t/);
+    assert.match(tsv, /^9a91efcf5ab825db78ea5a43597dd034\t/m);
+    assert.match(tsv, /\tUCD312\t/);
+
+    const fastaDownloadPromise = page.waitForEvent("download");
+    await inspector.getByTestId("download-local-fasta").click();
+    const fastaDownload = await fastaDownloadPromise;
+    const fastaPath = await fastaDownload.path();
+    assert(fastaPath !== null);
+    const fasta = await readFile(fastaPath, "utf8");
+    assert.match(
+      fasta,
+      /^>local_traversal .*scope=tile-local-not-complete-assembly-path/m,
+    );
+    assert.match(fasta, /traversal_digest=9a91efcf5ab825db78ea5a43597dd034/);
+    assert.match(fasta, /\n[ACGTN]+\n/);
+
+    assert.match(
+      await page.locator(".browser-status").innerText(),
+      /named paths available/,
+    );
+    await page.screenshot({
+      path: screenshotPath("chicken-named-path-inspector"),
+      fullPage: true,
+    });
+    await assertNoPageOverflow(page, "chicken named-path inspector");
+    assert.deepEqual(errors, []);
+    return {
+      source: "chicken",
+      locus: "IGLL1",
+      nodes: await page.locator("[data-node-key]").count(),
+      defaultUrl: `${baseUrl}/demo`,
+      resolvedUrl: page.url(),
+      screenshots: {
+        default: screenshotPath("chicken-default-igll1"),
+        inspector: screenshotPath("chicken-named-path-inspector"),
+        published: screenshotPath("chicken-published-example"),
+        sourceMenu: screenshotPath("chicken-source-menu"),
+      },
+      tsvHeader: tsv.split("\n")[0],
+      fastaHeader: fasta.split("\n")[0],
+      highlightTelemetry: {
+        bytesBefore: beforeHighlightBytes,
+        rangesBefore: beforeHighlightRanges,
+        highlightBytes,
+        highlightRanges,
+        bytesAfter: afterHighlightBytes,
+        rangesAfter: afterHighlightRanges,
+      },
+    };
+  } finally {
+    await page.close();
+  }
+}
+
 async function assertViewportState(page, expected) {
   const graph = page.locator(".tube-map-view");
   const actual = {
@@ -807,7 +1072,7 @@ async function assertHealthyBrowser(page) {
   assert.equal(await page.getByRole("button", { name: "Share" }).count(), 1);
   assert.match(
     await page.locator(".browser-status").innerText(),
-    /SHA-256 verified|integrity/i,
+    /verified|integrity/i,
   );
 }
 

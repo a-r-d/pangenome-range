@@ -1,5 +1,48 @@
 # Optimization log
 
+## 2026-08-30: bounded Poplar chromosome 19 named-membership proof
+
+The ORNL Populus trichocarpa release supplied a smaller Chr16 canary and a complete
+Chr19 graph with embedded GBWT DA samples. The two-tile canary passed first at 89,784
+KiB peak RSS. A full 16,626,325-base Chr19 encode then produced 1,015 tiles, 2,213
+catalog paths, 97,272 groups, and 183,057 membership records. It peaked at 170,772
+KiB RSS under `MemoryMax=4G` and `MemorySwapMax=0`; full reconstruction passed with a
+512 MiB validation admission budget. Locate took 42.84 s, observed at most 1,023 LF
+steps, and remained below the 8,192-step guard.
+
+The dense demo window `Nisqually-1#Chr19:6291456-6324224` agrees with the source
+oracle and exposes 89 paths across 45 sample labels. Its cold identity add-on is
+38,302 bytes in four actual waves. This is additional plant-genome evidence, not a
+1000G scale substitute. The derived archive remains local because the public source
+does not state redistribution terms.
+
+## 2026-08-29: production named-membership reader cost
+
+The registered `path-members-v1-` reader adds strict descriptor, aligned-directory,
+front-coded catalog, delta/run membership, UTF-8, ordering, allocation, tile/payload
+binding, lazy catalog lookup, and combined-query checks to the existing single-file
+ESM reader. After provenance binding and batched catalog lookup, the final unminified
+reader entry is 204,759 bytes raw and 44,051 bytes gzip. This is 65,835 raw bytes and
+12,856 gzip bytes above the earlier 138,924 /
+31,195-byte reader measurement. The network-sensitive gzip budget remains 50 KiB;
+the readable unminified raw budget increases deliberately to 208 KiB. Dynamic chunk
+loading was not introduced because it would change the package's current single-file
+loading behavior for an optional pre-v1 feature.
+
+The feature remains independently range-addressed at runtime: ordinary graph queries
+do not fetch membership descriptors, directories, catalog pages, or tile pages.
+
+Final-layout anonymous/named controls measured a 64-byte graph-only read increment
+from the additional registered extension entry, with identical canonical hashes and
+two dependency rounds. With the source-provenance cross-check included, identity-aware
+rice fetched 12,299 membership/provenance plus 10,586 catalog bytes; HPRC TERT fetched
+50,081 plus 40,105 bytes. Request traces now retain the actual one-based dependency
+group instead of inferring rounds from layer labels. HPRC uses four cold identity
+waves: descriptor plus provenance, membership directory, four parallel tile pages,
+and three parallel catalog pages. Rice uses five because its five catalog pages cross
+the bounded four-page batch limit. Neither meets the aspirational single-extra-round
+target, so the identity API remains experimental.
+
 This log records failed or incomplete performance experiments as first-class
 evidence. A run belongs here when it changes what we believe about the encoder,
 even if it never produces a candidate archive.
@@ -1058,3 +1101,137 @@ The older `configured` and `population` source values remain readable. Local
 files remain intentionally non-linkable because restoring a file handle would
 bypass the browser's user-selection security boundary. README links exercise
 important HPRC loci and a coordinate-only 1000 Genomes view.
+
+## 2026-08-28: paged path-name catalog experiment accepted locally
+
+The first named-path experiment conservatively fetched a complete 3,738,426-byte
+front-coded rice catalog for a tile containing 44 path IDs. That was correct but did
+not satisfy the intended static-object query shape. A standalone `PMPC0001` research
+object now maps arithmetic path-ID pages through a 64-byte header and fixed 48-byte
+directory entries. Pages front-code metadata locally, compress independently with
+zstd-3, and bind both directory and encoded pages with BLAKE3-128. It is not part of
+`.pngr` and does not change v1.
+
+Eight rice page sizes and one-to-three payload-range budgets were measured. At the
+selected 1,024 records/page, exhaustive Rust decode recovered 104,959/104,959 source
+records. The Xa7 identity set reads a 5,008-byte root plus three payload ranges for
+27,615 bytes total, 135.38 times less than the prior whole-catalog fetch. Chromium,
+Firefox, and WebKit each made the same four strict `206` requests and independently
+recovered 44/44 expected records with BLAKE3 and zstd enabled. Two- and three-total-
+range alternatives cost 94,383 and 63,526 bytes; minimizing complete catalog size was
+therefore rejected as the sole selection criterion.
+
+The same exporter opened the 4,051,134,848-byte HPRC GBWT once under a 12 GiB cap and
+wrote 53,150 metadata records in 2.44 s at 4,920,131,584 bytes peak RSS without vg or
+an `.ri`. Its smallest tested catalog is 660,980 bytes and exhaustively reconstructs
+all records. A dispersed 64-ID stress query touches every page and is retained as a
+worst-case catalog access pattern.
+
+The bounded HLA-B, MICB, KIR3DL1, and TERT follow-up then selected ten archive tiles
+and 15,936 traversal starts. Four sequential locate processes stayed below 4.921 GB
+RSS under 12 GiB address-space caps and reported zero swaps. Every membership
+multiplicity sum matched the existing anonymous weight. Membership bytes were 4,982,
+4,981, 7,548, and 21,768 respectively. Actual path IDs were clustered enough that the
+1,024-record catalog layout cost only 31,232 bytes for HLA-B/MICB, 55,218 for KIR3DL1,
+and 42,648 for TERT. All selected records passed Chromium, Firefox, and WebKit strict
+range decoding.
+
+KIR3DL1 and TERT contain non-disjoint tiles, confirming independently that path-ID
+sets cannot replace multiplicity-bearing group memberships. The bounded ten-tile
+catalog, membership, and index components total 734,715 bytes, or 0.008318% of the
+base archive. Archive-wide membership construction and an integrated same-object
+extension remain unmeasured; these bounded results do not authorize a v1 format
+change.
+
+## 2026-08-28: bounded same-object path membership accepted locally
+
+The next hypothesis was that the existing encoder could package a paged path catalog
+and multiplicity-bearing tile memberships without changing regional payloads or
+reintroducing a global occurrence table. Two paired experimental inputs now append an
+optional `path-members-v1-` descriptor, 1,024-record catalog pages, and one membership
+page per selected tile to the atomic temporary `.pngr`. Normal encoding does not emit
+the extension.
+
+The validator now checks every child range and digest, decodes catalog and membership
+pages, reconstructs anonymous paths from the referenced unchanged regional payload,
+and requires exact sorted `(traversal digest, occurrence weight)` equality. Decoder
+bounds reject excessive expansion before allocation, duplicate path IDs, invalid
+multiplicity totals, catalog escapes, corrupt lengths, and trailing data.
+
+The tiny fixture was byte-identical with one and four encoder workers. A bounded real
+HPRC run covered four 16,384 bp TERT tiles. The direct release encoder used 263,828
+KiB peak RSS and zero swaps under a 4 GiB address-space cap, producing a 987,840-byte
+archive at SHA-256
+`3f8af7f829a21b6c2d787a2eac39cf5015a07425ea9a3e8449b4c8ef71b846ac`.
+The extension contains 53,150 catalog records, 1,686 groups, and 4,257 memberships.
+Full validation succeeded at 57,656 KiB peak RSS under a 1 GiB cap. Chromium, Firefox,
+and WebKit each recovered one real tile's 464 exact named paths through four strict
+`206` requests totaling 76,869 bytes.
+
+This accepts the same-object packaging and validation hypothesis only. Construction
+still consumes a prepared bounded locate result from the isolated experiment; the
+unpublished local `gbwt-rs` locate path is not a production dependency. The extension
+is unregistered, the public TypeScript reader skips it, and its 65,536 tile-page bound
+is intentionally not archive-wide capacity. Direct tile-at-a-time locate is the next
+gate; no whole-genome membership run is authorized.
+
+## 2026-08-29: bounded direct GBWT locate accepted locally
+
+The build crate now parses the embedded GBWT document-array option instead of
+skipping it. `DiskGbzSource` locates one tile-sized batch with an explicit LF-step
+limit, grouping each LF round by record so only one disk-backed record is decoded at
+a time. Catalog records come directly from source metadata. No local `gbwt-rs`
+dependency was added, and the format/query/decoder crates remain GBWT-independent.
+
+The synthetic one-tile archive was byte-identical to the prepared C++/local-fork
+oracle: 5,572 bytes at SHA-256
+`818975d816044b33d5df0cb68b0df1fc7a9f0759647b8cdaa50ebb7c420fcf0c`.
+It located ten starts with a maximum of seven LF steps. An exhaustive checked-in GBZ
+test also maps every position to its brute-force enumerated sequence ID.
+
+The rice Xa7 tile located 122 starts in 16.43 ms with at most 1,017 LF steps. Its
+348,394-byte result was byte-identical to the prepared fixture at SHA-256
+`c8a0c184d3e4ef0469ce0e351eb919c4951f15cae7caab157af2487c7ea5d7e8`.
+The whole process peaked at 177,096 KiB RSS with zero swaps under a 4 GiB cap.
+
+The four-tile HPRC TERT run located 8,522 starts in 1,486.91 ms with at most 1,023 LF
+steps. Its 987,840-byte result was byte-identical to the prior prepared fixture at
+SHA-256 `3f8af7f829a21b6c2d787a2eac39cf5015a07425ea9a3e8449b4c8ef71b846ac`.
+The process peaked at 660,332 KiB RSS with zero swaps under a 4 GiB cap. Source-cache
+construction and reference indexing dominated the 94.79-second wall time; direct
+archive construction took 2.28 seconds.
+
+This accepts bounded direct encoder integration, not archive-wide named identity or a
+normative format change. Persistent source-cache v1 does not retain DA support, so
+direct mode currently re-streams the source into an ephemeral cache. The 1000G pilot
+remains deliberately skipped after its earlier memory failure.
+
+## 2026-08-29: named source-path membership productionized
+
+The production tranche replaces the experimental root-wide tile list with fixed 4 KiB
+membership-directory pages aligned one-for-one with graph directory pages. The root
+now scales with path-catalog pages and reference manifests, not tile count. The
+regional payload and default anonymous weighted semantics remain byte-contractually
+separate; named membership is an optional registered extension enabled by
+`--path-membership`.
+
+Persistent source-cache format v2 adds authenticated GBWT DA support and the canonical
+source-path catalog. On the synthetic fixture, ephemeral and persistent-cache encodes
+produced the identical 9,605-byte archive at SHA-256
+`a6d99b656a7f477afc43fdfde5acb5831115be6b09bb6eb1c3533563724a692a`.
+The checked-in MICB/KIR3DL1 golden archive is 32,013 bytes at SHA-256
+`5900f5c77ef4ee46a1e22e51f30634f95a0bf5c50b00e40ef75b80026cb00955`.
+Rust validation and the public TypeScript API agree on 169 catalog paths, two tiles,
+79 groups, 180 memberships, and total occurrence/multiplicity weight 180. TypeScript
+also rejects a corrupted membership-directory digest.
+
+Final-layout anonymous/named controls are retained in `results/named-membership/`.
+Rice named encoding added 3.49% wall and 1,884 KiB peak RSS; HPRC TERT added 2.57%
+wall with no observed peak increase beyond the anonymous run's 653,596 KiB. The
+fixed catalog dominates tiny bounded archives. Dividing those bounded deltas by a
+retained whole archive was rejected as an invalid projection: the mirrored directory
+alone costs one 4 KiB page per graph directory page, before tile membership pages and
+catalog data. Archive-wide named HPRC storage remains unmeasured. The user made the
+1000G pilot a permanent operational resource-safety exclusion after the earlier HPRC
+`vg` r-index OOM. The current embedded-DA encoder was not attempted on 1000G, and the
+absence record does not infer a direct-encoder result.

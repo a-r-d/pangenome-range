@@ -1,0 +1,59 @@
+{
+  "schema_version": 1,
+  "status": "passed_bounded_experiment",
+  "source_catalog": {
+    "paths": 104959,
+    "ndjson_bytes": 27104592,
+    "ndjson_sha256": "5fb2a77f2001801a4b84cb045ba764bef278b12b0fd4492991504a0b450a9332",
+    "normalized_exact_cpp_records": 104959,
+    "export_wall_seconds": 0.33,
+    "export_peak_rss_bytes": 488329216,
+    "export_swaps": 0,
+    "address_space_limit_bytes": 4294967296
+  },
+  "selected_layout": {
+    "records_per_page": 1024,
+    "pages": 103,
+    "root_bytes": 5008,
+    "paged_catalog_bytes": 218800,
+    "paged_catalog_sha256": "8444c47993e6eb401da92df7bb62aa847224ee5e770a663a3034f16991a86017",
+    "zstd_pages": 103,
+    "build_wall_ms": 145.468446,
+    "exhaustive_exact_records": 104959
+  },
+  "tile_query": {
+    "path_ids": 44,
+    "exact_records": 44,
+    "selected_pages": 5,
+    "root_ranges": 1,
+    "root_bytes": 5008,
+    "data_ranges": 3,
+    "data_range_bytes": 22607,
+    "selected_page_bytes": 10707,
+    "data_overfetch_bytes": 11900,
+    "total_ranges": 4,
+    "dependency_rounds": 2,
+    "total_bytes": 27615
+  },
+  "four_total_range_sweep": [
+    { "records_per_page": 64, "catalog_bytes": 565683, "query_bytes": 118250 },
+    { "records_per_page": 128, "catalog_bytes": 404726, "query_bytes": 69319 },
+    { "records_per_page": 256, "catalog_bytes": 307677, "query_bytes": 44122 },
+    { "records_per_page": 512, "catalog_bytes": 252078, "query_bytes": 32065 },
+    { "records_per_page": 1024, "catalog_bytes": 218800, "query_bytes": 27615 },
+    { "records_per_page": 2048, "catalog_bytes": 198751, "query_bytes": 28693 },
+    { "records_per_page": 4096, "catalog_bytes": 187058, "query_bytes": 35644 },
+    { "records_per_page": 8192, "catalog_bytes": 180650, "query_bytes": 53909 }
+  ],
+  "best_by_total_range_budget": [
+    { "total_ranges": 2, "records_per_page": 8192, "query_bytes": 94383 },
+    { "total_ranges": 3, "records_per_page": 4096, "query_bytes": 63526 },
+    { "total_ranges": 4, "records_per_page": 1024, "query_bytes": 27615 }
+  ],
+  "browser_matrix": [
+    { "browser": "chromium", "exact_records": 44, "http_206_requests": 4, "bytes": 27615, "fetch_wall_ms": 11.299999952316284, "first_decode_wall_ms": 27.299999952316284, "per_decode_ms": 15.484000000953674 },
+    { "browser": "firefox", "exact_records": 44, "http_206_requests": 4, "bytes": 27615, "fetch_wall_ms": 90, "first_decode_wall_ms": 19, "per_decode_ms": 10.14 },
+    { "browser": "webkit", "exact_records": 44, "http_206_requests": 4, "bytes": 27615, "fetch_wall_ms": 7, "first_decode_wall_ms": 27, "per_decode_ms": 18.12 }
+  ],
+  "browser_note": "Loopback timings are functional decoder measurements, not CDN or internet latency. Per-decode values are from 100 in-browser decode iterations."
+}

@@ -1,0 +1,9 @@
+{
+  "schema_version": 1,
+  "dataset": "1000 Genomes pilot",
+  "status": "permanent-operational-exclusion-resource-safety",
+  "user_waiver": "1000G is permanently excluded from this experiment after the earlier HPRC vg r-index prerequisite exhausted host memory.",
+  "current_direct_encoder_attempted": false,
+  "scope_note": "The current embedded-DA encoder avoids that r-index, but no 1000G run was attempted and no result is inferred.",
+  "attempt_authorized": false
+}

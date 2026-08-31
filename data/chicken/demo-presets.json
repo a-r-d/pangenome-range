@@ -1,0 +1,211 @@
+{
+  "schemaVersion": 1,
+  "status": "validated",
+  "presets": [
+    {
+      "id": "chicken-igll1-ucd312-deletion",
+      "archiveSha256": "93bcd713ccda14bf4e650c1c8d56751e5ed5db7624aecbf76769fa1909d25e4e",
+      "paperDoi": "10.1186/s12915-023-01758-0",
+      "sourceDatasetDoi": "10.5281/zenodo.10018222",
+      "sourceVcf": {
+        "filename": "pangenome.vcf.gz",
+        "bytes": 430058854,
+        "md5": "6f66845a728a43001dedc9661b1ffe49",
+        "sha256": "ec85ea239c4d39cb77c09bfaca347347c73f8d54578a9ba4fb78cfa31eed5ee4",
+        "record": {
+          "chrom": "chr15",
+          "position": 7944313,
+          "id": ">14904200>14904750",
+          "referenceLength": 5184,
+          "alternateAlleleIndex": 1,
+          "alleleCount": 1,
+          "ucd312Genotype": "12|1",
+          "graphTraversal": ">14904200>14904750"
+        }
+      },
+      "paperAnalysisRepository": {
+        "url": "https://github.com/WarrenLab/chicken-pangenome-paper",
+        "commit": "9c95d98ae51a1484b2c3a4c5867a4ac8b76d22b3"
+      },
+      "region": {
+        "sample": "bGalGal1b",
+        "contig": "chr15",
+        "start": 7929856,
+        "end": 7962624,
+        "trace": true
+      },
+      "traversalGroups": [
+        {
+          "tile": {
+            "sample": "bGalGal1b",
+            "contig": "chr15",
+            "start": 7929856,
+            "end": 7946240,
+            "archiveOffset": "416403698"
+          },
+          "traversalDigest": "9a91efcf5ab825db78ea5a43597dd034",
+          "occurrenceWeight": "1",
+          "memberships": [
+            {
+              "pathId": "3667",
+              "canonicalName": "UCD312#2#h2tg000050l#fragment=1251366",
+              "sample": "UCD312",
+              "contig": "h2tg000050l",
+              "haplotype": "2",
+              "fragment": "1251366",
+              "sense": "haplotype",
+              "multiplicity": "1",
+              "orientationRelativeToTraversal": "reverse"
+            }
+          ]
+        },
+        {
+          "tile": {
+            "sample": "bGalGal1b",
+            "contig": "chr15",
+            "start": 7946240,
+            "end": 7962624,
+            "archiveOffset": "416432212"
+          },
+          "traversalDigest": "59f15358db4a7b7f34f0aec13bc5c0b3",
+          "occurrenceWeight": "1",
+          "memberships": [
+            {
+              "pathId": "3667",
+              "canonicalName": "UCD312#2#h2tg000050l#fragment=1251366",
+              "sample": "UCD312",
+              "contig": "h2tg000050l",
+              "haplotype": "2",
+              "fragment": "1251366",
+              "sense": "haplotype",
+              "multiplicity": "1",
+              "orientationRelativeToTraversal": "reverse"
+            }
+          ]
+        }
+      ],
+      "expectedSourcePaths": [
+        {
+          "pathId": "3667",
+          "canonicalName": "UCD312#2#h2tg000050l#fragment=1251366",
+          "sample": "UCD312",
+          "contig": "h2tg000050l",
+          "haplotype": "2",
+          "fragment": "1251366",
+          "sense": "haplotype",
+          "multiplicity": "1",
+          "orientationRelativeToTraversal": "reverse"
+        }
+      ],
+      "publishedClaim": "Approximately 5 kb deletion relative to bGalGal1b found in one UCD312 haplotype.",
+      "observedArchiveEvidence": "The exact VCF deletion edge maps uniquely to these two adjacent tile-local traversal groups and one named UCD312 GBWT source path.",
+      "trace": {
+        "graph": {
+          "dependencyRounds": 4,
+          "requestRanges": [
+            {
+              "offset": "0",
+              "length": 16384,
+              "layer": "bootstrap"
+            },
+            {
+              "offset": "16384",
+              "length": 6910,
+              "layer": "bootstrap"
+            },
+            {
+              "offset": "3046142",
+              "length": 4096,
+              "layer": "directory"
+            },
+            {
+              "offset": "416403698",
+              "length": 70145,
+              "layer": "payload"
+            }
+          ],
+          "totalBytes": 97535,
+          "uniqueBytes": 97535,
+          "duplicateBytes": 0,
+          "bootstrapBytes": 23294,
+          "directoryBytes": 4096,
+          "payloadBytes": 70145,
+          "cacheHits": {
+            "bootstrap": 1,
+            "directory": 0,
+            "payload": 0
+          },
+          "decompressionMs": 16.497224000000642,
+          "decompressionTaskMs": 16.497224000000642,
+          "integrityMs": 4.6111369999980525,
+          "decodeMs": 52.99391000000105,
+          "mergeMs": 21.767308000000412,
+          "selectedChunks": 2,
+          "selectedNodes": 2836,
+          "selectedTraversals": 49,
+          "canonicalHash": "1f4611de92736d59ab1fd3fb21350ea5ecbb92470e611b78e0e8677d8c428e82"
+        },
+        "membership": {
+          "dependencyRounds": 3,
+          "requestRanges": [
+            {
+              "offset": "1498976628",
+              "length": 7504,
+              "layer": "extension-descriptor",
+              "dependencyGroup": 1
+            },
+            {
+              "offset": "1463323822",
+              "length": 514,
+              "layer": "extension-descriptor",
+              "dependencyGroup": 1
+            },
+            {
+              "offset": "1493082484",
+              "length": 4096,
+              "layer": "extension-page",
+              "dependencyGroup": 2
+            },
+            {
+              "offset": "1471431149",
+              "length": 626,
+              "layer": "extension-page",
+              "dependencyGroup": 3
+            },
+            {
+              "offset": "1471431775",
+              "length": 855,
+              "layer": "extension-page",
+              "dependencyGroup": 3
+            }
+          ],
+          "totalBytes": 13595,
+          "cacheHits": 0,
+          "integrityMs": 0.46795600000041304,
+          "decompressionMs": 0.3124420000003738,
+          "decompressionTaskMs": 0.3124420000003738,
+          "decodeMs": 3.026419999998325,
+          "pagesAvoidedByLimit": 0
+        },
+        "catalog": {
+          "dependencyRounds": 1,
+          "requestRanges": [
+            {
+              "offset": "1463340810",
+              "length": 9570,
+              "layer": "extension-page",
+              "dependencyGroup": 4
+            }
+          ],
+          "totalBytes": 9570,
+          "cacheHits": 0,
+          "integrityMs": 0.40716799999972864,
+          "decompressionMs": 2.8187739999993937,
+          "decompressionTaskMs": 2.8187739999993937,
+          "decodeMs": 5.017593000000488,
+          "pagesAvoidedByLimit": 0
+        }
+      }
+    }
+  ]
+}

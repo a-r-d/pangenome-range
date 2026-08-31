@@ -53,6 +53,27 @@ describe("tube-map model", () => {
     ).toBe(true);
   });
 
+  it("retains an exact preferred tile-local traversal within the pattern limit", () => {
+    const ordinary = makeTile(100, 1_000n, 0n, [100n, 90n, 80n, 70n]);
+    const preferred = makeTile(200, 9_000n, 1_000n, [40n, 16n, 10n, 4n]);
+    const model = buildTubeMapModel([ordinary, preferred], query, {
+      maxPatterns: 4,
+      preferredPatterns: [
+        {
+          archiveOffset: 9_000n,
+          orientedNodes: [2_006n, 2_011n, 2_010n],
+        },
+      ],
+    });
+
+    expect(model.patterns).toHaveLength(4);
+    expect(model.patterns[0]).toMatchObject({
+      id: "T2-P4",
+      weight: 4n,
+      orientedNodes: [2_006n, 2_011n, 2_010n],
+    });
+  });
+
   it("collapses maximal simple chains and expands an explicitly selected group", () => {
     const tile = makeLongChainTile();
     const collapsed = buildTubeMapModel([tile], query, {

@@ -1,0 +1,2 @@
+status,reason,current_direct_encoder_attempted
+not_run,permanent operational resource-safety exclusion after prior HPRC vg r-index OOM,false

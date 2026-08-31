@@ -1,0 +1,4 @@
+mode,graph_bytes,graph_ranges,graph_rounds,canonical_hash,membership_bytes,membership_ranges,membership_rounds,catalog_bytes,catalog_ranges,catalog_rounds,membership_decode_ms,catalog_decode_ms
+anonymous,248616,2,2,500ccef9a6de19f9e730532eaedb6150c13bb9f82a0f22bddea40bb21c22758c,0,0,0,0,0,0,0,0
+named_graph_only,248680,2,2,500ccef9a6de19f9e730532eaedb6150c13bb9f82a0f22bddea40bb21c22758c,0,0,0,0,0,0,0,0
+named_identity,248680,2,2,500ccef9a6de19f9e730532eaedb6150c13bb9f82a0f22bddea40bb21c22758c,50081,7,3,40105,3,1,6.063706,14.221868

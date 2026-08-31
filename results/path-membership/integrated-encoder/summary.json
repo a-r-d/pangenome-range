@@ -1,0 +1,93 @@
+{
+  "schema_version": 1,
+  "status": "bounded-local-proof",
+  "date": "2026-08-28",
+  "mode": "experimental-prepared-membership-extension",
+  "tiny": {
+    "archive_bytes": 31895,
+    "archive_sha256": "85f96c2e4eb267adf9484c3f9eb0e27924218505c41388f73d65fd61d61f4db4",
+    "threads_tested": [1, 4],
+    "catalog_records": 169,
+    "tile_pages": 1,
+    "groups": 64,
+    "memberships": 90,
+    "deterministic": true
+  },
+  "hprc_tert": {
+    "source_gbz_bytes": 5492627216,
+    "source_sha256": "11d6047f79575ffb83757462484bad134ed20928bd2c8171ec52e35a54976e2b",
+    "interval": {
+      "sample": "GRCh38",
+      "contig": "chr5",
+      "start": 1245184,
+      "end": 1310720,
+      "tile_width": 16384,
+      "tiles": 4
+    },
+    "locate": {
+      "positions": 8522,
+      "load_wall_ms": 2232.994632,
+      "locate_wall_ms": 1433.877899,
+      "max_lf_steps": 1023,
+      "address_space_limit_bytes": 12884901888,
+      "max_rss_kib": 4805116,
+      "swaps": 0
+    },
+    "encoder": {
+      "archive_bytes": 987840,
+      "archive_sha256": "3f8af7f829a21b6c2d787a2eac39cf5015a07425ea9a3e8449b4c8ef71b846ac",
+      "whole_wall_ms": 20617.807867,
+      "source_checksum_wall_ms": 19648.22283,
+      "construction_wall_ms": 406.345997,
+      "first_payload_after_build_start_ms": 4.10601,
+      "pre_rename_validation_wall_ms": 251.972672,
+      "address_space_limit_bytes": 4294967296,
+      "threads": 1,
+      "max_queued_bytes": 134217728,
+      "max_rss_kib": 263828,
+      "swaps": 0
+    },
+    "extension": {
+      "catalog_records": 53150,
+      "catalog_pages": 52,
+      "tile_pages": 4,
+      "groups": 1686,
+      "memberships": 4257,
+      "page_encoded_bytes": 734988,
+      "page_decoded_bytes": 1551866,
+      "descriptor_bytes": 3752
+    },
+    "full_validation": {
+      "schema_version": 3,
+      "extension_entries": 3,
+      "extension_encoded_bytes": 739160,
+      "extension_decoded_bytes": 1556068,
+      "validation_wall_ms": 504.134332,
+      "address_space_limit_bytes": 1073741824,
+      "max_queued_bytes": 402653184,
+      "max_rss_kib": 57656,
+      "swaps": 0,
+      "anonymous_group_reconciliation": "exact"
+    }
+  },
+  "browser": {
+    "engines": ["chromium", "firefox", "webkit"],
+    "query": "GRCh38#chr5:1261568-1277952",
+    "groups": 689,
+    "membership_occurrences": 1570,
+    "unique_paths": 464,
+    "catalog_pages": 3,
+    "requests": 4,
+    "bytes": 76869,
+    "strict_206": true,
+    "catalog_records_match_source": true,
+    "max_rss_kib": 337640,
+    "swaps": 0
+  },
+  "limitations": [
+    "The encoder consumes a prepared bounded membership summary and complete catalog; it does not yet run GBWT locate itself.",
+    "path-members-v1- is an optional unregistered research extension and is not exposed by the public TypeScript reader.",
+    "The 65536 tile-page limit intentionally prevents presenting this bounded implementation as an archive-wide design.",
+    "No whole-genome or 1000 Genomes membership construction was attempted."
+  ]
+}

@@ -1,0 +1,29 @@
+{
+  "archiveBytes": 32013,
+  "archiveSha256": "5900f5c77ef4ee46a1e22e51f30634f95a0bf5c50b00e40ef75b80026cb00955",
+  "source": "test-data/micb-kir3dl1.gbz",
+  "sourceBytes": 73920,
+  "command": "target/release/pangenome-range encode test-data/micb-kir3dl1.gbz test-data/golden/path-membership-v1.pngr --sample CHM13 --contig chr6 --start 31350872 --end 31360000 --threads 1 --path-membership --progress off",
+  "query": {
+    "sample": "CHM13",
+    "contig": "chr6",
+    "start": 31350872,
+    "end": 31360000
+  },
+  "catalogPathCount": "169",
+  "referencedPaths": 90,
+  "tiles": 2,
+  "groups": 79,
+  "memberships": 180,
+  "occurrenceWeight": "180",
+  "membershipMultiplicity": "180",
+  "firstReferencedPath": {
+    "pathId": "1",
+    "canonicalName": "GRCh38#0#chr6#fragment=31498140",
+    "sample": "GRCh38",
+    "contig": "chr6",
+    "haplotype": "0",
+    "fragment": "31498140",
+    "sense": "reference"
+  }
+}

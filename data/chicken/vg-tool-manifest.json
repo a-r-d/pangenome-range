@@ -1,0 +1,37 @@
+{
+  "schemaVersion": 1,
+  "vg": {
+    "repository": "https://github.com/vgteam/vg.git",
+    "commit": "32cadf3d3ee45d04c532767158c7dee6243f5713",
+    "upstream": true
+  },
+  "gbwtgraph": {
+    "repository": "https://github.com/jltsiren/gbwtgraph.git",
+    "commit": "7fac0af212b0502d40cca3d2b2c3a5fd7d85c540"
+  },
+  "localPatch": {
+    "path": "patches/vg/gbwtgraph-move-gbwt-index.patch",
+    "sha256": "2398b3c11c47e1caf978cadc17e896bb30a9ddcdc54fb7e32084cd8f66dda841",
+    "reason": "Move the GBWT rvalue into GBZ instead of copying it during GFA-to-GBZ construction."
+  },
+  "reproducibilityShims": {
+    "whoami": {
+      "path": "scripts/chicken/repro-bin/whoami",
+      "sha256": "fe6d03c9624222397e79f16ad7761efbebc268044a91f0f5056393c1ca2feaa2"
+    },
+    "hostname": {
+      "path": "scripts/chicken/repro-bin/hostname",
+      "sha256": "54340e48d8a1fff6a8b98dfc20f7b2eaa6c9250c9016d63a4985c6207ac79fdf"
+    }
+  },
+  "compiler": "g++ (Ubuntu 15.2.0-4ubuntu4) 15.2.0",
+  "buildMode": "default optimized make build",
+  "buildCommand": "PATH=scripts/chicken/repro-bin:$PATH make -j 8",
+  "version": "vg v1.76.1-146-g32cadf3d3",
+  "binaryBytes": 718488736,
+  "binarySha256": "80562fb2bb1240b520a139bfb060592214c71e68846c0dd915592c07b352a763",
+  "patchApplyCheck": {
+    "status": "passed",
+    "command": "git -C CLEAN_GBWTGRAPH_CHECKOUT apply --check patches/vg/gbwtgraph-move-gbwt-index.patch"
+  }
+}

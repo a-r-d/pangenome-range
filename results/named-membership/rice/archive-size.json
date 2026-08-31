@@ -1,0 +1,13 @@
+{
+  "schema_version": 2,
+  "anonymous_bytes": 130236,
+  "named_bytes": 352503,
+  "bounded_delta_bytes": 222267,
+  "bounded_delta_percent": 170.664793,
+  "retained_whole_chr06_archive_bytes": 325664519,
+  "retained_whole_chr06_graph_directory_pages": 61,
+  "fixed_membership_directory_bytes_if_full_archive": 249856,
+  "fixed_membership_directory_minimum_percent": 0.076721898,
+  "archive_wide_storage_overhead_established": false,
+  "note": "The bounded one-tile delta cannot be divided by the whole chromosome archive to project storage. The fixed directory alone would add 249,856 bytes before membership tile pages, the catalog, descriptor, compression, and metadata."
+}

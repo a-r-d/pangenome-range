@@ -1,0 +1,9 @@
+diff --git a/src/gbz.cpp b/src/gbz.cpp
+index cd8d65a..4c89081 100644
+--- a/src/gbz.cpp
++++ b/src/gbz.cpp
+@@ -266,3 +266,3 @@ GBZ::GBZ(gbwt::GBWT&& index, const GBZ& supergraph) :
+ GBZ::GBZ(gbwt::GBWT&& index, const HandleGraph& graph, const NamedNodeBackTranslation* segment_space) :
+-  index(index), graph(this->index, graph, segment_space)
++  index(std::move(index)), graph(this->index, graph, segment_space)
+ {

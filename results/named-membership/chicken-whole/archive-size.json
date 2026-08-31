@@ -1,0 +1,10 @@
+{
+  "schema_version": 1,
+  "source_gbz_bytes": 1359062880,
+  "archive_bytes": 1498984132,
+  "archive_sha256": "93bcd713ccda14bf4e650c1c8d56751e5ed5db7624aecbf76769fa1909d25e4e",
+  "archive_to_gbz_ratio": 1.1029542150397045,
+  "index_bytes": 8940286,
+  "payload_bytes": 1490043846,
+  "extension_encoded_bytes": 37092170
+}

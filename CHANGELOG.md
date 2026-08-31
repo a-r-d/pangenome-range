@@ -4,6 +4,67 @@
 
 ### Changed
 
+- Added a whole-reference-genome archive derived from the published 30-assembly
+  chicken graph as the default configured research demo. The 1,498,984,132-byte
+  archive covers all 207 `bGalGal1b`
+  reference paths and contains GRCg7b gene search, summaries, 12,237 exact GBWT
+  source-path catalog records, 717,130 tile-local traversal groups, and 1,850,732
+  membership records. Full validation passed 64,371 payloads and eight retained
+  GBZ-oracle workloads. The exact patched vg source/submodule/compiler/binary is
+  is pinned and checksum-gated through `scripts/chicken/build-pinned-vg.sh`, with
+  clean patch application and the existing binary identity verified; a fresh
+  independent from-zero build was not demonstrated. The minimal rvalue-move
+  repair is checked in under `patches/vg/`. The browser labels the
+  archive as whole genome, defaults to IGLL1, explains how to select a named
+  traversal, exposes live capabilities/counts/traces, and exports exact path TSV
+  plus oriented tile-local FASTA. A checksum-pinned graph VCF independently maps
+  the published 5,184-base UCD312 deletion edge to two adjacent fragment-aware
+  tile groups and one UCD312 source path; biological interpretation and directly
+  observed archive membership remain separate. The earlier chromosome 15 object
+  remains historical bounded evidence only. The Zenodo graph file is CC BY 4.0;
+  its license and attribution are retained.
+- Fixed named-membership request-wave accounting and scheduling. Traces now retain
+  the actual dependency group for each range; membership directories, tile pages,
+  and catalog pages use shared bounded batches in `pathMembership()` and
+  `queryWithPathMembership()`. A delayed range-source test observes all same-wave
+  tile reads starting before any completes. The small path-inspector early-return
+  loading-state bug is also fixed. The default locate ceiling is reduced from one
+  million to 8,192 LF steps; callers may explicitly raise it for unusual inputs.
+- Productionized optional named-path membership as registered `path-members-v1-`.
+  `--path-membership` performs bounded tile-batched LF locate in the disk encoder;
+  scalable fixed 4 KiB membership directories mirror graph directory pages instead
+  of listing every tile in the root. Persistent source-cache v2 authenticates and
+  reuses GBWT DA support and the canonical path catalog. Rust validation reconciles
+  every group with the unchanged anonymous traversal payload, while the browser
+  package exposes `capabilities().pathMembership`, `info().pathMembership`, and
+  lazy `pathCatalogInfo()`, `pathById()`, batched `pathsByIds()`, `searchPaths()`,
+  `tilePathMemberships()`, `pathMembership()`, and `queryWithPathMembership()` APIs.
+  Combined queries report graph, membership, and catalog traces separately, and the
+  tube-map inspector filters, copies, and highlights named source paths within loaded
+  tiles. Membership hashes now bind manifest identity, core bounds, regional payload
+  BLAKE3-128, and canonical oriented nodes. The descriptor records authenticated
+  identity-source provenance, catalog/group/occurrence totals, the sum of per-group
+  distinct-path counts, and codec
+  distribution. A checked-in Rust/TypeScript golden archive covers exact path
+  identity, multiplicity totals, range decoding, and directory corruption. Missing
+  path metadata fails closed without fabricated biological labels, and one path may
+  retain both orientations in a group while counting once toward `uniquePathCount`.
+  Fresh
+  final-layout rice Xa7 and four-tile HPRC TERT runs passed under a hard 4 GiB
+  address-space cap at 155,344 KiB and 653,416 KiB peak RSS respectively, with zero
+  swap. Named encoder wall overhead was 3.49% and 2.57%; bounded tile results do not
+  establish archive-wide storage overhead. Graph-only hashes and
+  dependency rounds were unchanged, with a measured 64-byte extension-directory
+  increment. Exact evidence is retained under `results/named-membership/`.
+  The 1000G pilot is a permanent user-accepted operational resource-safety
+  exclusion after the earlier HPRC `vg` r-index OOM. The current embedded-DA
+  encoder was not attempted on 1000G; no 1000G membership result is inferred.
+  Source-cache v1 directories are intentionally unsupported and must be rebuilt.
+  Cross-extension validation now requires the membership identity-source SHA-256 to
+  equal archive provenance, and membership materialization is capped separately at
+  250,000 records per group and tile. Encoder reports advance to schema 12 and record
+  named/anonymous mode, identity
+  source/checksum, membership totals, codec distribution, and directory-page counts.
 - Added `named-loci-v1---`, `summary-pyr-v1--`, and `archive-meta-v1-`
   extensions. The encoder always emits summaries and deterministic provenance,
   and emits named loci only with explicit GFF3, sample, release, and assembly

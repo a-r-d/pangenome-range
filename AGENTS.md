@@ -138,15 +138,23 @@ Therefore:
   but anonymous haplotype evidence remains associated with its source tile unless
   the format contains a real, tested continuation identity.
 - Do not double-count overlapping halo traversals across chunks.
-- If stable sample identity is later added, it must be a separate explicit mode
-  or sidecar with its own byte cost, construction cost, query cost, and format
-  version. Do not reintroduce a row-per-visit index.
+- Stable source-path identity is an explicit optional `path-members-v1-` mode with
+  separately measured byte, construction, and query cost. It uses a paged global
+  catalog plus tile membership pages, never a row-per-visit index. Its path IDs may
+  support highlighting across loaded tiles, but fragment boundaries and tile-local
+  traversal semantics remain authoritative.
 
 The only serialized semantic label is
 `anonymous-distinct-weighted-tile-paths`. `anonymous-all-tile-paths` may exist
 only as an internal source-oracle mode; it is not a second file-format payload.
 
 A reader must expose the semantic label to callers.
+
+Named membership pages must bind manifest sample/contig, core bounds, regional
+payload BLAKE3-128, and canonical oriented-node sequence. Occurrence weight remains
+the anonymous weight; unique path count is separate; membership multiplicities must
+sum exactly to occurrence weight. Missing metadata or locate support fails named
+encoding rather than falling back to anonymous mode.
 
 ---
 

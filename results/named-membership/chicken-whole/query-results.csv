@@ -1,0 +1,9 @@
+query_id,query_class,query_size,selected_chunks,canonical_hash,correctness,haplotype_tiles_correct,total_bytes_fetched
+chr1-start,fixed-boundary-start,65536,4,de1ff62ba1688947f09ba9b5ff96e4e25133ffb74f4e4e5f983a8a717dc08aa7,true,true,133625
+chr1-middle,fixed-seeded-interval,65536,4,b3bf189edec0a00f4a83b0465f5d5c254ce6f51754b5fdd1e2defd266df72c86,true,true,93605
+chr2-middle,fixed-seeded-interval,65536,4,be6efc990da9c730fa2eaff76b977812badbbc4caec3c0d3cb01c7f664122328,true,true,124962
+igll1,fixed-biological-igll1,65536,4,d21b5f3495521359e06afd365c951247f10379a08ec49ad5e4bd310d857df7c3,true,true,122719
+chr-z-middle,fixed-sex-chromosome,65536,4,c1335229dc749aca4809cfa3e90045ec44414bf5d85bb21baa9a0944e1e28377,true,true,36872
+unlocalized-scaffold,fixed-unlocalized-scaffold,42181,3,fe63d619c47ce44368c455b94a3197084a05edb7116a015a4188c99b645d4f04,true,true,15790
+mitochondrion,fixed-nonnuclear,16784,2,2c6f4f2176faad45434dd84aa046b445b7cb045e498a0941120782e15940e551,true,true,19359
+chr-z-end,fixed-boundary-end,69446,5,caf9503c3f4535ff7ed98a254d888225391235d3488fe66da0bb44f716e7c44c,true,true,123501

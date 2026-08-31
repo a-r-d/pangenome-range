@@ -1,0 +1,56 @@
+{
+  "schemaVersion": 1,
+  "archiveSha256": "fcb19b2c6e850c16e7e831613f34d27feef477331064cde5b16137492e6d1b43",
+  "queries": [
+    {
+      "id": "chr15-start",
+      "class": "fixed-boundary-start",
+      "sample": "bGalGal1b",
+      "contig": "chr15",
+      "start": 0,
+      "end": 65536,
+      "context": 100,
+      "expectedCanonicalHash": "36ffff229229e1d9c3947868648fe82b6d130a1c39e5c17e8b93c6d4f8e4a4f2"
+    },
+    {
+      "id": "chr15-quarter",
+      "class": "fixed-seeded-interval",
+      "sample": "bGalGal1b",
+      "contig": "chr15",
+      "start": 3276800,
+      "end": 3342336,
+      "context": 100,
+      "expectedCanonicalHash": "7d573800757b182753977984e901ca43e92852d931d6050468029d81114122d3"
+    },
+    {
+      "id": "chr15-middle",
+      "class": "fixed-seeded-interval",
+      "sample": "bGalGal1b",
+      "contig": "chr15",
+      "start": 6291456,
+      "end": 6356992,
+      "context": 100,
+      "expectedCanonicalHash": "8b22a944ad3b04f48d92d3617fd13949291028d65c5e1c765d2075e92567391a"
+    },
+    {
+      "id": "igll1",
+      "class": "fixed-biological-igll1",
+      "sample": "bGalGal1b",
+      "contig": "chr15",
+      "start": 7913472,
+      "end": 7979008,
+      "context": 100,
+      "expectedCanonicalHash": "d21b5f3495521359e06afd365c951247f10379a08ec49ad5e4bd310d857df7c3"
+    },
+    {
+      "id": "chr15-end",
+      "class": "fixed-boundary-end",
+      "sample": "bGalGal1b",
+      "contig": "chr15",
+      "start": 12632064,
+      "end": 12703657,
+      "context": 100,
+      "expectedCanonicalHash": "5de56a267d8736b9f463fc368b9992df8327e2ff50fbbfd57c3e9e0895512142"
+    }
+  ]
+}

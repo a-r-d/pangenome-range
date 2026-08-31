@@ -1,0 +1,49 @@
+{
+  "schema_version": 1,
+  "dataset": "Complete 30-chicken pangenome named-membership demo",
+  "date": "2026-08-30",
+  "format_policy": "optional-path-members-v1-extension",
+  "source": {
+    "name": "pangenome.gfa.gz",
+    "bytes": 2358369558,
+    "sha256": "609230aa36071690bfde02445a7d0693f75e512a79276f60a3b5d04361c2600d",
+    "url": "https://zenodo.org/records/10018222",
+    "license": "CC-BY-4.0"
+  },
+  "derived_source": {
+    "gfa_bytes": 12630299872,
+    "gbz_bytes": 1359062880,
+    "gbz_sha256": "96c04d263e8af7cf0863cfda8a22bb5cc9b9c3aea387cdd59a05db7a7ab1ea7f",
+    "paths": 12237,
+    "samples": 18,
+    "haplotypes": 30,
+    "contigs": 6188,
+    "vg_version": "1.76.1-146-g32cadf3d3",
+    "vg_binary_sha256": "80562fb2bb1240b520a139bfb060592214c71e68846c0dd915592c07b352a763"
+  },
+  "annotation": {
+    "assembly": "GCF_016699485.2",
+    "release": "106",
+    "source_sha256": "d298f52807d16a467068a18dcf384b331b823d0861837731cc77a331e07fef72",
+    "mapped_sha256": "0b9b65ba6db7cac55636d392638895faf0758dc2d0be0944347c3501c1d6ee27",
+    "gene_rows": 25437
+  },
+  "reference": {
+    "sample": "bGalGal1b",
+    "paths": 207,
+    "bases": 1052949595
+  },
+  "limits": {
+    "vg_memory_high_bytes": 42949672960,
+    "vg_memory_max_bytes": 45097156608,
+    "encode_memory_max_bytes": 2147483648,
+    "validation_memory_max_bytes": 2147483648,
+    "oracle_memory_max_bytes": 34359738368,
+    "swap_max_bytes": 0,
+    "threads": 1,
+    "encode_max_queued_bytes": 67108864,
+    "validation_max_queued_bytes": 536870912,
+    "path_locate_max_lf_steps": 8192
+  },
+  "publication_authorized": true
+}

@@ -1,0 +1,82 @@
+{
+  "schemaVersion": 2,
+  "dataset": {
+    "title": "A pangenome graph reference of 30 chicken genomes",
+    "paperDoi": "10.1186/s12915-023-01758-0",
+    "datasetDoi": "10.5281/zenodo.10018222",
+    "record": "https://zenodo.org/records/10018222",
+    "license": {
+      "spdx": "CC-BY-4.0",
+      "basis": "The Zenodo graph file carries an explicit CC BY 4.0 dataset license; retain the Rice et al. citation and license with derived archives."
+    }
+  },
+  "paperAnalysis": {
+    "repository": "https://github.com/WarrenLab/chicken-pangenome-paper",
+    "commit": "9c95d98ae51a1484b2c3a4c5867a4ac8b76d22b3",
+    "license": "GPL-3.0-only"
+  },
+  "inputs": {
+    "graph": {
+      "url": "https://zenodo.org/records/10018222/files/pangenome.gfa.gz?download=1",
+      "filename": "pangenome.gfa.gz",
+      "bytes": 2358369558,
+      "md5": "f2ddedbe3bab487d87c34b1842b26b8f",
+      "sha256": "609230aa36071690bfde02445a7d0693f75e512a79276f60a3b5d04361c2600d",
+      "uncompressedBytes": 12630299872,
+      "format": "GFA 1.1"
+    },
+    "graphVcf": {
+      "url": "https://zenodo.org/records/10018222/files/pangenome.vcf.gz?download=1",
+      "filename": "pangenome.vcf.gz",
+      "bytes": 430058854,
+      "md5": "6f66845a728a43001dedc9661b1ffe49",
+      "sha256": "ec85ea239c4d39cb77c09bfaca347347c73f8d54578a9ba4fb78cfa31eed5ee4"
+    },
+    "annotation": {
+      "accession": "GCF_016699485.2",
+      "release": "NCBI RefSeq 106",
+      "url": "https://ftp.ncbi.nlm.nih.gov/genomes/all/GCF/016/699/485/GCF_016699485.2_bGalGal1.mat.broiler.GRCg7b/GCF_016699485.2_bGalGal1.mat.broiler.GRCg7b_genomic.gff.gz",
+      "filename": "GCF_016699485.2_genomic.gff.gz",
+      "bytes": 25161571,
+      "sha256": "d298f52807d16a467068a18dcf384b331b823d0861837731cc77a331e07fef72"
+    }
+  },
+  "toolchain": {
+    "manifest": "data/chicken/vg-tool-manifest.json",
+    "pangenomeRangeEncoderCommit": "5fd57c7464cb1a87593e30636d63fb28e43dde6b"
+  },
+  "reference": {
+    "sample": "bGalGal1b",
+    "assembly": "GCF_016699485.2",
+    "pathRule": "Select every GBWT path whose metadata sample field is exactly bGalGal1b; map RefSeq/GenBank accessions to chromosome labels with GCF_016699485.2_assembly_report.txt.",
+    "referencePaths": 207
+  },
+  "derived": {
+    "gbz": {
+      "filename": "chicken-whole-patched-gbz-v1.gbz",
+      "bytes": 1359062880,
+      "sha256": "96c04d263e8af7cf0863cfda8a22bb5cc9b9c3aea387cdd59a05db7a7ab1ea7f"
+    },
+    "mappedAnnotation": {
+      "filename": "chicken-whole-genes.gff3",
+      "bytes": 4424252,
+      "sha256": "0b9b65ba6db7cac55636d392638895faf0758dc2d0be0944347c3501c1d6ee27"
+    },
+    "archive": {
+      "filename": "chicken-whole-named.pngr",
+      "bytes": 1498984132,
+      "sha256": "93bcd713ccda14bf4e650c1c8d56751e5ed5db7624aecbf76769fa1909d25e4e",
+      "objectName": "pangenome-range/sha256/93bcd713ccda14bf4e650c1c8d56751e5ed5db7624aecbf76769fa1909d25e4e/chicken-whole-named.pngr",
+      "publicUrl": "https://archives.ard.ninja/pangenome-range/sha256/93bcd713ccda14bf4e650c1c8d56751e5ed5db7624aecbf76769fa1909d25e4e/chicken-whole-named.pngr",
+      "originValidation": "passed",
+      "originEvidence": "results/named-membership/chicken-whole/origin-check.json"
+    }
+  },
+  "commands": {
+    "buildVg": "scripts/chicken/build-pinned-vg.sh $CHICKEN_DATA_DIR/tools/pinned-vg --jobs 8",
+    "buildCorpus": "VG_BIN=$CHICKEN_DATA_DIR/tools/pinned-vg/vg-source/bin/vg CHICKEN_DATA_DIR=$CHICKEN_DATA_DIR scripts/chicken/build-chicken-whole.sh",
+    "buildPreset": "node --max-old-space-size=256 scripts/chicken/build-demo-presets.mjs $CHICKEN_DATA_DIR/chicken-whole-named.pngr $CHICKEN_DATA_DIR/pangenome.vcf.gz data/chicken/demo-presets.json",
+    "upload": "aws s3 cp $CHICKEN_DATA_DIR/chicken-whole-named.pngr s3://$ARCHIVE_BUCKET/pangenome-range/sha256/93bcd713ccda14bf4e650c1c8d56751e5ed5db7624aecbf76769fa1909d25e4e/chicken-whole-named.pngr --content-type application/octet-stream --cache-control public,max-age=31536000,immutable,no-transform",
+    "originCheck": "pnpm --filter @pangenome-range/benchmark build && pnpm --filter @pangenome-range/benchmark bench -- origin-check --url https://archives.ard.ninja/pangenome-range/sha256/93bcd713ccda14bf4e650c1c8d56751e5ed5db7624aecbf76769fa1909d25e4e/chicken-whole-named.pngr --origin https://a-r-d.github.io --file $CHICKEN_DATA_DIR/chicken-whole-named.pngr --sha256 93bcd713ccda14bf4e650c1c8d56751e5ed5db7624aecbf76769fa1909d25e4e --report results/2026-08-30-chicken-merge-hardening/origin-check.json"
+  }
+}

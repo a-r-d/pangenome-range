@@ -410,3 +410,34 @@ component and bundle inventory, deterministic golden screenshot, public HLA-B
 and lower-complexity screenshots, exact byte-range/query status, and the
 Chromium/Firefox/WebKit result. Older explorer reports remain historical
 evidence and are not the current product contract.
+
+## Bounded integrated path-membership proof (2026-08-28)
+
+`results/path-membership/integrated-encoder/` retains the first same-object encoder
+proof. One- and four-worker tiny archives are byte-identical. The real HPRC workload
+is four aligned TERT tiles, not a chromosome or whole-genome run: the direct encoder
+peaked at 263,828 KiB RSS with zero swaps under a 4 GiB address-space cap, and full
+validation reconciled all 1,686 named groups with their unchanged anonymous payloads.
+Chromium, Firefox, and WebKit each recovered 464 exact catalog records through four
+strict `206` requests totaling 76,869 bytes. Loopback timing is functional evidence,
+not public-network performance.
+
+## Production named-membership conformance (2026-08-29)
+
+The production tranche changes placement, so earlier archive SHA values remain
+historical. A checked-in MICB/KIR3DL1 fixture now covers two CHM13 chr6 tiles. Its
+32,013-byte archive has SHA-256
+`5900f5c77ef4ee46a1e22e51f30634f95a0bf5c50b00e40ef75b80026cb00955`.
+Rust and TypeScript agree on 169 catalog paths, 79 groups, 180 memberships, and total
+occurrence/multiplicity weight 180. Browser tests also corrupt the fixed membership
+directory body and require digest rejection.
+
+The synthetic direct encode through ephemeral and persistent source-cache v2 remains
+the cache-path determinism gate. Final-layout anonymous/named controls, validation,
+query bytes, and memory evidence are retained under `results/named-membership/`.
+Rice and four-tile HPRC retain anonymous controls. A later local Populus trichocarpa
+Chr19 run expands the named-only construction proof to 1,015 tiles and full
+reconstruction under a 4 GiB, zero-swap cap; it has no anonymous size-control run and
+is not published pending data-use review. The permanent 1000G operational exclusion
+is explicit, the current direct encoder was not attempted there, and no result is
+inferred.

@@ -13,7 +13,10 @@ const props = defineProps<{
   locus?: LocusHit;
   plan?: RegionPlan;
   bins: readonly OverviewBin[];
+  publishedExampleAvailable: boolean;
+  publishedExampleDisabled: boolean;
 }>();
+const emit = defineEmits<{ publishedExample: [] }>();
 
 const ticks = computed(() => {
   const region = props.region;
@@ -47,6 +50,7 @@ function width(start: number, end: number): string {
     <div class="reference-track__heading">
       <strong>{{ region ? `${region.sample} · ${region.contig}` : 'Opening archive…' }}</strong>
       <span v-if="region">{{ region.start.toLocaleString() }}–{{ region.end.toLocaleString() }} · {{ (region.end - region.start).toLocaleString() }} bp</span>
+      <button v-if="publishedExampleAvailable" type="button" :disabled="publishedExampleDisabled" title="Open the source-validated UCD312 IGLL1 deletion example" @click="emit('publishedExample')">Published example</button>
     </div>
     <div class="reference-ruler">
       <div class="reference-ruler__line"></div>

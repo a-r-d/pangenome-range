@@ -1,0 +1,44 @@
+{
+  "schema_version": 1,
+  "status": "passed-whole-chromosome-publishable",
+  "full_source_attempt": {
+    "status": "abandoned-after-cgroup-oom",
+    "stage": "vg path/walk indexing job 0",
+    "memory_cap_bytes": 12884901888,
+    "reason": "The full 49-million-node GFA exceeded the bounded budget before final GBZ construction. The production recipe prohibits this path."
+  },
+  "safe_conversion": {
+    "scope": "closed chromosome 15 component",
+    "segments": 518756,
+    "links": 703861,
+    "walks": 80,
+    "peak_rss_kib": 378252,
+    "memory_cap_bytes": 2147483648,
+    "swap_bytes": 0
+  },
+  "whole_chr15": {
+    "tiles": 776,
+    "catalog_paths": 80,
+    "groups": 8441,
+    "memberships": 22835,
+    "occurrence_weight": 22835,
+    "peak_rss_kib": 44648,
+    "maximum_lf_steps": 1023,
+    "full_validation_passed": true,
+    "oracle_queries_passed": 5
+  },
+  "igll1_demo": {
+    "start": 7913472,
+    "end": 7979008,
+    "named_locus_search_passed": true,
+    "source_oracle_passed": true,
+    "canonical_hash": "d21b5f3495521359e06afd365c951247f10379a08ec49ad5e4bd310d857df7c3",
+    "groups": 72,
+    "memberships": 196,
+    "occurrence_weight": 196,
+    "membership_multiplicity": 196,
+    "unique_paths": 30
+  },
+  "publication_authorized": true,
+  "license": "CC-BY-4.0"
+}

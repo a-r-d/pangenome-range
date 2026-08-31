@@ -1,0 +1,52 @@
+{
+  "schemaVersion": 1,
+  "capturedAt": "2026-08-30",
+  "viewport": {
+    "width": 1600,
+    "height": 1000
+  },
+  "testedSiteBase": "http://127.0.0.1:34909/pangenome-range",
+  "archives": {
+    "chicken": "https://archives.ard.ninja/pangenome-range/sha256/93bcd713ccda14bf4e650c1c8d56751e5ed5db7624aecbf76769fa1909d25e4e/chicken-whole-named.pngr",
+    "hprc": "https://archives.ard.ninja/pangenome-range/sha256/ecf5ae4fa8c784a80307507f58bed894311b8560724b57de0fcc35237c324b63/hprc-v1-gencode-v50-disk-t8.pngr",
+    "rice": "https://archives.ard.ninja/pangenome-range/sha256/c91768e6e98d32ff6467732a26e32def5058f4c15d247a0ac6a252a4403e134c/rice-chr06-mc-xa7-anonymous.pngr"
+  },
+  "screenshots": [
+    {
+      "state": "default chicken IGLL1",
+      "file": "chicken-default-igll1.png",
+      "testedPath": "/demo",
+      "sha256": "d63f10c0e4ce6d9a97481204ee3a5661794aa040520c732cedcadc1e67c3a39e"
+    },
+    {
+      "state": "named path inspector",
+      "file": "chicken-named-path-inspector.png",
+      "testedPath": "/demo?archive=chicken&sample=bGalGal1b&contig=chr15&start=7929856&end=7962624&locus=IGLL1",
+      "sha256": "1338176e8e0fb43cb09f0a90814c73e16352c73a78c4e5ee00f7e6e3bfb76c05"
+    },
+    {
+      "state": "published UCD312 example",
+      "file": "chicken-published-example.png",
+      "testedPath": "/demo?archive=chicken&sample=bGalGal1b&contig=chr15&start=7929856&end=7962624&locus=IGLL1",
+      "sha256": "e0815d879d3cd3a3dab4e02a393cf6abbad70f838a0cd9eb072cbdfe2ccc053f"
+    },
+    {
+      "state": "archive source menu",
+      "file": "chicken-source-menu.png",
+      "testedPath": "/demo",
+      "sha256": "3e03252a540f1f27a2424139153ab13143d365c9baf7ce1980b98839623d3e7f"
+    },
+    {
+      "state": "HPRC HLA-B alternate source",
+      "file": "hprc-hla-b.png",
+      "testedPath": "/demo?archive=hprc&locus=HLA-B&zoom=0.32&center=0.5&vscale=1.3",
+      "sha256": "362296ba50f062414b8395556c25aab040d2530b82750a09de46c31856af711f"
+    },
+    {
+      "state": "rice Xa7 alternate source",
+      "file": "rice-xa7.png",
+      "testedPath": "/demo?archive=rice&locus=Xa7&zoom=2.856&center=0.600576&vscale=1.45",
+      "sha256": "29e478f85880d6817bf7a7aafc06882c19d0b93406f9ee88e496cfd4d87c0821"
+    }
+  ]
+}

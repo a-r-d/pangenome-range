@@ -1,0 +1,52 @@
+{
+  "schema_version": 1,
+  "implementation": "experimental Rust ordinary GBWT locate from embedded DA samples",
+  "gbwt_bytes": 457520368,
+  "gbwt_sha256": "367ba437b73ff2ba59a37a0747171e9fcdf6b734d138b014c858c38f2ba3874d",
+  "da_serialized_bytes": 11323784,
+  "sampled_records": 1404075,
+  "da_samples": 1456844,
+  "max_lf_steps_limit": 10000,
+  "address_space_limit_bytes": 4294967296,
+  "used_r_index": false,
+  "tile_starts": {
+    "requested_positions": 122,
+    "exact_cpp_matches": 122,
+    "located_output_sha256": "cf5128ff4dfdaa24a507e6bfa16f464c30a1949bb6906b001d93d3430d04f4fb",
+    "total_lf_steps": 49155,
+    "lf_steps": {
+      "p50": 322,
+      "p90": 892,
+      "p95": 940,
+      "p99": 985,
+      "max": 1017
+    },
+    "load_wall_ms": 463.457805,
+    "locate_wall_ms": 7.901718,
+    "process_wall_seconds": 0.49,
+    "peak_rss_bytes": 486363136,
+    "swaps": 0
+  },
+  "deterministic_sample": {
+    "seed": 20260828,
+    "requested_positions": 4096,
+    "exact_cpp_matches": 4096,
+    "located_output_sha256": "941642c5ad1e104b5a192fd67d88145286ac68eb615e9073f02ce7cbfa35c142",
+    "total_lf_steps": 2053946,
+    "lf_steps": {
+      "p50": 497,
+      "p90": 914,
+      "p95": 968,
+      "p99": 1011,
+      "max": 1023
+    },
+    "load_wall_ms": 406.735068,
+    "locate_wall_ms": 372.167468,
+    "rust_process_wall_seconds": 0.79,
+    "rust_peak_rss_bytes": 486170624,
+    "cpp_fast_locate_process_wall_seconds": 0.75,
+    "cpp_fast_locate_peak_rss_bytes": 1535127552,
+    "rust_swaps": 0,
+    "cpp_swaps": 0
+  }
+}

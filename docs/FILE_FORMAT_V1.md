@@ -119,7 +119,8 @@ emitted as required.
 
 All registered v1 entries have the required flag clear. The reference encoder
 always emits the summary and deterministic archive metadata entries. It emits
-the named-locus entry only when explicit annotation input is supplied. Readers
+the named-locus entry only when explicit annotation input is supplied and the
+path-membership entry only when `--path-membership` is requested. Readers
 that do not implement these features MUST be able to skip them and continue
 serving regional graph queries.
 
@@ -128,6 +129,7 @@ serving regional graph queries.
 | `named-loci-v1---` | binary-searchable names, aliases, and genomic intervals |
 | `summary-pyr-v1--` | arithmetic multiscale overview bins |
 | `archive-meta-v1-` | deterministic source, encoder, reference, and annotation provenance |
+| `path-members-v1-` | tile-local named GBWT source-path membership and path catalog |
 
 Each extension-directory entry addresses a small descriptor. A known
 descriptor MAY own child page ranges elsewhere at or after `data_offset`.
@@ -146,8 +148,9 @@ length, codec, and BLAKE3-128 value using the 56-byte sequence below:
 Known-extension child pages MUST stay within the object, MUST NOT overlap any
 regional payload, extension descriptor, or other child page, and MUST pass
 their digest before decompression. A parser MUST consume every descriptor and
-page exactly. This is one bounded level of indirection, not a generic recursive
-extension graph. Both encoded and decoded child-page lengths are at most 64 MiB.
+page exactly. Registered schemas may also define fixed raw directory pages that
+address these child-page sequences. This is not a generic recursive extension graph.
+Both encoded and decoded compressed child-page lengths are at most 64 MiB.
 
 #### 3.2.1 Named loci
 
@@ -318,6 +321,93 @@ metadata bytes to the archive; the source and annotation SHA-256 values bind
 the named inputs. This is integrity and identity evidence, not a keyed
 authenticity signature. Published whole-object SHA-256 or a strong immutable
 HTTP identity remains necessary to bind the complete object externally.
+
+#### 3.2.4 Named source-path membership
+
+The optional descriptor begins with a 112-byte header:
+
+| Offset | Size | Type | Field |
+| ---: | ---: | --- | --- |
+| 0 | 8 | bytes | magic `PNGPMD01` |
+| 8 | 4 | `u32` | version, exactly `1` |
+| 12 | 4 | `u32` | records per catalog page, 1 through 65,536 |
+| 16 | 8 | `u64` | total source-path count, nonzero |
+| 24 | 4 | `u32` | catalog-page count, nonzero |
+| 28 | 4 | `u32` | membership-manifest count, nonzero |
+| 32 | 1 | `u8` | identity source: `1` embedded GBWT DA bounded LF v1, `2` prepared authenticated oracle v1 |
+| 33 | 7 | bytes | reserved, all zero |
+| 40 | 32 | bytes | SHA-256 of the authenticated source GBZ |
+| 72 | 8 | `u64` | membership group count |
+| 80 | 8 | `u64` | membership occurrence total |
+| 88 | 8 | `u64` | `group_unique_path_count_sum`: sum of each group's distinct path-ID count |
+| 96 | 8 | `u64` | groups using delta codec `0` |
+| 104 | 8 | `u64` | groups using run codec `1` |
+
+The codec counts MUST sum to the group count, the source checksum MUST be nonzero,
+and `group_unique_path_count_sum` MUST NOT exceed the occurrence total. This field
+is not an archive-global distinct-path cardinality; a path may contribute once in
+many groups or tiles. When this extension is present, `archive-meta-v1-` is REQUIRED
+and its source GBZ SHA-256 MUST exactly equal this identity-source SHA-256. The complete
+descriptor is at most 16 MiB. Its exact byte length is the 112-byte
+header plus 64 bytes per catalog descriptor and 32 bytes per membership manifest.
+
+Each catalog descriptor is `u64 first_path_id`, `u64 record_count`, then the
+56-byte child-page sequence. Path IDs start at zero and pages cover a contiguous
+range ending at `path_count`. A catalog page begins with magic `PNGPCP01`, `u32
+version = 1`, `u32 record_count`, and `u64 first_path_id`. Each record contains
+front-coded UTF-8 canonical name, sample, and contig strings; unsigned LEB128
+haplotype and fragment values; and a sense byte (`0` unknown, `1` generic, `2`
+reference, `3` haplotype). The canonical name is a deterministic rendering of
+the structured GBWT metadata; the GBWT serialization does not retain an original
+input spelling. A front-coded string is unsigned LEB128 prefix-byte length,
+unsigned LEB128 suffix-byte length, then suffix bytes. Prefixes MUST end on a
+UTF-8 boundary. Reconstructed strings in one page total at most 64 MiB. All LEB128
+values MUST use their minimal representation. The production encoder emits named
+membership only when every source path has complete path, sample, and contig
+metadata; it never fabricates missing biological labels.
+
+Each membership manifest is exactly 32 bytes: `u32 manifest_index`, four zero
+reserved bytes, `u64 first_page_offset`, `u64 page_count`, and `u64 entry_count`.
+There is exactly one membership manifest for each root reference manifest in the
+same order. Page and entry counts MUST equal the corresponding graph manifest.
+Membership-directory ranges are contiguous across manifests.
+
+Membership directories are raw fixed 4 KiB pages aligned one-for-one with graph
+directory pages. Their 32-byte header is magic `PNGPMI01`, `u32 version = 1`,
+`u32 entry_count`, then BLAKE3-128 over bytes 32 through 4095. Up to 72 entries
+follow in graph-directory order. Each entry is `u64 group_count` plus the 56-byte
+child-page sequence. Remaining bytes MUST be zero. Empty pages are valid only when
+the aligned graph directory page is empty.
+
+A decoded tile page begins with magic `PNGPMT01`, `u32 version = 1`, `u32
+group_count`, zero-based half-open `u64 core_start` and `u64 core_end`, and the
+16-byte BLAKE3-128 integrity value of the aligned regional payload.
+Zero groups is valid for a tile containing no anonymous traversal evidence.
+Groups are strictly ordered by their 16-byte traversal digest. Each group contains
+that digest, `u64 occurrence_weight`, `u64 unique_path_count`, `u64 membership_bytes`,
+then exactly that many membership-codec bytes. The digest is BLAKE3-128 over the
+domain `pangenome-range/path-membership/traversal/v1\0`; length-prefixed UTF-8
+manifest sample and contig; little-endian `u64` core start and end; the aligned
+regional payload BLAKE3-128; the traversal length as little-endian `u64`; and each
+oriented handle as little-endian `u64`. This binds a group to the manifest identity,
+physical tile interval, exact regional payload, and canonical oriented traversal.
+
+Membership codec `0` stores a count followed by path-ID deltas, multiplicities,
+and one orientation byte per membership. Codec `1` additionally run-encodes
+consecutive path IDs with multiplicity one and equal orientation. Counts and integer
+fields use minimal unsigned LEB128. `(path_id, orientation)` pairs MUST be unique
+and strictly increasing; path IDs alone may repeat once with each orientation and
+must be less than `path_count`. Multiplicities are nonzero and orientation is `0`
+or `1`. For every group, membership multiplicities MUST sum to `occurrence_weight`
+and `unique_path_count` MUST equal the number of distinct path IDs. Total expanded
+occurrences per tile are at most 16,777,216. A decoder MUST also reject more than
+250,000 materialized membership records in one group or one tile; multiplicity is
+stored as a scalar and does not consume one record per occurrence.
+
+Membership identity is tile-local. It associates each reconstructed local traversal
+occurrence with a real GBWT source path, but it does not authorize a reader to stitch
+anonymous graph-query traversals across tiles or infer biological continuity not
+present in the returned membership records.
 
 ## 4. Root index and reference manifests
 

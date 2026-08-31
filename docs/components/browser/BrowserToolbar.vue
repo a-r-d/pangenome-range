@@ -13,6 +13,8 @@ defineProps<{
   disabled: boolean;
   searchMessage?: string;
   options: GraphOptions;
+  namedPathHintAvailable: boolean;
+  namedPathHintVisible: boolean;
 }>();
 const emit = defineEmits<{
   "update:command": [value: string];
@@ -30,6 +32,7 @@ const emit = defineEmits<{
   verticalIn: [];
   archive: [];
   share: [];
+  showNamedPathHint: [];
 }>();
 
 function updateOption<Key extends keyof GraphOptions>(
@@ -88,6 +91,10 @@ function updateOption<Key extends keyof GraphOptions>(
         <div class="toolbar-option-row">
           <label><input :checked="options.simplifyLinearChains" type="checkbox" @change="updateOption(options, 'simplifyLinearChains', ($event.target as HTMLInputElement).checked)" /> Simplify linear chains</label>
           <HelpTooltip text="Collapse non-branching node runs into display groups. Graph branches and data are preserved, and a selected group can be expanded." />
+        </div>
+        <div v-if="namedPathHintAvailable" class="toolbar-option-row">
+          <button type="button" @click="emit('showNamedPathHint')">{{ namedPathHintVisible ? 'Named-path hint is visible' : 'Show named-path hint' }}</button>
+          <HelpTooltip text="The hint points to colored tile-local traversals whose exact source-path membership can be inspected." />
         </div>
         <div class="toolbar-option-row">
           <label>Show bases <select :value="options.showBases" aria-label="Base display mode" @change="updateOption(options, 'showBases', ($event.target as HTMLSelectElement).value as GraphOptions['showBases'])"><option value="automatic">Automatic</option><option value="on">On</option><option value="off">Off</option></select></label>

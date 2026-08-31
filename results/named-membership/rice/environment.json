@@ -1,0 +1,8 @@
+{
+  "schema_version": 1,
+  "kernel": "Linux 6.17.0-41-generic x86_64",
+  "rustc": "1.97.1 (8bab26f4f 2026-07-14)",
+  "node": "v24.16.0",
+  "pnpm": "11.24.0",
+  "base_commit": "81e9affd3274d0be0d62f1f7c06b582d07817ccf"
+}

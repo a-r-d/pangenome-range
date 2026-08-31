@@ -13,6 +13,18 @@ export {
   parseGenomicCommand,
 } from "./navigation.js";
 export type {
+  LocalTraversalExportErrorCode,
+  LocalTraversalFastaOptions,
+  NamedPathTsvOptions,
+} from "./research-exports.js";
+export {
+  bytesToHex,
+  LocalTraversalExportError,
+  localTraversalFasta,
+  localTraversalSequence,
+  namedPathMembershipTsv,
+} from "./research-exports.js";
+export type {
   TubeMapLayout,
   TubeMapLayoutBoundary,
   TubeMapLayoutEdge,
@@ -34,6 +46,7 @@ export type {
   TubeMapEdge,
   TubeMapModel,
   TubeMapNode,
+  TubeMapPreferredPattern,
   TubeMapSourceTile,
   TubeMapTileBoundary,
 } from "./tube-map-model.js";
@@ -48,3 +61,14 @@ export type {
   TubeMapRenderResult,
 } from "./tube-map-renderer.js";
 export { renderTubeMapSvg } from "./tube-map-renderer.js";
+export type {
+  ExpectedPresetTraversalGroup,
+  LocatedPresetTraversalGroup,
+  LocateValidatedPresetResult,
+  ValidatedPresetErrorCode,
+} from "./validated-preset.js";
+export {
+  locateValidatedPresetGroups,
+  matchValidatedPresetPatterns,
+  ValidatedPresetError,
+} from "./validated-preset.js";

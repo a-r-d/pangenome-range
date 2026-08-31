@@ -87,10 +87,17 @@ export interface TubeMapModel {
 
 export interface TubeMapBuildOptions {
   readonly maxPatterns?: 0 | 4 | 8 | 16;
+  /** Exact tile-local traversals that should be retained within maxPatterns. */
+  readonly preferredPatterns?: readonly TubeMapPreferredPattern[];
   readonly simplifyLinearChains?: boolean;
   readonly expandedNodeGroups?: readonly string[];
   readonly maxDisplayedNodeGroups?: number;
   readonly maxDisplayedTopologyEdges?: number;
+}
+
+export interface TubeMapPreferredPattern {
+  readonly archiveOffset: bigint;
+  readonly orientedNodes: readonly bigint[];
 }
 
 export const DEFAULT_TUBE_MAP_BUILD_OPTIONS = {
@@ -253,8 +260,15 @@ export function buildTubeMapModel(
     }
   }
 
+  const preferredPatterns = options.preferredPatterns ?? [];
   const selectedPatterns = rawPatterns
-    .sort(compareRawPatterns)
+    .sort((left, right) => {
+      const leftPreference = preferredPatternRank(left, preferredPatterns);
+      const rightPreference = preferredPatternRank(right, preferredPatterns);
+      return (
+        leftPreference - rightPreference || compareRawPatterns(left, right)
+      );
+    })
     .slice(0, maxPatterns);
   for (const pattern of selectedPatterns) {
     for (const handle of pattern.orientedNodes) {
@@ -652,6 +666,18 @@ function compareRawPatterns(left: RawPattern, right: RawPattern): number {
     compareBigintArrays(left.orientedNodes, right.orientedNodes) ||
     left.tile.key.localeCompare(right.tile.key)
   );
+}
+
+function preferredPatternRank(
+  pattern: RawPattern,
+  preferredPatterns: readonly TubeMapPreferredPattern[],
+): number {
+  const index = preferredPatterns.findIndex(
+    (preferred) =>
+      preferred.archiveOffset === pattern.tile.archiveOffset &&
+      compareBigintArrays(preferred.orientedNodes, pattern.orientedNodes) === 0,
+  );
+  return index < 0 ? preferredPatterns.length : index;
 }
 
 function compareBigintArrays(
