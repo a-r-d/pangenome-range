@@ -1235,3 +1235,51 @@ catalog data. Archive-wide named HPRC storage remains unmeasured. The user made 
 1000G pilot a permanent operational resource-safety exclusion after the earlier HPRC
 `vg` r-index OOM. The current embedded-DA encoder was not attempted on 1000G, and the
 absence record does not infer a direct-encoder result.
+
+## 2026-08-31: bounded named-membership finalizer optimization
+
+The HPRC finalizer now uses bounded ordered workers with explicit progress and resolves
+only selected offsets while scanning compressed GBWT runs, instead of decompressing a
+complete record on every LF round. On a retained 256-tile GRCh38 chr5 interval, the
+membership phase improved from about 65 seconds with one worker and 16 seconds with
+the original eight-worker locator to about 5.8 seconds with the retained 32-worker
+compressed-run locator. Peak RSS was 1,970,640 KiB with no swap, and all completed
+variants produced the identical archive SHA-256
+`e01657069a335b5abf67ff137d6a4199ac58bab8fede20598fa26f041985fa17`.
+
+This is not the requested 20-minute whole-HPRC path. The bounded rate is 44.3 tiles/s;
+363,105 known physical tiles project to about 137 minutes for membership alone, while
+20 minutes requires about 303 tiles/s. The full run was not launched. Sixty-four
+workers, 128 KiB tiles, two-pass batching, cross-tile carry caches, internal sample
+scanning, a 1 GiB source cache, and hash grouping did not improve end-to-end time and
+were removed. Detailed retained evidence is in
+`results/path-membership/hprc-finalizer-performance-2026-08-31/`.
+
+## 2026-08-31: whole-HPRC named archive and parallel validation accepted
+
+The complete 363,105-tile HPRC v2.1 archive finished its named-membership phase
+in 1 hour 29 minutes 57 seconds with 32 bounded workers. It retained 75,587,329
+canonical traversal groups, 174,838,191 path memberships, and 350,433,180 located
+occurrences. The final archive is 10,836,425,558 bytes with SHA-256
+`82585cb612effbf414b1c8f38b049bc415876866168ccc929f9a885f06d97b0a`.
+
+The first final validation attempt exposed a separate rejected implementation:
+all membership pages were decoded and reconciled serially before the existing
+payload progress callback began. It used one full core for more than 73 minutes
+without measurable progress and was stopped. The already finalized archive bytes
+were preserved through a same-filesystem hard link; construction was not repeated.
+
+Validation now assigns membership tiles to the existing bounded worker pool,
+checks each decoded tile's actual reconstruction estimate against its per-worker
+budget before materialization, aggregates totals on the coordinator, and reports
+tile/group/rate/ETA progress. Full validation with 32 workers completed in 51
+minutes 10.51 seconds: membership reconciliation took 27 minutes 02.94 seconds,
+and all 363,105 physical payloads then passed full reconstruction in 24 minutes
+07.13 seconds. The process peaked at 9,670,064 KiB RSS with zero swap. Validation
+progress uses a separate clock and completed-byte counter for each phase so earlier
+extension work cannot distort the regional-payload rate or ETA.
+
+The retained seven-query GBZ oracle workload then passed every canonical graph hash
+and every checked haplotype tile, including HLA-B, MICB, repetitive KIR3DL1, TERT,
+CHM13 fragment-start, and GRCh38 chromosome 1/X terminal-boundary cases. It finished
+in 48.55 seconds at 10,776,088 KiB peak RSS with zero swap under the 35 GiB cap.

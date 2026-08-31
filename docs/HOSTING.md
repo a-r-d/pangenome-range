@@ -72,28 +72,29 @@ retain the origin's `Content-Range`, CORS, ETag, and `no-transform` headers.
 ## Canonical demo archives
 
 The Pages workflow defaults to the content-addressed HPRC v2.1 / GENCODE v50
-archive at:
+archive with exact named GBWT source-path membership at:
 
 ```text
-https://archives.ard.ninja/pangenome-range/sha256/ecf5ae4fa8c784a80307507f58bed894311b8560724b57de0fcc35237c324b63/hprc-v1-gencode-v50-disk-t8.pngr
+https://archives.ard.ninja/pangenome-range/sha256/82585cb612effbf414b1c8f38b049bc415876866168ccc929f9a885f06d97b0a/hprc-v2.1-gencode-v50-named-membership-82585cb612effbf4.pngr
 ```
 
-Its byte length is 8,832,749,949 and its SHA-256 is:
+Its byte length is 10,836,425,558 and its SHA-256 is:
 
 ```text
-ecf5ae4fa8c784a80307507f58bed894311b8560724b57de0fcc35237c324b63
+82585cb612effbf414b1c8f38b049bc415876866168ccc929f9a885f06d97b0a
 ```
 
 The current origin host serves that object from:
 
 ```text
-/srv/data/public-archives/pangenome-range/sha256/ecf5ae4fa8c784a80307507f58bed894311b8560724b57de0fcc35237c324b63/hprc-v1-gencode-v50-disk-t8.pngr
+/srv/data/public-archives/pangenome-range/sha256/82585cb612effbf414b1c8f38b049bc415876866168ccc929f9a885f06d97b0a/hprc-v2.1-gencode-v50-named-membership-82585cb612effbf4.pngr
 ```
 
-This is a deployed viewer/demo object, distinct from the later 677-byte-larger
-release-hardening measurement archive carrying the new provenance extension.
-The content-addressed path prevents the demo object from being mistaken for
-those later bytes.
+This archive contains 363,105 membership tile pages, 75,587,329 canonical
+traversal groups, 174,838,191 memberships, and 53,150 catalog records. Full
+structural validation and the retained seven-query GBZ source oracle both
+passed before publication. Named identity remains an explicit experimental
+extension; graph-only readers continue to use the unchanged regional payloads.
 
 The source menu also includes the content-addressed PPanG rice chromosome 6
 archive:

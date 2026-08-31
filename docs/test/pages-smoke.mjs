@@ -831,6 +831,22 @@ async function exerciseChickenArchive(browser, baseUrl) {
     });
     await assertNoPageOverflow(page, "chicken named-path inspector");
     assert.deepEqual(errors, []);
+    await page.goto(
+      `${baseUrl}/demo?archive=chicken&preset=chicken-igll1-ucd312-deletion`,
+    );
+    await page.getByTestId("published-example").waitFor();
+    await page
+      .getByRole("complementary", { name: "Pattern inspector" })
+      .getByRole("heading", { name: "Named source paths" })
+      .waitFor();
+    assert.equal(
+      new URL(page.url()).searchParams.get("preset"),
+      "chicken-igll1-ucd312-deletion",
+    );
+    assert.equal(
+      await page.locator(".pngr-pattern-port.is-selected").count(),
+      2,
+    );
     return {
       source: "chicken",
       locus: "IGLL1",
@@ -853,6 +869,7 @@ async function exerciseChickenArchive(browser, baseUrl) {
         bytesAfter: afterHighlightBytes,
         rangesAfter: afterHighlightRanges,
       },
+      publishedPresetDeepLink: true,
     };
   } finally {
     await page.close();

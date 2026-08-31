@@ -130,9 +130,12 @@ coordinate-based percentage and measured ETA. Do not derive completion from
 temporary archive size because regional compression ratios vary.
 `source_checksum_progress` and `output_checksum_progress` report byte-based
 completion, opaque source-load/index phases emit heartbeats, and
-`archive_validation_progress` reports validated directory entries/pages,
-physical payloads, bytes, rate, elapsed time, and ETA. A long run should never
-have a silent phase merely because payload encoding has finished.
+`path_membership_validation_progress` reports validated membership tiles,
+groups, bytes, rate, elapsed time, and ETA while named-membership pages are
+reconciled with their regional payloads. `archive_validation_progress` then
+reports validated directory entries/pages, physical payloads, bytes, rate,
+elapsed time, and ETA for the regional-payload stage alone. A long run should
+never have a silent phase merely because payload encoding has finished.
 
 The accepted whole-source record-preserving run is retained in
 [`results/2026-08-25-record-preserving-v4/REPORT.md`](https://github.com/a-r-d/pangenome-range/blob/main/results/2026-08-25-record-preserving-v4/REPORT.md).

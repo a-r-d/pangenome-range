@@ -731,7 +731,7 @@ pub fn decode_path_catalog_page(bytes: &[u8]) -> io::Result<Vec<PathCatalogRecor
 
 fn encode_delta(memberships: &[PathMembership]) -> io::Result<Vec<u8>> {
     let mut values = memberships.to_vec();
-    values.sort();
+    values.sort_by_key(|item| (item.path_id, item.reversed_relative_to_group));
     validate_membership_id_order(&values)?;
     let mut output = vec![DELTA_CODEC];
     put_varint(&mut output, usize_to_u64(values.len())?);
@@ -750,7 +750,7 @@ fn encode_delta(memberships: &[PathMembership]) -> io::Result<Vec<u8>> {
 
 fn encode_runs(memberships: &[PathMembership]) -> io::Result<Vec<u8>> {
     let mut values = memberships.to_vec();
-    values.sort();
+    values.sort_by_key(|item| (item.path_id, item.reversed_relative_to_group));
     validate_membership_id_order(&values)?;
     let mut records = Vec::<(u8, u64, u64, bool)>::new();
     let mut index = 0;
@@ -1265,7 +1265,7 @@ mod tests {
         let dual_orientation = vec![
             PathMembership {
                 path_id: 1,
-                multiplicity: 1,
+                multiplicity: 3,
                 reversed_relative_to_group: false,
             },
             PathMembership {
@@ -1275,6 +1275,8 @@ mod tests {
             },
         ];
         let encoded = encode_delta(&dual_orientation).unwrap();
+        assert_eq!(decode_memberships(&encoded, 2).unwrap(), dual_orientation);
+        let encoded = encode_runs(&dual_orientation).unwrap();
         assert_eq!(decode_memberships(&encoded, 2).unwrap(), dual_orientation);
         let exact_duplicate = vec![
             PathMembership {
@@ -1292,7 +1294,7 @@ mod tests {
 
         let group = TraversalMembershipGroup {
             traversal_digest: [1; 16],
-            occurrence_weight: 2,
+            occurrence_weight: 4,
             unique_path_count: 1,
             memberships: dual_orientation,
         };

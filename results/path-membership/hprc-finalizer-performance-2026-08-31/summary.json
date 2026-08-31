@@ -1,0 +1,45 @@
+{
+  "schemaVersion": 1,
+  "status": "BOUNDED_OPTIMIZATION_ACCEPTED_FULL_RUN_NOT_AUTHORIZED",
+  "archiveBytes": 12834459,
+  "archiveSha256": "e01657069a335b5abf67ff137d6a4199ac58bab8fede20598fa26f041985fa17",
+  "tilePages": 256,
+  "locatedPositions": 338960,
+  "maximumLfSteps": 1023,
+  "groups": 76862,
+  "memberships": 169223,
+  "occurrenceTotal": 169224,
+  "oneWorker": {
+    "membershipPhaseMs": 64966.86,
+    "constructionWallMs": 79725.22,
+    "processWallSeconds": 106.07,
+    "peakRssKiB": 689568
+  },
+  "eightWorkerOriginalLf": {
+    "membershipPhaseMs": 15635.85,
+    "constructionWallMs": 29281.90,
+    "processWallSeconds": 54.11,
+    "peakRssKiB": 1081800
+  },
+  "eightWorkerTargetedRle": {
+    "membershipPhaseMsApprox": 9100,
+    "constructionWallMs": 29761.94,
+    "processWallSeconds": 54.46,
+    "peakRssKiB": 1058740
+  },
+  "thirtyTwoWorkerTargetedRle": {
+    "membershipPhaseMsApprox": 5780,
+    "tilesPerSecond": 44.3,
+    "constructionWallMs": 18591.57,
+    "processWallSeconds": 42.33,
+    "peakRssKiB": 1970640,
+    "swaps": 0
+  },
+  "wholeArchiveProjection": {
+    "knownPhysicalTiles": 363105,
+    "membershipSecondsAtBoundedRate": 8196.5,
+    "membershipMinutesAtBoundedRate": 136.6,
+    "requiredTilesPerSecondForTwentyMinutes": 302.6,
+    "warning": "Linear projection from one bounded interval; not a completed whole-archive measurement"
+  }
+}

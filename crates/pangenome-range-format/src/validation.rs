@@ -57,6 +57,9 @@ pub struct ArchiveValidationProgress {
     pub directory_entries_validated: u64,
     pub directory_entries_total: u64,
     pub physical_payloads_validated: u64,
+    pub path_membership_tile_pages_validated: u64,
+    pub path_membership_tile_pages_total: u64,
+    pub path_membership_groups_validated: u64,
     pub compressed_payload_bytes_validated: u64,
     pub uncompressed_payload_bytes_validated: u64,
     pub entries_per_second: f64,
@@ -89,6 +92,9 @@ pub struct ArchiveValidationSummary {
     pub path_membership_tile_pages: u64,
     pub path_membership_groups: u64,
     pub path_membership_memberships: u64,
+    pub path_membership_effective_workers: u64,
+    pub path_membership_peak_estimated_worker_bytes: u64,
+    pub path_membership_validation_wall_ms: f64,
     pub directory_validation_wall_ms: f64,
     pub payload_validation_wall_ms: f64,
     pub payload_read_worker_ms: f64,
@@ -110,6 +116,27 @@ struct PayloadWorkerMeasurement {
     reconstruction_ms: f64,
 }
 
+#[derive(Clone)]
+struct MembershipValidationJob {
+    manifest_index: usize,
+    entry: ArchiveEntry,
+    membership_entry: crate::PathMembershipDirectoryEntry,
+}
+
+#[derive(Default)]
+struct MembershipWorkerMeasurement {
+    estimated_worker_bytes: u64,
+    encoded_bytes: u64,
+    decoded_bytes: u64,
+    groups: u64,
+    memberships: u64,
+    occurrence_total: u64,
+    group_unique_path_count_sum: u64,
+    delta_groups: u64,
+    run_groups: u64,
+    stored_range: Option<(u64, u64, &'static str)>,
+}
+
 #[derive(Default)]
 struct ProgressState {
     sequence: u64,
@@ -117,6 +144,7 @@ struct ProgressState {
     last_directory_pages: u64,
     last_directory_entries: u64,
     last_physical_payloads: u64,
+    last_path_membership_tile_pages: u64,
 }
 
 /// Runs the default one-worker standard validation gate.
@@ -243,6 +271,9 @@ pub fn validate_archive_with_options(
     let mut path_membership_group_unique_path_count_sum = 0_u64;
     let mut path_membership_delta_groups = 0_u64;
     let mut path_membership_run_groups = 0_u64;
+    let mut path_membership_effective_workers = 0_u64;
+    let mut path_membership_peak_estimated_worker_bytes = 0_u64;
+    let mut path_membership_validation_wall_ms = 0.0;
     let mut archive_metadata_source_sha256 = None;
     let mut stored_ranges = entries
         .iter()
@@ -397,8 +428,13 @@ pub fn validate_archive_with_options(
                     "path-membership descriptor does not cover every reference manifest",
                 ));
             }
-            for (manifest, membership_manifest) in
-                bootstrap.root.manifests.iter().zip(&descriptor.manifests)
+            let mut jobs = Vec::with_capacity(u64_to_usize(header.entry_count)?);
+            for (manifest_index, (manifest, membership_manifest)) in bootstrap
+                .root
+                .manifests
+                .iter()
+                .zip(&descriptor.manifests)
+                .enumerate()
             {
                 if membership_manifest.page_count != manifest.page_count
                     || membership_manifest.entry_count != manifest.entry_count
@@ -450,26 +486,136 @@ pub fn validate_archive_with_options(
                             invalid_data("path-membership directory page count overflow")
                         })?;
                     for (entry, membership_entry) in graph_entries.iter().zip(&membership_entries) {
-                        validate_tile_membership(
-                            source.as_ref(),
-                            descriptor.path_count,
-                            manifest,
-                            entry,
-                            membership_entry,
-                            &mut extension_encoded_bytes,
-                            &mut extension_decoded_bytes,
-                            &mut stored_ranges,
-                            &mut path_membership_tile_pages,
-                            &mut path_membership_groups,
-                            &mut path_membership_memberships,
-                            &mut path_membership_occurrence_total,
-                            &mut path_membership_group_unique_path_count_sum,
-                            &mut path_membership_delta_groups,
-                            &mut path_membership_run_groups,
-                        )?;
+                        jobs.push(MembershipValidationJob {
+                            manifest_index,
+                            entry: entry.clone(),
+                            membership_entry: membership_entry.clone(),
+                        });
                     }
                 }
             }
+            let max_membership_job_bytes = jobs
+                .iter()
+                .map(estimated_membership_worker_bytes)
+                .try_fold(0_u64, |maximum, bytes| {
+                    bytes.map(|bytes| maximum.max(bytes))
+                })?;
+            if max_membership_job_bytes > options.max_queued_bytes {
+                return Err(invalid_data(format!(
+                    "one path-membership validation job requires an estimated {max_membership_job_bytes} bytes, above max queued bytes {}",
+                    options.max_queued_bytes
+                )));
+            }
+            let memory_workers = options
+                .max_queued_bytes
+                .checked_div(max_membership_job_bytes.max(1))
+                .map_or(options.workers, |workers| {
+                    usize::try_from(workers).unwrap_or(usize::MAX).max(1)
+                });
+            let effective_workers = options.workers.min(memory_workers).min(jobs.len().max(1));
+            path_membership_effective_workers = usize_to_u64(effective_workers)?;
+            let membership_worker_budget = options
+                .max_queued_bytes
+                .checked_div(path_membership_effective_workers.max(1))
+                .ok_or_else(|| invalid_data("path-membership worker budget is zero"))?;
+            let membership_started = Instant::now();
+            let membership_total = usize_to_u64(jobs.len())?;
+            let jobs = Arc::new(jobs);
+            let manifests = Arc::new(bootstrap.root.manifests.clone());
+            let mut membership_progress = ProgressState::default();
+            let mut membership_encoded_bytes = 0_u64;
+            let mut membership_decoded_bytes = 0_u64;
+            let mut max_observed_membership_worker_bytes = 0_u64;
+            validate_memberships_parallel(
+                &source,
+                &manifests,
+                &jobs,
+                descriptor.path_count,
+                effective_workers,
+                membership_worker_budget,
+                |validated, measurement| {
+                    max_observed_membership_worker_bytes = max_observed_membership_worker_bytes
+                        .max(measurement.estimated_worker_bytes);
+                    path_membership_tile_pages = path_membership_tile_pages
+                        .checked_add(1)
+                        .ok_or_else(|| invalid_data("path-membership tile count overflow"))?;
+                    path_membership_groups = path_membership_groups
+                        .checked_add(measurement.groups)
+                        .ok_or_else(|| invalid_data("path-membership group count overflow"))?;
+                    path_membership_memberships = path_membership_memberships
+                        .checked_add(measurement.memberships)
+                        .ok_or_else(|| invalid_data("path-membership count overflow"))?;
+                    path_membership_occurrence_total = path_membership_occurrence_total
+                        .checked_add(measurement.occurrence_total)
+                        .ok_or_else(|| invalid_data("path-membership occurrence total overflow"))?;
+                    path_membership_group_unique_path_count_sum =
+                        path_membership_group_unique_path_count_sum
+                            .checked_add(measurement.group_unique_path_count_sum)
+                            .ok_or_else(|| {
+                                invalid_data("path-membership unique path-count sum overflow")
+                            })?;
+                    path_membership_delta_groups = path_membership_delta_groups
+                        .checked_add(measurement.delta_groups)
+                        .ok_or_else(|| invalid_data("path-membership codec count overflow"))?;
+                    path_membership_run_groups = path_membership_run_groups
+                        .checked_add(measurement.run_groups)
+                        .ok_or_else(|| invalid_data("path-membership codec count overflow"))?;
+                    membership_encoded_bytes = membership_encoded_bytes
+                        .checked_add(measurement.encoded_bytes)
+                        .ok_or_else(|| invalid_data("extension encoded byte count overflow"))?;
+                    membership_decoded_bytes = membership_decoded_bytes
+                        .checked_add(measurement.decoded_bytes)
+                        .ok_or_else(|| invalid_data("extension decoded byte count overflow"))?;
+                    stored_ranges.push(measurement.stored_range.ok_or_else(|| {
+                        invalid_data("path-membership worker omitted its stored range")
+                    })?);
+                    maybe_emit_membership_progress(
+                        options.progress_interval_ms,
+                        false,
+                        membership_started,
+                        &mut membership_progress,
+                        directory_pages,
+                        directory_pages_total,
+                        entry_count,
+                        header.entry_count,
+                        validated,
+                        membership_total,
+                        path_membership_groups,
+                        membership_encoded_bytes,
+                        membership_decoded_bytes,
+                        &mut emit,
+                    )
+                },
+            )?;
+            maybe_emit_membership_progress(
+                options.progress_interval_ms,
+                true,
+                membership_started,
+                &mut membership_progress,
+                directory_pages,
+                directory_pages_total,
+                entry_count,
+                header.entry_count,
+                path_membership_tile_pages,
+                membership_total,
+                path_membership_groups,
+                membership_encoded_bytes,
+                membership_decoded_bytes,
+                &mut emit,
+            )?;
+            extension_encoded_bytes = extension_encoded_bytes
+                .checked_add(membership_encoded_bytes)
+                .ok_or_else(|| invalid_data("extension encoded byte count overflow"))?;
+            extension_decoded_bytes = extension_decoded_bytes
+                .checked_add(membership_decoded_bytes)
+                .ok_or_else(|| invalid_data("extension decoded byte count overflow"))?;
+            path_membership_validation_wall_ms =
+                membership_started.elapsed().as_secs_f64() * 1_000.0;
+            path_membership_peak_estimated_worker_bytes = max_observed_membership_worker_bytes
+                .checked_mul(path_membership_effective_workers)
+                .ok_or_else(|| {
+                    invalid_data("path-membership validation worker memory estimate overflow")
+                })?;
             if path_membership_groups != descriptor.group_count
                 || path_membership_occurrence_total != descriptor.occurrence_total
                 || path_membership_group_unique_path_count_sum
@@ -510,16 +656,24 @@ pub fn validate_archive_with_options(
         .ok_or_else(|| invalid_data("validation worker memory estimate overflow"))?;
     let payload_started = Instant::now();
     let entries = Arc::new(entries);
+    let mut validated_compressed_payload_bytes = 0_u64;
+    let mut validated_uncompressed_payload_bytes = 0_u64;
     let measurements = validate_payloads_parallel(
         &source,
         &entries,
         options.mode,
         effective_workers,
         |validated, measurement| {
+            validated_compressed_payload_bytes = validated_compressed_payload_bytes
+                .checked_add(measurement.compressed_bytes)
+                .ok_or_else(|| invalid_data("validated compressed byte count overflow"))?;
+            validated_uncompressed_payload_bytes = validated_uncompressed_payload_bytes
+                .checked_add(measurement.uncompressed_bytes)
+                .ok_or_else(|| invalid_data("validated uncompressed byte count overflow"))?;
             maybe_emit_progress(
                 options.progress_interval_ms,
                 false,
-                started,
+                payload_started,
                 &mut progress_state,
                 directory_pages,
                 directory_pages_total,
@@ -527,12 +681,10 @@ pub fn validate_archive_with_options(
                 header.entry_count,
                 validated,
                 physical_payload_count,
-                compressed_payload_bytes,
-                uncompressed_payload_bytes,
+                validated_compressed_payload_bytes,
+                validated_uncompressed_payload_bytes,
                 &mut emit,
-            )?;
-            let _ = measurement;
-            Ok(())
+            )
         },
     )?;
     let payload_validation_wall_ms = payload_started.elapsed().as_secs_f64() * 1_000.0;
@@ -559,7 +711,7 @@ pub fn validate_archive_with_options(
     maybe_emit_progress(
         options.progress_interval_ms,
         true,
-        started,
+        payload_started,
         &mut progress_state,
         directory_pages,
         directory_pages_total,
@@ -567,12 +719,12 @@ pub fn validate_archive_with_options(
         header.entry_count,
         physical_payload_count,
         physical_payload_count,
-        compressed_payload_bytes,
-        uncompressed_payload_bytes,
+        validated_compressed_payload_bytes,
+        validated_uncompressed_payload_bytes,
         &mut emit,
     )?;
     Ok(ArchiveValidationSummary {
-        schema_version: 4,
+        schema_version: 5,
         archive_version: header.version,
         archive_path: path.to_path_buf(),
         archive_bytes: source_len,
@@ -595,6 +747,9 @@ pub fn validate_archive_with_options(
         path_membership_tile_pages,
         path_membership_groups,
         path_membership_memberships,
+        path_membership_effective_workers,
+        path_membership_peak_estimated_worker_bytes,
+        path_membership_validation_wall_ms,
         directory_validation_wall_ms,
         payload_validation_wall_ms,
         payload_read_worker_ms: aggregate.read_ms,
@@ -607,7 +762,6 @@ pub fn validate_archive_with_options(
 }
 
 #[allow(
-    clippy::too_many_arguments,
     clippy::too_many_lines,
     reason = "the complete tile-to-regional-payload reconciliation remains contiguous and auditable"
 )]
@@ -617,17 +771,8 @@ fn validate_tile_membership(
     manifest: &crate::ReferenceManifest,
     entry: &ArchiveEntry,
     membership_entry: &crate::PathMembershipDirectoryEntry,
-    extension_encoded_bytes: &mut u64,
-    extension_decoded_bytes: &mut u64,
-    stored_ranges: &mut Vec<(u64, u64, &'static str)>,
-    path_membership_tile_pages: &mut u64,
-    path_membership_groups: &mut u64,
-    path_membership_memberships: &mut u64,
-    path_membership_occurrence_total: &mut u64,
-    path_membership_group_unique_path_count_sum: &mut u64,
-    path_membership_delta_groups: &mut u64,
-    path_membership_run_groups: &mut u64,
-) -> io::Result<()> {
+    worker_budget: u64,
+) -> io::Result<MembershipWorkerMeasurement> {
     let encoded = source.read_range(
         membership_entry.storage.offset,
         u64_to_usize(membership_entry.storage.encoded_len)?,
@@ -655,6 +800,16 @@ fn validate_tile_membership(
     }
     let regional_raw = decompress(entry.codec, &regional_encoded, entry.uncompressed_len)?;
     let payload = RecordRegionalPayload::decode(&regional_raw)?;
+    let estimated_worker_bytes = estimated_membership_reconstruction_bytes(
+        entry,
+        membership_entry,
+        payload.total_occurrences,
+    )?;
+    if estimated_worker_bytes > worker_budget {
+        return Err(invalid_data(format!(
+            "path-membership validation job requires an estimated {estimated_worker_bytes} bytes, above its {worker_budget}-byte worker budget; reduce workers or increase max queued bytes"
+        )));
+    }
     if payload.reference_sample != manifest.sample
         || payload.reference_contig != manifest.contig
         || payload.core_start != entry.start
@@ -692,48 +847,49 @@ fn validate_tile_membership(
             "named memberships differ from anonymous regional traversal groups",
         ));
     }
-    *path_membership_tile_pages = path_membership_tile_pages
-        .checked_add(1)
-        .ok_or_else(|| invalid_data("path-membership tile count overflow"))?;
-    *path_membership_groups = path_membership_groups
-        .checked_add(usize_to_u64(groups.len())?)
-        .ok_or_else(|| invalid_data("path-membership group count overflow"))?;
-    *path_membership_memberships = path_membership_memberships
-        .checked_add(groups.iter().try_fold(0_u64, |total, group| {
+    let mut measurement = MembershipWorkerMeasurement {
+        estimated_worker_bytes,
+        encoded_bytes: membership_entry.storage.encoded_len,
+        decoded_bytes: usize_to_u64(decoded.len())?,
+        groups: usize_to_u64(groups.len())?,
+        memberships: groups.iter().try_fold(0_u64, |total, group| {
             total
                 .checked_add(usize_to_u64(group.memberships.len())?)
                 .ok_or_else(|| invalid_data("path-membership count overflow"))
-        })?)
-        .ok_or_else(|| invalid_data("path-membership count overflow"))?;
+        })?,
+        stored_range: Some((
+            membership_entry.storage.offset,
+            membership_entry.storage.encoded_len,
+            "tile-membership page",
+        )),
+        ..MembershipWorkerMeasurement::default()
+    };
     for group in &groups {
-        *path_membership_occurrence_total = path_membership_occurrence_total
+        measurement.occurrence_total = measurement
+            .occurrence_total
             .checked_add(group.occurrence_weight)
             .ok_or_else(|| invalid_data("path-membership occurrence total overflow"))?;
-        *path_membership_group_unique_path_count_sum = path_membership_group_unique_path_count_sum
+        measurement.group_unique_path_count_sum = measurement
+            .group_unique_path_count_sum
             .checked_add(group.unique_path_count)
             .ok_or_else(|| invalid_data("path-membership unique path-count sum overflow"))?;
         match selected_path_membership_codec(&group.memberships)? {
             PATH_MEMBERSHIP_DELTA_CODEC => {
-                *path_membership_delta_groups = path_membership_delta_groups
+                measurement.delta_groups = measurement
+                    .delta_groups
                     .checked_add(1)
                     .ok_or_else(|| invalid_data("path-membership codec count overflow"))?;
             }
             PATH_MEMBERSHIP_RUN_CODEC => {
-                *path_membership_run_groups = path_membership_run_groups
+                measurement.run_groups = measurement
+                    .run_groups
                     .checked_add(1)
                     .ok_or_else(|| invalid_data("path-membership codec count overflow"))?;
             }
             _ => return Err(invalid_data("unknown selected path-membership codec")),
         }
     }
-    add_extension_page_metrics(
-        &membership_entry.storage,
-        decoded.len(),
-        extension_encoded_bytes,
-        extension_decoded_bytes,
-        stored_ranges,
-        "tile-membership page",
-    )
+    Ok(measurement)
 }
 
 fn add_extension_page_metrics(
@@ -820,6 +976,113 @@ fn estimated_worker_bytes(entry: &ArchiveEntry, mode: ValidationMode) -> io::Res
             .ok_or_else(|| invalid_data("full validation memory estimate overflow"))?,
     )
     .ok_or_else(|| invalid_data("full validation memory estimate overflow"))
+}
+
+fn estimated_membership_worker_bytes(job: &MembershipValidationJob) -> io::Result<u64> {
+    estimated_worker_bytes(&job.entry, ValidationMode::Standard)?
+        .checked_add(job.membership_entry.storage.encoded_len)
+        .and_then(|bytes| {
+            job.membership_entry
+                .storage
+                .decoded_len
+                .checked_mul(2)
+                .and_then(|decoded| bytes.checked_add(decoded))
+        })
+        .ok_or_else(|| invalid_data("path-membership validation worker estimate overflow"))
+}
+
+fn estimated_membership_reconstruction_bytes(
+    entry: &ArchiveEntry,
+    membership_entry: &crate::PathMembershipDirectoryEntry,
+    total_occurrences: u64,
+) -> io::Result<u64> {
+    estimated_worker_bytes(entry, ValidationMode::Standard)?
+        .checked_add(membership_entry.storage.encoded_len)
+        .and_then(|bytes| {
+            membership_entry
+                .storage
+                .decoded_len
+                .checked_mul(2)
+                .and_then(|decoded| bytes.checked_add(decoded))
+        })
+        .and_then(|bytes| {
+            total_occurrences
+                .checked_mul(17)
+                .and_then(|reconstruction| bytes.checked_add(reconstruction))
+        })
+        .ok_or_else(|| invalid_data("path-membership reconstruction estimate overflow"))
+}
+
+fn validate_memberships_parallel(
+    source: &Arc<FileRangeSource>,
+    manifests: &Arc<Vec<crate::ReferenceManifest>>,
+    jobs: &Arc<Vec<MembershipValidationJob>>,
+    path_count: u64,
+    workers: usize,
+    worker_budget: u64,
+    mut completed: impl FnMut(u64, MembershipWorkerMeasurement) -> io::Result<()>,
+) -> io::Result<()> {
+    if jobs.is_empty() {
+        return Ok(());
+    }
+    let next = Arc::new(AtomicUsize::new(0));
+    let stopped = Arc::new(AtomicBool::new(false));
+    let (sender, receiver) =
+        mpsc::sync_channel::<io::Result<MembershipWorkerMeasurement>>(workers * 2);
+    thread::scope(|scope| -> io::Result<()> {
+        for _ in 0..workers {
+            let source = Arc::clone(source);
+            let manifests = Arc::clone(manifests);
+            let jobs = Arc::clone(jobs);
+            let next = Arc::clone(&next);
+            let stopped = Arc::clone(&stopped);
+            let sender = sender.clone();
+            scope.spawn(move || {
+                while !stopped.load(Ordering::Acquire) {
+                    let index = next.fetch_add(1, Ordering::AcqRel);
+                    let Some(job) = jobs.get(index) else {
+                        break;
+                    };
+                    let result = manifests
+                        .get(job.manifest_index)
+                        .ok_or_else(|| invalid_data("membership manifest index is out of range"))
+                        .and_then(|manifest| {
+                            validate_tile_membership(
+                                &source,
+                                path_count,
+                                manifest,
+                                &job.entry,
+                                &job.membership_entry,
+                                worker_budget,
+                            )
+                        });
+                    let failed = result.is_err();
+                    if sender.send(result).is_err() {
+                        break;
+                    }
+                    if failed {
+                        stopped.store(true, Ordering::Release);
+                        break;
+                    }
+                }
+            });
+        }
+        drop(sender);
+        let mut completed_count = 0_u64;
+        while completed_count < usize_to_u64(jobs.len())? {
+            let measurement = receiver.recv().map_err(|_| {
+                invalid_data("path-membership validation workers stopped before completion")
+            })??;
+            completed_count = completed_count
+                .checked_add(1)
+                .ok_or_else(|| invalid_data("path-membership validation count overflow"))?;
+            if let Err(error) = completed(completed_count, measurement) {
+                stopped.store(true, Ordering::Release);
+                return Err(error);
+            }
+        }
+        Ok(())
+    })
 }
 
 fn validate_payloads_parallel(
@@ -980,8 +1243,79 @@ fn maybe_emit_progress(
         directory_entries_validated,
         directory_entries_total,
         physical_payloads_validated,
+        path_membership_tile_pages_validated: 0,
+        path_membership_tile_pages_total: 0,
+        path_membership_groups_validated: 0,
         compressed_payload_bytes_validated,
         uncompressed_payload_bytes_validated,
+        entries_per_second,
+        estimated_seconds_remaining,
+        elapsed_seconds,
+    });
+    Ok(())
+}
+
+#[allow(clippy::too_many_arguments, clippy::cast_precision_loss)]
+fn maybe_emit_membership_progress(
+    interval_ms: u64,
+    force: bool,
+    started: Instant,
+    state: &mut ProgressState,
+    directory_pages_validated: u64,
+    directory_pages_total: u64,
+    directory_entries_validated: u64,
+    directory_entries_total: u64,
+    tile_pages_validated: u64,
+    tile_pages_total: u64,
+    groups_validated: u64,
+    encoded_bytes_validated: u64,
+    decoded_bytes_validated: u64,
+    emit: &mut impl FnMut(&ArchiveValidationProgress),
+) -> io::Result<()> {
+    let elapsed_seconds = started.elapsed().as_secs_f64();
+    let elapsed_ms = elapsed_seconds * 1_000.0;
+    if force && state.sequence > 0 && state.last_path_membership_tile_pages == tile_pages_validated
+    {
+        return Ok(());
+    }
+    if !force && state.sequence == 0 && interval_ms > 0 && elapsed_ms < interval_ms as f64 {
+        return Ok(());
+    }
+    if !force && state.sequence > 0 && elapsed_ms - state.last_emit_ms < interval_ms as f64 {
+        return Ok(());
+    }
+    state.sequence = state
+        .sequence
+        .checked_add(1)
+        .ok_or_else(|| invalid_data("validation progress sequence overflow"))?;
+    state.last_emit_ms = elapsed_ms;
+    state.last_path_membership_tile_pages = tile_pages_validated;
+    let entries_per_second = if elapsed_seconds > 0.0 {
+        tile_pages_validated as f64 / elapsed_seconds
+    } else {
+        0.0
+    };
+    let estimated_seconds_remaining = (entries_per_second > 0.0)
+        .then(|| tile_pages_total.saturating_sub(tile_pages_validated) as f64 / entries_per_second);
+    let percent_complete = if tile_pages_total == 0 {
+        100.0
+    } else {
+        tile_pages_validated as f64 / tile_pages_total as f64 * 100.0
+    };
+    emit(&ArchiveValidationProgress {
+        phase: "path_membership_validation_progress",
+        sequence: state.sequence,
+        percent_complete,
+        directory_pages_validated,
+        directory_pages_total,
+        directory_entries_validated,
+        directory_entries_total,
+        physical_payloads_validated: 0,
+        path_membership_tile_pages_validated: tile_pages_validated,
+        path_membership_tile_pages_total: tile_pages_total,
+        path_membership_groups_validated: groups_validated,
+        compressed_payload_bytes_validated: encoded_bytes_validated,
+        uncompressed_payload_bytes_validated: decoded_bytes_validated,
         entries_per_second,
         estimated_seconds_remaining,
         elapsed_seconds,
@@ -1014,6 +1348,64 @@ mod tests {
         assert_eq!(summary.path_membership_tile_pages, 2);
         assert_eq!(summary.path_membership_groups, 79);
         assert_eq!(summary.path_membership_memberships, 180);
+    }
+
+    #[test]
+    fn named_membership_validation_is_parallel_and_reports_progress() {
+        let path = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../test-data/golden/path-membership-v1.pngr");
+        let baseline = validate_archive_with_options(
+            &path,
+            ValidationOptions {
+                workers: 1,
+                progress_interval_ms: 0,
+                ..ValidationOptions::default()
+            },
+            |_| {},
+        )
+        .unwrap();
+        let mut progress = Vec::new();
+        let parallel = validate_archive_with_options(
+            &path,
+            ValidationOptions {
+                workers: 4,
+                progress_interval_ms: 0,
+                ..ValidationOptions::default()
+            },
+            |snapshot| progress.push(snapshot.clone()),
+        )
+        .unwrap();
+        assert_eq!(parallel.schema_version, 5);
+        assert_eq!(parallel.path_membership_effective_workers, 2);
+        assert_eq!(parallel.path_membership_tile_pages, 2);
+        assert_eq!(
+            parallel.path_membership_groups,
+            baseline.path_membership_groups
+        );
+        assert_eq!(
+            parallel.path_membership_memberships,
+            baseline.path_membership_memberships
+        );
+        let final_membership = progress
+            .iter()
+            .rfind(|snapshot| snapshot.phase == "path_membership_validation_progress")
+            .unwrap();
+        assert_eq!(final_membership.path_membership_tile_pages_validated, 2);
+        assert_eq!(final_membership.path_membership_tile_pages_total, 2);
+        assert_eq!(final_membership.path_membership_groups_validated, 79);
+        let final_payload = progress
+            .iter()
+            .rfind(|snapshot| snapshot.phase == "archive_validation_progress")
+            .unwrap();
+        assert_eq!(final_payload.physical_payloads_validated, 2);
+        assert_eq!(
+            final_payload.compressed_payload_bytes_validated,
+            parallel.compressed_payload_bytes
+        );
+        assert_eq!(
+            final_payload.uncompressed_payload_bytes_validated,
+            parallel.uncompressed_payload_bytes
+        );
     }
 
     #[test]

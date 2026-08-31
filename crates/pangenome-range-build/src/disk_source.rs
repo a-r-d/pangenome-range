@@ -5,6 +5,7 @@ use crate::source::{
 };
 use gbz::bwt::Record;
 use gbz::headers::{GBWTPayload, GBZPayload, Header, SequencesPayload};
+use gbz::support::RLEIter;
 use gbz::{
     FullPathName, GENERIC_HAPLOTYPE, GENERIC_SAMPLE, Metadata, Orientation, Pos,
     REFERENCE_SAMPLES_KEY, Tags,
@@ -36,6 +37,49 @@ const SOURCE_DA_SAMPLES_FILE: &str = "gbwt-da-samples.bin";
 const SOURCE_PATH_CATALOG_FILE: &str = "source-path-catalog.json";
 const SOURCE_PATH_INDEX_INTERVAL: usize = 1_000;
 const MAX_SOURCE_CACHE_MANIFEST_BYTES: u64 = 1024 * 1024;
+
+fn follow_selected_offsets(
+    record: Record<'_>,
+    mut indices: Vec<usize>,
+    current: &mut [Pos],
+) -> io::Result<()> {
+    indices.sort_unstable_by_key(|index| current[*index].offset);
+    let (_, mut edges, bwt) = record.into_raw_parts();
+    let mut next_index = 0_usize;
+    let mut run_start = 0_usize;
+    for run in RLEIter::with_sigma(bwt, edges.len()) {
+        let run_end = run_start
+            .checked_add(run.len)
+            .ok_or_else(|| invalid_data("GBWT record run length overflow"))?;
+        let edge = edges
+            .get_mut(run.value)
+            .ok_or_else(|| invalid_data("GBWT record run value is outside its edge list"))?;
+        while let Some(&index) = indices.get(next_index) {
+            let offset = current[index].offset;
+            if offset >= run_end {
+                break;
+            }
+            if offset < run_start {
+                return Err(invalid_data("GBWT locate offsets are not monotone"));
+            }
+            let successor_offset = edge
+                .offset
+                .checked_add(offset - run_start)
+                .ok_or_else(|| invalid_data("GBWT successor offset overflow"))?;
+            current[index] = Pos::new(edge.node, successor_offset);
+            next_index += 1;
+        }
+        edge.offset = edge
+            .offset
+            .checked_add(run.len)
+            .ok_or_else(|| invalid_data("GBWT edge offset overflow"))?;
+        run_start = run_end;
+        if next_index == indices.len() {
+            return Ok(());
+        }
+    }
+    Err(invalid_data("GBWT locate offset is outside its record"))
+}
 
 #[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -474,13 +518,7 @@ impl DiskGbzSource {
                     .ok_or_else(|| invalid_data("GBWT locate node overflow"))?;
                 let record = Record::new(node, &bytes)
                     .ok_or_else(|| invalid_data("GBWT locate record is invalid"))?;
-                let successors = record.decompress();
-                for index in indices {
-                    let offset = current[index].offset;
-                    current[index] = *successors
-                        .get(offset)
-                        .ok_or_else(|| invalid_data("GBWT locate offset is outside its record"))?;
-                }
+                follow_selected_offsets(record, indices, &mut current)?;
             }
         }
         unreachable!("bounded LF loop returns on success or limit")
