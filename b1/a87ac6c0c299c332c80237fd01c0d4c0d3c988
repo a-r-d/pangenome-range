@@ -1,0 +1,71 @@
+packages/browser/test/validated-preset.test.ts
+  s_2ec244cc8606c0::t_443e77ce1d8cef 1-48,50-82,86-202
+  s_2ec244cc8606c0::t_9f8da091b04caf 49,83-85
+scripts/chicken/build-demo-presets.mjs
+  s_2ec244cc8606c0::t_4952a81e29fb93 181
+packages/browser/test/research-exports.test.ts
+  s_2ec244cc8606c0::t_685269f4c2ba33 8,31-40,42-92,131-155
+  s_2ec244cc8606c0::t_9f8da091b04caf 41
+docs/CHICKEN_DEMO.md
+  s_2ec244cc8606c0::t_c8a3e305ee5967 3-6
+data/chicken/README.md
+  s_2ec244cc8606c0::t_c8a3e305ee5967 30,51-52
+docs/components/browser/PatternInspector.vue
+  s_2ec244cc8606c0::t_9f8da091b04caf 89
+  s_2ec244cc8606c0::t_7bf88ba89ced35 84-88,90-112,201,215,235-236,238
+packages/browser/src/viewer/validated-preset.ts
+  s_2ec244cc8606c0::t_443e77ce1d8cef 1-46,50-183,185-195
+  s_2ec244cc8606c0::t_9f8da091b04caf 47-49,184
+CHANGELOG.md
+  s_2ec244cc8606c0::t_c8a3e305ee5967 7-9,14-17
+docs/components/browser/BrowserStatusBar.vue
+  s_2ec244cc8606c0::t_dc9b0e09a6d03c 5,21,38,45-46,54,59-60,75-78,83-84
+docs/test/docs.test.mjs
+  s_2ec244cc8606c0::t_ce0220484dd478 48-51
+README.md
+  s_2ec244cc8606c0::t_c8a3e305ee5967 39-41
+data/chicken/demo-presets.json
+  s_2ec244cc8606c0::t_8651200d66d94e 101,138-142,184-187,202-205
+packages/browser/src/viewer/index.ts
+  s_2ec244cc8606c0::t_443e77ce1d8cef 64-74
+  s_2ec244cc8606c0::t_685269f4c2ba33 16,22
+results/2026-08-30-chicken-merge-hardening/REPORT.md
+  s_2ec244cc8606c0::t_c8a3e305ee5967 5,8-11,23,47
+  s_2ec244cc8606c0::t_0068ca1b14fa53 78,102-115,119-120
+  s_2ec244cc8606c0::t_b5f441fc83f5f5 116-118
+  s_2ec244cc8606c0::t_4a108530fb6912 121
+PR_DESCRIPTION.md
+  s_2ec244cc8606c0::t_c8a3e305ee5967 13-15,58-59,78-83,96-102
+  s_2ec244cc8606c0::t_0068ca1b14fa53 88
+  s_2ec244cc8606c0::t_8eb29526ce6ad2 23
+docs/test/pages-smoke.mjs
+  s_2ec244cc8606c0::t_0068ca1b14fa53 848-852,855
+  s_2ec244cc8606c0::t_b9cd0701faf8d4 688-725,732,734-737,739-742
+  s_2ec244cc8606c0::t_d47ed59e450771 726-731,733,738,853-854
+docs/components/browser/ArchiveSourceMenu.vue
+  s_2ec244cc8606c0::t_c8a3e305ee5967 88
+packages/browser/src/viewer/research-exports.ts
+  s_2ec244cc8606c0::t_685269f4c2ba33 39-47,50-68,98-103,116-120,123-141,170-188,191-207,270
+  s_2ec244cc8606c0::t_a2dab201a10162 48-49
+  s_2ec244cc8606c0::t_9f8da091b04caf 189-190,208-269
+docs/components/browser/PangenomeBrowser.vue
+  s_2ec244cc8606c0::t_9f8da091b04caf 175-176
+  s_2ec244cc8606c0::t_c8a3e305ee5967 187
+  s_2ec244cc8606c0::t_9758bf32c99a33 20,22-23,149,161,342-343,382-383,527-528,629,639,641-646,648,661,663-664,1005,1008-1009,1019,1021-1050,1052-1061,1063-1080,1084-1089,1333
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.0",
+  "base_commit_sha": "b1a87ac6c0c299c332c80237fd01c0d4c0d3c988",
+  "prompts": {},
+  "sessions": {
+    "s_2ec244cc8606c0": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a048bd-ab38-7a82-b1d9-eb0f59af00f9",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "aaron decker <aaron@ard.ninja>"
+    }
+  }
+}
