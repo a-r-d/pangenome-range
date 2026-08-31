@@ -1,0 +1,26 @@
+.agents/skills/publish-pangenome-range-npm/SKILL.md
+  s_d5c1dbd3fe6449::t_c1283729d12249 1-86
+.agents/skills/publish-pangenome-range-npm/agents/openai.yaml
+  s_d5c1dbd3fe6449::t_2a76dd03a6886e 1-4
+README.md
+  s_d5c1dbd3fe6449::t_2d1874bbf505c8 4,74-93
+  s_d5c1dbd3fe6449::t_91ba15e980fccd 94
+docs/DISTRIBUTION.md
+  s_d5c1dbd3fe6449::t_5d74d0a7b5f6c4 134-138,140,142-143,148
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.0",
+  "base_commit_sha": "42d34558b09fecf07b33a5477f3f0228a47b8b98",
+  "prompts": {},
+  "sessions": {
+    "s_d5c1dbd3fe6449": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a0594b-15f7-7882-8953-57dad5a22850",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "aaron decker <aaron@ard.ninja>"
+    }
+  }
+}
