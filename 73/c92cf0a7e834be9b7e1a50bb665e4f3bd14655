@@ -1,0 +1,19 @@
+npm/scripts/smoke-packed-release.mjs
+  s_d5c1dbd3fe6449::t_d97de6c8172dac 148
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.0",
+  "base_commit_sha": "73c92cf0a7e834be9b7e1a50bb665e4f3bd14655",
+  "prompts": {},
+  "sessions": {
+    "s_d5c1dbd3fe6449": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a0594b-15f7-7882-8953-57dad5a22850",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "aaron decker <aaron@ard.ninja>"
+    }
+  }
+}
