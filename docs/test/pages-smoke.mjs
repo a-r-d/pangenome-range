@@ -843,6 +843,10 @@ async function exerciseChickenArchive(browser, baseUrl) {
       new URL(page.url()).searchParams.get("preset"),
       "chicken-igll1-ucd312-deletion",
     );
+    await page
+      .locator(".pngr-pattern-port.is-selected")
+      .nth(1)
+      .waitFor({ state: "visible" });
     assert.equal(
       await page.locator(".pngr-pattern-port.is-selected").count(),
       2,
