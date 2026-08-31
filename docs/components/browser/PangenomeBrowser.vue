@@ -28,6 +28,7 @@ import {
 import { withBase } from "vitepress";
 import {
   computed,
+  nextTick,
   onBeforeUnmount,
   onMounted,
   ref,
@@ -1082,11 +1083,13 @@ async function openPublishedExample(): Promise<void> {
     const highlighted = selectedPatterns.map((pattern) => pattern.id);
     if (new Set(highlighted).size !== preset.traversalGroups.length)
       throw new Error("Expected displayed patterns were not distinct");
+    publishedMembershipEvidence.value = mergeFeatureTraces(located.traces);
+    selection.value = { kind: "pattern", pattern: selectedPatterns[0] };
+    await nextTick();
+    if (!isCurrent()) return;
     highlightedPatternIds.value = highlighted;
     if (highlightedPatternIds.value.length !== preset.traversalGroups.length)
       throw new Error("Expected displayed patterns were not all highlighted");
-    publishedMembershipEvidence.value = mergeFeatureTraces(located.traces);
-    selection.value = { kind: "pattern", pattern: selectedPatterns[0] };
     publishedExampleOpen.value = true;
     message.value = "Validated UCD312 deletion traversal selected";
     const url = new URL(window.location.href);

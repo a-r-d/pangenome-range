@@ -334,6 +334,7 @@ watch(
     props.model,
     props.options,
     props.selection,
+    props.highlightedPatternIds,
     zoom.value,
     panX.value,
     verticalScale.value,
