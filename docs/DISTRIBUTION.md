@@ -131,21 +131,21 @@ project, runs `npx pangenome-range --help`,
 `npx pangenome-range encode --help`, and `--version`, and imports the reader and
 viewer.
 
-Eventual npm publication should use npm trusted publishing from the protected
-release workflow. Registry ownership for `pangenome-range` and the
-`@pangenome-range` scope, trusted-publisher configuration, and release-environment
-approval are external setup still required. No npm publish command is present
-until that setup is complete.
+Version `0.1.0` was published manually from the verified `npm-release-set`
+artifact: all five exact-version platform packages first, then the main package.
+The release workflow still stages and verifies packages without publishing them.
+Future automated publication should use npm trusted publishing from a protected
+release workflow; no `npm publish` command is currently present in Actions.
 
-## One-time repository setup before publication
+## Remaining automated-publishing setup
 
-The repository owner must complete these service-side steps; they cannot be
+Ownership for `pangenome-range` and the `@pangenome-range` scope is established.
+The remaining service-side steps for trusted automated publication cannot be
 proved by a local package rehearsal:
 
 1. Protect `main`, or add an equivalent ruleset, requiring the normal CI and
    CodeQL checks.
-2. Establish npm ownership for `pangenome-range` and the `@pangenome-range`
-   scope, then bind trusted publishing to the protected release workflow.
+2. Bind npm trusted publishing to the protected release workflow.
 3. Configure the protected GitHub `release` environment and its approval rules.
 4. Run the release workflow and require all five real target artifacts before
    any publish step.

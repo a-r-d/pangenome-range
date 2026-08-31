@@ -1,6 +1,7 @@
 # pangenome-range
 
 [![CI](https://img.shields.io/github/actions/workflow/status/a-r-d/pangenome-range/ci.yml?branch=main&style=for-the-badge&logo=githubactions&logoColor=white&label=CI)](https://github.com/a-r-d/pangenome-range/actions/workflows/ci.yml)
+[![npm](https://img.shields.io/npm/v/pangenome-range?style=for-the-badge&logo=npm)](https://www.npmjs.com/package/pangenome-range)
 [![MIT](https://img.shields.io/badge/license-MIT-blue?style=for-the-badge)](LICENSE)
 
 Open a region of a large pangenome graph in the browser without downloading the
@@ -69,6 +70,27 @@ checked](docs/CHICKEN_DEMO.md).
 
 Demo links can open a particular archive, gene, coordinate range, or saved view.
 Local files still require you to choose the file in the browser.
+
+## Install
+
+Install the reader, viewer, and native command-line encoder with Node.js 24:
+
+```bash
+npm install pangenome-range
+```
+
+Run the encoder without a separate global installation:
+
+```bash
+npx pangenome-range encode input.gbz output.pngr
+```
+
+The native executable is supplied by an exact-version optional package for the
+current platform. For a JavaScript-only installation, omit optional packages:
+
+```bash
+npm install --omit=optional pangenome-range
+```
 
 ## Read a region in TypeScript
 

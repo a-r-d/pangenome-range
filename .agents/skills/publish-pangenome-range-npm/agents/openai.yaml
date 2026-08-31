@@ -1,0 +1,4 @@
+interface:
+  display_name: "Publish pangenome-range to npm"
+  short_description: "Verify and publish the complete npm release"
+  default_prompt: "Use $publish-pangenome-range-npm to prepare, publish, and verify the next npm release."
