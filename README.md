@@ -24,6 +24,17 @@ There are four main pieces:
 - **A TypeScript reader** opens local or remote archives and returns graph data.
 - **A browser viewer** draws the selected region and its local paths.
 
+## Why I built this
+
+This started with recent work I did on
+[PureJsImage](https://github.com/a-r-d/PureJsImage), using HTTP range requests to
+open large TIFF files on [purejsimage.com](https://purejsimage.com/) without
+downloading the whole image first.
+
+I wanted to find another interesting problem for the same approach. Pangenome
+graphs were a good fit: the files are huge, but a browser usually needs only one
+small region. This project is the result.
+
 ## Live demos
 
 | Demo | Data | What it shows |

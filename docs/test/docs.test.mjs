@@ -114,6 +114,9 @@ test("README leads with the four project parts and useful demo links", async () 
   assert.match(source, /\*\*A Rust encoder\*\*/);
   assert.match(source, /\*\*A TypeScript reader\*\*/);
   assert.match(source, /\*\*A browser viewer\*\*/);
+  assert.match(source, /## Why I built this/);
+  assert.match(source, /https:\/\/github\.com\/a-r-d\/PureJsImage/);
+  assert.match(source, /https:\/\/purejsimage\.com\//);
   assert.match(source, /## Live demos/);
   assert.match(source, /archive=chicken&preset=chicken-igll1-ucd312-deletion/);
   assert.match(source, /archive=hprc&locus=HLA-B/);
