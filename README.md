@@ -3,57 +3,64 @@
 [![CI](https://img.shields.io/github/actions/workflow/status/a-r-d/pangenome-range/ci.yml?branch=main&style=for-the-badge&logo=githubactions&logoColor=white&label=CI)](https://github.com/a-r-d/pangenome-range/actions/workflows/ci.yml)
 [![MIT](https://img.shields.io/badge/license-MIT-blue?style=for-the-badge)](LICENSE)
 
-## [Explore named chicken paths →](https://a-r-d.github.io/pangenome-range/demo?archive=chicken&locus=IGLL1)
+Open population-scale pangenome graphs directly in the browser from one static
+file. No query server.
 
-### [Open the large human pangenome →](https://a-r-d.github.io/pangenome-range/demo?archive=hprc&locus=HLA-B)
+[Explore the published UCD312 deletion →](https://a-r-d.github.io/pangenome-range/demo?archive=chicken&preset=chicken-igll1-ucd312-deletion) · [Format specification](docs/FILE_FORMAT_V1.md) · [Distribution guide](docs/DISTRIBUTION.md)
 
-`pangenome-range` is four things:
+![Published UCD312 chicken example](results/2026-08-30-chicken-merge-hardening/chicken-published-example.png)
 
-1. `.pngr`, a range-readable pangenome file format.
-2. A reference Rust encoder from GBZ to `.pngr`.
-3. A reference JavaScript decoder.
-4. A [browser demo](https://a-r-d.github.io/pangenome-range/demo) using that decoder.
+**1.50 GB remote archive · 120.7 KB cold read · 10 HTTP ranges · exact UCD312 source path**
 
-It is inspired by tiled GeoTIFF systems: convert a huge GBZ pangenome into one tiled, static `.pngr` object, then query small regions in a browser with HTTP Range requests instead of downloading the whole graph.
+The demo opens a whole-reference-genome archive derived from the published
+30-assembly chicken pangenome. It searches IGLL1, highlights a validated
+5,184-base deletion, and resolves the traversal to the exact named GBWT path:
 
-[Format specification](docs/FILE_FORMAT_V1.md) · [Live demo](https://a-r-d.github.io/pangenome-range/demo) · [Viewer requirements](docs/VIEWER_PRODUCT_REQUIREMENTS.md) · [Hosting requirements](docs/HOSTING.md)
+`UCD312#2#h2tg000050l#fragment=1251366`
 
-### Curated demo views
+The browser keeps that source observation separate from the paper's biological
+interpretation and makes no phenotype, breed, ancestry, or allele-frequency
+claim. See the [chicken demo evidence](docs/CHICKEN_DEMO.md).
 
-The HPRC archive includes GENCODE v50 named-locus search:
+`pangenome-range` provides:
 
-- [HLA-B — dense MHC variation](https://a-r-d.github.io/pangenome-range/demo?archive=hprc&locus=HLA-B&zoom=0.32&center=0.5&vscale=1.3)
+- the `.pngr` range-readable file-format specification;
+- a Rust GBZ → `.pngr` encoder;
+- a TypeScript range reader;
+- a lightweight tube-map viewer.
+
+```ts
+import { openPangenome } from "pangenome-range";
+
+const archive = await openPangenome("https://example.org/graph.pngr");
+const result = await archive.query({
+  sample: "GRCh38", contig: "chr6",
+  start: 31_353_194, end: 31_367_067,
+});
+console.log(result.graph.nodes.ids.length, result.tiles.length);
+await archive.close();
+```
+
+| Demo | Scope | Identity |
+| --- | --- | --- |
+| [Chicken IGLL1](https://a-r-d.github.io/pangenome-range/demo?archive=chicken&preset=chicken-igll1-ucd312-deletion) | 1.50 GB whole reference genome | Named paths and published preset |
+| [HPRC HLA-B](https://a-r-d.github.io/pangenome-range/demo?archive=hprc&locus=HLA-B&zoom=0.32&center=0.5&vscale=1.3) | 10.84 GB whole human graph | Named paths and gene search |
+| [Rice Xa7](https://a-r-d.github.io/pangenome-range/demo?archive=rice&locus=Xa7&zoom=2.856&center=0.600576&vscale=1.45) | Chromosome 6 | Anonymous currently |
+| [1000G NA19239](https://a-r-d.github.io/pangenome-range/demo?archive=1000g&sample=NA19239&contig=1&start=0&end=32768&zoom=0.35&center=0.5&vscale=1) | Whole population graph | Graph-only |
+
+<details>
+<summary>More HPRC demonstration loci</summary>
+
 - [MICB — MHC class I-related variation](https://a-r-d.github.io/pangenome-range/demo?archive=hprc&locus=MICB&zoom=0.38&center=0.5&vscale=1.2)
 - [KIR3DL1 — structurally complex immune locus](https://a-r-d.github.io/pangenome-range/demo?archive=hprc&locus=KIR3DL1&zoom=0.3&center=0.5&vscale=1.25)
 - [CHAD — compact alternate paths and node labels](https://a-r-d.github.io/pangenome-range/demo?archive=hprc&locus=CHAD&zoom=0.45&center=0.5&vscale=1.2)
 - [CRISP1 — dense graph and display-budget controls](https://a-r-d.github.io/pangenome-range/demo?archive=hprc&locus=CRISP1&zoom=0.25&center=0.5&vscale=1)
 
-The second archive exposes real NA19239 haplotype-0 population-path coordinates, not GRCh38 coordinates, and does not contain named-gene annotations:
+</details>
 
-- [1000 Genomes NA19239 haplotype 0 — chromosome 1 opening window](https://a-r-d.github.io/pangenome-range/demo?archive=1000g&sample=NA19239&contig=1&start=0&end=32768&zoom=0.35&center=0.5&vscale=1)
-
-The rice demo explores chromosome 6 from the PPanG rice pangenome, using NATELBORO as the reference. The paths show local patterns of variation across the graph, not individual named rice accessions:
-
-- [Rice Xa7 — bacterial-blight-resistance locus](https://a-r-d.github.io/pangenome-range/demo?archive=rice&locus=Xa7&zoom=2.856&center=0.600576&vscale=1.45)
-
-The default demo opens a whole-reference-genome archive derived from the
-published 30-assembly chicken graph at the chromosome 15 IGLL1 locus. The
-1.50 GB object includes
-searchable GRCg7b genes and exact named GBWT source-path membership:
-
-- [Chicken IGLL1 — named paths through an immune-gene locus](https://a-r-d.github.io/pangenome-range/demo?archive=chicken&locus=IGLL1&zoom=0.35&center=0.5&vscale=1.2)
-
-The paper-backed **Published example** control resolves the exact 5,184-base
-reference skip to two fragment-aware tile groups and one UCD312 source path.
-The browser keeps that source observation separate from the paper's biological
-interpretation and makes no phenotype or allele-frequency claim. See the
-[chicken demo evidence](docs/CHICKEN_DEMO.md).
-
-Demo URLs can select `archive=hprc`, `archive=1000g`, `archive=rice`,
-`archive=chicken`, or `archive=fixture`; select a named `locus` or an exact
-`sample`/`contig`/`start`/`end` interval; and restore horizontal `zoom`,
-normalized `center`, and vertical `vscale`. Local file selections cannot be
-restored from a link because browsers do not grant URLs access to local files.
+Demo URLs can select an archive, named locus, exact coordinate interval, or
+validated preset, and restore viewport state. Local files cannot be restored
+from a URL because browsers require an explicit user file selection.
 
 ## Encoder
 

@@ -17,6 +17,7 @@ use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::fs::File;
 use std::io::{self, BufRead, BufReader, Read, Seek, SeekFrom, Write};
 use std::path::Path;
+use std::sync::{Arc, Mutex, mpsc};
 use std::time::Instant;
 
 #[derive(Clone, Debug, Default)]
@@ -37,6 +38,27 @@ pub(crate) struct PathMembershipBuildMetrics {
     pub located_positions: u64,
     pub maximum_lf_steps: u64,
     pub locate_wall_ms: f64,
+}
+
+#[derive(Clone, Debug)]
+pub(crate) struct PathMembershipBuildProgress {
+    pub tile_pages_completed: u64,
+    pub tile_pages_total: u64,
+    pub percent_complete: f64,
+    pub reference_ordinal: u64,
+    pub reference_count: u64,
+    pub sample: String,
+    pub contig: String,
+    pub core_start: u64,
+    pub core_end: u64,
+    pub groups: u64,
+    pub memberships: u64,
+    pub located_positions: u64,
+    pub maximum_lf_steps: u64,
+    pub tiles_per_second: f64,
+    pub estimated_seconds_remaining: Option<f64>,
+    pub elapsed_seconds: f64,
+    pub temporary_archive_bytes: u64,
 }
 
 #[derive(Deserialize)]
@@ -700,6 +722,395 @@ pub(crate) fn write_path_membership_extension(
     Ok((entry, metrics))
 }
 
+struct DirectMembershipJob {
+    sequence: usize,
+    reference_id: usize,
+    bucket_id: usize,
+    entry_id: usize,
+    sample: Arc<str>,
+    contig: Arc<str>,
+    entry: ArchiveEntry,
+}
+
+struct DirectMembershipJobCursor<'a> {
+    manifests: &'a [ReferenceManifest],
+    bucket_entries: &'a [Vec<Vec<ArchiveEntry>>],
+    names: Vec<(Arc<str>, Arc<str>)>,
+    reference_id: usize,
+    bucket_id: usize,
+    entry_id: usize,
+    sequence: usize,
+}
+
+impl<'a> DirectMembershipJobCursor<'a> {
+    fn new(
+        manifests: &'a [ReferenceManifest],
+        bucket_entries: &'a [Vec<Vec<ArchiveEntry>>],
+    ) -> Self {
+        let names = manifests
+            .iter()
+            .map(|manifest| {
+                (
+                    Arc::<str>::from(manifest.sample.as_str()),
+                    Arc::<str>::from(manifest.contig.as_str()),
+                )
+            })
+            .collect();
+        Self {
+            manifests,
+            bucket_entries,
+            names,
+            reference_id: 0,
+            bucket_id: 0,
+            entry_id: 0,
+            sequence: 0,
+        }
+    }
+
+    fn next_job(&mut self) -> io::Result<Option<DirectMembershipJob>> {
+        while self.reference_id < self.manifests.len() {
+            let buckets = self
+                .bucket_entries
+                .get(self.reference_id)
+                .ok_or_else(|| invalid("membership manifest is missing directory buckets"))?;
+            while self.bucket_id < buckets.len() {
+                let entries = &buckets[self.bucket_id];
+                if let Some(entry) = entries.get(self.entry_id) {
+                    let (sample, contig) = self
+                        .names
+                        .get(self.reference_id)
+                        .ok_or_else(|| invalid("membership manifest name is missing"))?;
+                    let job = DirectMembershipJob {
+                        sequence: self.sequence,
+                        reference_id: self.reference_id,
+                        bucket_id: self.bucket_id,
+                        entry_id: self.entry_id,
+                        sample: Arc::clone(sample),
+                        contig: Arc::clone(contig),
+                        entry: entry.clone(),
+                    };
+                    self.sequence = self
+                        .sequence
+                        .checked_add(1)
+                        .ok_or_else(|| invalid("membership job sequence overflow"))?;
+                    self.entry_id += 1;
+                    return Ok(Some(job));
+                }
+                self.bucket_id += 1;
+                self.entry_id = 0;
+            }
+            self.reference_id += 1;
+            self.bucket_id = 0;
+        }
+        Ok(None)
+    }
+}
+
+struct DirectMembershipTileResult {
+    reference_id: usize,
+    bucket_id: usize,
+    entry_id: usize,
+    entry: ArchiveEntry,
+    raw_page: Vec<u8>,
+    group_count: u64,
+    metrics: PathMembershipBuildMetrics,
+}
+
+fn build_direct_membership_tile(
+    payload_reader: &mut File,
+    source: &dyn PangenomeSource,
+    path_count: u64,
+    max_lf_steps: usize,
+    job: DirectMembershipJob,
+) -> io::Result<DirectMembershipTileResult> {
+    let encoded_len = u64_to_usize(job.entry.compressed_len)?;
+    let mut encoded = vec![0_u8; encoded_len];
+    payload_reader.seek(SeekFrom::Start(job.entry.offset))?;
+    payload_reader.read_exact(&mut encoded)?;
+    let raw = decompress(job.entry.codec, &encoded, job.entry.uncompressed_len)?;
+    drop(encoded);
+    let payload = RecordRegionalPayload::decode(&raw)?;
+    drop(raw);
+    let starts = traversal_starts(&payload)?;
+    let locate_started = Instant::now();
+    let positions = starts
+        .iter()
+        .map(|start| start.position)
+        .collect::<Vec<_>>();
+    let located = source
+        .locate_positions(&positions, max_lf_steps)?
+        .ok_or_else(|| invalid("active source does not provide bounded GBWT locate"))?;
+    let locate_wall_ms = locate_started.elapsed().as_secs_f64() * 1_000.0;
+    let groups = direct_groups(
+        &payload,
+        &starts,
+        &located,
+        path_count,
+        &TileMembershipIdentity {
+            sample: &job.sample,
+            contig: &job.contig,
+            core_start: job.entry.start,
+            core_end: job.entry.end,
+            regional_payload_integrity: &job.entry.integrity,
+        },
+    )?;
+    drop(payload);
+    let raw_page = encode_tile_membership_page(
+        job.entry.start,
+        job.entry.end,
+        &job.entry.integrity,
+        &groups,
+    )?;
+    let mut metrics = PathMembershipBuildMetrics {
+        locate_wall_ms,
+        located_positions: usize_to_u64(located.len())?,
+        maximum_lf_steps: located.iter().map(|item| item.lf_steps).max().unwrap_or(0),
+        ..PathMembershipBuildMetrics::default()
+    };
+    record_group_metrics(&mut metrics, &groups)?;
+    Ok(DirectMembershipTileResult {
+        reference_id: job.reference_id,
+        bucket_id: job.bucket_id,
+        entry_id: job.entry_id,
+        entry: job.entry,
+        raw_page,
+        group_count: usize_to_u64(groups.len())?,
+        metrics,
+    })
+}
+
+fn merge_direct_membership_metrics(
+    metrics: &mut PathMembershipBuildMetrics,
+    tile: &PathMembershipBuildMetrics,
+) -> io::Result<()> {
+    for (target, value, label) in [
+        (&mut metrics.groups, tile.groups, "membership group count"),
+        (
+            &mut metrics.memberships,
+            tile.memberships,
+            "membership count",
+        ),
+        (
+            &mut metrics.occurrence_total,
+            tile.occurrence_total,
+            "membership occurrence total",
+        ),
+        (
+            &mut metrics.group_unique_path_count_sum,
+            tile.group_unique_path_count_sum,
+            "membership group unique-path-count sum",
+        ),
+        (
+            &mut metrics.delta_groups,
+            tile.delta_groups,
+            "delta membership groups",
+        ),
+        (
+            &mut metrics.run_groups,
+            tile.run_groups,
+            "run membership groups",
+        ),
+        (
+            &mut metrics.located_positions,
+            tile.located_positions,
+            "located position count",
+        ),
+    ] {
+        checked_add(target, value, label)?;
+    }
+    metrics.maximum_lf_steps = metrics.maximum_lf_steps.max(tile.maximum_lf_steps);
+    metrics.locate_wall_ms += tile.locate_wall_ms;
+    Ok(())
+}
+
+#[allow(
+    clippy::cast_precision_loss,
+    clippy::too_many_arguments,
+    clippy::too_many_lines
+)]
+fn append_direct_membership_tiles(
+    archive: &mut File,
+    archive_path: &Path,
+    source: &dyn PangenomeSource,
+    manifests: &[ReferenceManifest],
+    bucket_entries: &[Vec<Vec<ArchiveEntry>>],
+    path_count: u64,
+    max_lf_steps: usize,
+    data_offset: u64,
+    worker_count: usize,
+    progress_interval_ms: u64,
+    metrics: &mut PathMembershipBuildMetrics,
+    progress: &mut dyn FnMut(&PathMembershipBuildProgress),
+) -> io::Result<Vec<Vec<Vec<PathMembershipDirectoryEntry>>>> {
+    let total_tiles = bucket_entries.iter().try_fold(0_usize, |total, buckets| {
+        buckets.iter().try_fold(total, |subtotal, entries| {
+            subtotal
+                .checked_add(entries.len())
+                .ok_or_else(|| invalid("membership tile count overflow"))
+        })
+    })?;
+    if total_tiles == 0 {
+        return Err(invalid("direct path membership found no encoded tiles"));
+    }
+    let mut membership_buckets = bucket_entries
+        .iter()
+        .map(|buckets| {
+            buckets
+                .iter()
+                .map(|entries| Vec::with_capacity(entries.len()))
+                .collect::<Vec<_>>()
+        })
+        .collect::<Vec<_>>();
+    let worker_count = worker_count.max(1).min(total_tiles);
+    let window = worker_count.saturating_mul(2).max(1);
+    let started = Instant::now();
+    let mut last_progress_ms = 0.0_f64;
+    let total_tiles_u64 = usize_to_u64(total_tiles)?;
+
+    std::thread::scope(|scope| -> io::Result<()> {
+        let (job_sender, job_receiver) = mpsc::sync_channel::<DirectMembershipJob>(window);
+        let (result_sender, result_receiver) =
+            mpsc::sync_channel::<(usize, io::Result<DirectMembershipTileResult>)>(window);
+        let job_receiver = Arc::new(Mutex::new(job_receiver));
+        let readers = (0..worker_count)
+            .map(|_| File::open(archive_path))
+            .collect::<io::Result<Vec<_>>>()?;
+        for mut payload_reader in readers {
+            let jobs = Arc::clone(&job_receiver);
+            let results = result_sender.clone();
+            scope.spawn(move || {
+                loop {
+                    let job = match jobs.lock() {
+                        Ok(receiver) => receiver.recv(),
+                        Err(_) => return,
+                    };
+                    let Ok(job) = job else {
+                        return;
+                    };
+                    let sequence = job.sequence;
+                    let result = build_direct_membership_tile(
+                        &mut payload_reader,
+                        source,
+                        path_count,
+                        max_lf_steps,
+                        job,
+                    );
+                    if results.send((sequence, result)).is_err() {
+                        return;
+                    }
+                }
+            });
+        }
+        drop(result_sender);
+
+        let mut cursor = DirectMembershipJobCursor::new(manifests, bucket_entries);
+        let mut dispatched = 0_usize;
+        let mut next_write = 0_usize;
+        let mut pending = BTreeMap::<usize, io::Result<DirectMembershipTileResult>>::new();
+        while dispatched.saturating_sub(next_write) < window {
+            let Some(job) = cursor.next_job()? else {
+                break;
+            };
+            job_sender
+                .send(job)
+                .map_err(|_| invalid("membership workers stopped before accepting work"))?;
+            dispatched += 1;
+        }
+
+        while next_write < total_tiles {
+            let (sequence, result) = result_receiver
+                .recv()
+                .map_err(|_| invalid("membership workers stopped before completing work"))?;
+            if pending.insert(sequence, result).is_some() {
+                return Err(invalid("membership worker returned a duplicate sequence"));
+            }
+            while let Some(result) = pending.remove(&next_write) {
+                let result = result?;
+                let bucket = membership_buckets
+                    .get_mut(result.reference_id)
+                    .and_then(|buckets| buckets.get_mut(result.bucket_id))
+                    .ok_or_else(|| invalid("membership worker returned an invalid bucket"))?;
+                if bucket.len() != result.entry_id {
+                    return Err(invalid("membership worker returned entries out of order"));
+                }
+                let raw_len = usize_to_u64(result.raw_page.len())?;
+                let storage =
+                    append_page(archive, ChunkCodec::Zstd3, &result.raw_page, data_offset)?;
+                checked_add(
+                    &mut metrics.page_encoded_bytes,
+                    storage.encoded_len,
+                    "membership encoded page bytes",
+                )?;
+                checked_add(
+                    &mut metrics.page_decoded_bytes,
+                    raw_len,
+                    "membership decoded page bytes",
+                )?;
+                merge_direct_membership_metrics(metrics, &result.metrics)?;
+                bucket.push(PathMembershipDirectoryEntry {
+                    group_count: result.group_count,
+                    storage,
+                });
+                checked_add(&mut metrics.tile_pages, 1, "membership tile page count")?;
+                next_write += 1;
+
+                let elapsed_seconds = started.elapsed().as_secs_f64();
+                let elapsed_ms = elapsed_seconds * 1_000.0;
+                if next_write == total_tiles
+                    || elapsed_ms - last_progress_ms >= progress_interval_ms as f64
+                {
+                    let completed = usize_to_u64(next_write)?;
+                    let tiles_per_second = if elapsed_seconds > 0.0 {
+                        completed as f64 / elapsed_seconds
+                    } else {
+                        0.0
+                    };
+                    let estimated_seconds_remaining = (tiles_per_second > 0.0).then(|| {
+                        total_tiles_u64.saturating_sub(completed) as f64 / tiles_per_second
+                    });
+                    let manifest = manifests
+                        .get(result.reference_id)
+                        .ok_or_else(|| invalid("membership progress manifest is missing"))?;
+                    progress(&PathMembershipBuildProgress {
+                        tile_pages_completed: completed,
+                        tile_pages_total: total_tiles_u64,
+                        percent_complete: completed as f64 / total_tiles_u64 as f64 * 100.0,
+                        reference_ordinal: usize_to_u64(result.reference_id + 1)?,
+                        reference_count: usize_to_u64(manifests.len())?,
+                        sample: manifest.sample.clone(),
+                        contig: manifest.contig.clone(),
+                        core_start: result.entry.start,
+                        core_end: result.entry.end,
+                        groups: metrics.groups,
+                        memberships: metrics.memberships,
+                        located_positions: metrics.located_positions,
+                        maximum_lf_steps: metrics.maximum_lf_steps,
+                        tiles_per_second,
+                        estimated_seconds_remaining,
+                        elapsed_seconds,
+                        temporary_archive_bytes: archive.metadata()?.len(),
+                    });
+                    last_progress_ms = elapsed_ms;
+                }
+            }
+
+            while dispatched < total_tiles && dispatched.saturating_sub(next_write) < window {
+                let Some(job) = cursor.next_job()? else {
+                    break;
+                };
+                job_sender
+                    .send(job)
+                    .map_err(|_| invalid("membership workers stopped before accepting work"))?;
+                dispatched += 1;
+            }
+        }
+        drop(job_sender);
+        Ok(())
+    })?;
+
+    Ok(membership_buckets)
+}
+
 /// Generates the catalog and tile membership pages directly from the active
 /// disk-backed GBZ source. Regional payloads are decoded one at a time and all
 /// LF work is bounded by `max_lf_steps`.
@@ -713,6 +1124,9 @@ pub(crate) fn write_direct_path_membership_extension(
     max_lf_steps: usize,
     data_offset: u64,
     identity_source_sha256: [u8; 32],
+    worker_count: usize,
+    progress_interval_ms: u64,
+    progress: &mut dyn FnMut(&PathMembershipBuildProgress),
 ) -> io::Result<(ExtensionEntry, PathMembershipBuildMetrics)> {
     let source_catalog = source.path_catalog()?.ok_or_else(|| {
         invalid("active source does not provide a complete named path catalog for membership")
@@ -771,77 +1185,20 @@ pub(crate) fn write_direct_path_membership_extension(
     if manifests.len() != bucket_entries.len() {
         return Err(invalid("membership manifest and directory counts differ"));
     }
-    let mut payload_reader = File::open(archive_path)?;
-    let mut membership_buckets = Vec::with_capacity(bucket_entries.len());
-    for (manifest, buckets) in manifests.iter().zip(bucket_entries) {
-        let mut manifest_buckets = Vec::with_capacity(buckets.len());
-        for bucket in buckets {
-            let mut membership_entries = Vec::with_capacity(bucket.len());
-            for entry in bucket {
-                let encoded_len = u64_to_usize(entry.compressed_len)?;
-                let mut encoded = vec![0_u8; encoded_len];
-                payload_reader.seek(SeekFrom::Start(entry.offset))?;
-                payload_reader.read_exact(&mut encoded)?;
-                let raw = decompress(entry.codec, &encoded, entry.uncompressed_len)?;
-                drop(encoded);
-                let payload = RecordRegionalPayload::decode(&raw)?;
-                drop(raw);
-                let starts = traversal_starts(&payload)?;
-                let positions = starts
-                    .iter()
-                    .map(|start| start.position)
-                    .collect::<Vec<_>>();
-                let locate_started = Instant::now();
-                let located = source
-                    .locate_positions(&positions, max_lf_steps)?
-                    .ok_or_else(|| invalid("active source does not provide bounded GBWT locate"))?;
-                metrics.locate_wall_ms += locate_started.elapsed().as_secs_f64() * 1_000.0;
-                checked_add(
-                    &mut metrics.located_positions,
-                    usize_to_u64(located.len())?,
-                    "located position count",
-                )?;
-                metrics.maximum_lf_steps = metrics
-                    .maximum_lf_steps
-                    .max(located.iter().map(|item| item.lf_steps).max().unwrap_or(0));
-                let groups = direct_groups(
-                    &payload,
-                    &starts,
-                    &located,
-                    path_count,
-                    &TileMembershipIdentity {
-                        sample: &manifest.sample,
-                        contig: &manifest.contig,
-                        core_start: entry.start,
-                        core_end: entry.end,
-                        regional_payload_integrity: &entry.integrity,
-                    },
-                )?;
-                drop(payload);
-                record_group_metrics(&mut metrics, &groups)?;
-                let raw_page =
-                    encode_tile_membership_page(entry.start, entry.end, &entry.integrity, &groups)?;
-                let storage = append_page(archive, ChunkCodec::Zstd3, &raw_page, data_offset)?;
-                checked_add(
-                    &mut metrics.page_encoded_bytes,
-                    storage.encoded_len,
-                    "membership encoded page bytes",
-                )?;
-                checked_add(
-                    &mut metrics.page_decoded_bytes,
-                    usize_to_u64(raw_page.len())?,
-                    "membership decoded page bytes",
-                )?;
-                membership_entries.push(PathMembershipDirectoryEntry {
-                    group_count: usize_to_u64(groups.len())?,
-                    storage,
-                });
-                checked_add(&mut metrics.tile_pages, 1, "membership tile page count")?;
-            }
-            manifest_buckets.push(membership_entries);
-        }
-        membership_buckets.push(manifest_buckets);
-    }
+    let membership_buckets = append_direct_membership_tiles(
+        archive,
+        archive_path,
+        source,
+        manifests,
+        bucket_entries,
+        path_count,
+        max_lf_steps,
+        data_offset,
+        worker_count,
+        progress_interval_ms,
+        &mut metrics,
+        progress,
+    )?;
     if metrics.tile_pages == 0 {
         return Err(invalid("direct path membership found no encoded tiles"));
     }

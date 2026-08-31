@@ -45,7 +45,8 @@ use crate::features::{
 };
 use crate::local_subgraph::LocalSubgraph;
 use crate::path_membership::{
-    write_direct_path_membership_extension, write_path_membership_extension,
+    PathMembershipBuildProgress, write_direct_path_membership_extension,
+    write_path_membership_extension,
 };
 use crate::source::{LoadedGbzSource, PangenomeSource, SourcePathIndex};
 
@@ -262,24 +263,93 @@ fn emit_progress_snapshot(mode: BuildProgressMode, snapshot: &BuildProgressSnaps
 fn emit_validation_progress(mode: BuildProgressMode, snapshot: &ArchiveValidationProgress) {
     match mode {
         BuildProgressMode::Off => {}
+        BuildProgressMode::Plain => {
+            if snapshot.phase == "path_membership_validation_progress" {
+                eprintln!(
+                    "[validate_membership] {:6.2}% | {}/{} tiles | {} groups | {:.0} tiles/s | ETA {} | elapsed {} | read {}",
+                    snapshot.percent_complete,
+                    format_integer(snapshot.path_membership_tile_pages_validated),
+                    format_integer(snapshot.path_membership_tile_pages_total),
+                    format_integer(snapshot.path_membership_groups_validated),
+                    snapshot.entries_per_second,
+                    snapshot
+                        .estimated_seconds_remaining
+                        .map_or_else(|| "unknown".into(), format_duration),
+                    format_duration(snapshot.elapsed_seconds),
+                    format_bytes(snapshot.compressed_payload_bytes_validated),
+                );
+            } else {
+                eprintln!(
+                    "[validate] {:6.2}% | {}/{} entries | {} payloads | {}/{} pages | {:.0} entries/s | ETA {} | elapsed {} | read {}",
+                    snapshot.percent_complete,
+                    format_integer(snapshot.directory_entries_validated),
+                    format_integer(snapshot.directory_entries_total),
+                    format_integer(snapshot.physical_payloads_validated),
+                    format_integer(snapshot.directory_pages_validated),
+                    format_integer(snapshot.directory_pages_total),
+                    snapshot.entries_per_second,
+                    snapshot
+                        .estimated_seconds_remaining
+                        .map_or_else(|| "unknown".into(), format_duration),
+                    format_duration(snapshot.elapsed_seconds),
+                    format_bytes(snapshot.compressed_payload_bytes_validated),
+                );
+            }
+        }
+        BuildProgressMode::Json => eprintln!(
+            "{}",
+            serde_json::to_string(snapshot).expect("validation progress is JSON-serializable")
+        ),
+    }
+}
+
+fn emit_path_membership_progress(mode: BuildProgressMode, snapshot: &PathMembershipBuildProgress) {
+    match mode {
+        BuildProgressMode::Off => {}
         BuildProgressMode::Plain => eprintln!(
-            "[validate] {:6.2}% | {}/{} entries | {} payloads | {}/{} pages | {:.0} entries/s | ETA {} | elapsed {} | read {}",
+            "[path_membership] {:6.2}% | {}/{} tiles | {:.1} tiles/s | ETA {} | elapsed {} | {} groups | {} memberships | {} located | max LF {} | output {} | ref {}/{} {}#{}:{}-{}",
             snapshot.percent_complete,
-            format_integer(snapshot.directory_entries_validated),
-            format_integer(snapshot.directory_entries_total),
-            format_integer(snapshot.physical_payloads_validated),
-            format_integer(snapshot.directory_pages_validated),
-            format_integer(snapshot.directory_pages_total),
-            snapshot.entries_per_second,
+            format_integer(snapshot.tile_pages_completed),
+            format_integer(snapshot.tile_pages_total),
+            snapshot.tiles_per_second,
             snapshot
                 .estimated_seconds_remaining
                 .map_or_else(|| "unknown".into(), format_duration),
             format_duration(snapshot.elapsed_seconds),
-            format_bytes(snapshot.compressed_payload_bytes_validated),
+            format_integer(snapshot.groups),
+            format_integer(snapshot.memberships),
+            format_integer(snapshot.located_positions),
+            format_integer(snapshot.maximum_lf_steps),
+            format_bytes(snapshot.temporary_archive_bytes),
+            snapshot.reference_ordinal,
+            snapshot.reference_count,
+            snapshot.sample,
+            snapshot.contig,
+            format_integer(snapshot.core_start),
+            format_integer(snapshot.core_end),
         ),
         BuildProgressMode::Json => eprintln!(
             "{}",
-            serde_json::to_string(snapshot).expect("validation progress is JSON-serializable")
+            serde_json::json!({
+                "phase": "path_membership_progress",
+                "tile_pages_completed": snapshot.tile_pages_completed,
+                "tile_pages_total": snapshot.tile_pages_total,
+                "percent_complete": snapshot.percent_complete,
+                "reference_ordinal": snapshot.reference_ordinal,
+                "reference_count": snapshot.reference_count,
+                "sample": snapshot.sample,
+                "contig": snapshot.contig,
+                "core_start": snapshot.core_start,
+                "core_end": snapshot.core_end,
+                "groups": snapshot.groups,
+                "memberships": snapshot.memberships,
+                "located_positions": snapshot.located_positions,
+                "maximum_lf_steps": snapshot.maximum_lf_steps,
+                "tiles_per_second": snapshot.tiles_per_second,
+                "estimated_seconds_remaining": snapshot.estimated_seconds_remaining,
+                "elapsed_seconds": snapshot.elapsed_seconds,
+                "temporary_archive_bytes": snapshot.temporary_archive_bytes,
+            })
         ),
     }
 }
@@ -2697,6 +2767,27 @@ pub fn build_fixed_archive_from_source_with_options(
             invalid_data("named path membership requires authenticated archive metadata")
         })?;
         archive_temp.file.flush()?;
+        emit_progress(
+            options.progress,
+            "path_membership_sync",
+            "syncing completed regional payloads before named-membership workers start",
+        );
+        // The regional payload pass can leave several GiB of dirty archive pages
+        // charged to a memory-capped encoder cgroup. Flush them before starting
+        // the locate workers so the kernel can reclaim that cache under pressure.
+        archive_temp.file.sync_data()?;
+        emit_progress(
+            options.progress,
+            "path_membership",
+            &format!(
+                "locating and encoding {} tiles with {} ordered workers",
+                format_integer(directory_entries),
+                format_integer(usize_to_u64(options.threads)?),
+            ),
+        );
+        let mut progress = |snapshot: &PathMembershipBuildProgress| {
+            emit_path_membership_progress(options.progress, snapshot);
+        };
         Some(write_direct_path_membership_extension(
             &mut archive_temp.file,
             &archive_temp.path,
@@ -2706,6 +2797,9 @@ pub fn build_fixed_archive_from_source_with_options(
             options.path_locate_max_lf_steps,
             data_offset,
             identity_source_sha256,
+            options.threads,
+            options.progress_interval_ms,
+            &mut progress,
         )?)
     } else if let (Some(summary), Some(catalog)) = (
         options.path_membership_summary.as_deref(),

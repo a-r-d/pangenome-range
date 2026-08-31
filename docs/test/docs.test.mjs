@@ -53,6 +53,10 @@ test("the demo is a single browser shell using public reader and viewer exports"
   assert.match(browser, /openPublishedExample/);
   assert.match(
     browser,
+    /URLSearchParams\(window\.location\.search\)[\s\S]*?\.get\("preset"\)/,
+  );
+  assert.match(
+    browser,
     /activeArchiveSha256\.value !== publishedPreset\?\.archiveSha256/,
   );
   assert.match(browser, /viewportFromUrl/);
@@ -82,7 +86,7 @@ test("Pages defaults to the content-addressed whole-genome demo archive", async 
   const source = await readFile(pagesWorkflowUrl, "utf8");
   assert.match(
     source,
-    /sha256\/ecf5ae4fa8c784a80307507f58bed894311b8560724b57de0fcc35237c324b63\/hprc-v1-gencode-v50-disk-t8\.pngr/,
+    /sha256\/82585cb612effbf414b1c8f38b049bc415876866168ccc929f9a885f06d97b0a\/hprc-v2\.1-gencode-v50-named-membership-82585cb612effbf4\.pngr/,
   );
   assert.match(source, /vars\.PANGENOME_RANGE_DEMO_ARCHIVE_URL/);
   assert.match(
@@ -103,16 +107,17 @@ test("Pages defaults to the content-addressed whole-genome demo archive", async 
   assert.doesNotMatch(source, /PANGENOME_RANGE_DEMO_POPLAR_ARCHIVE_URL/);
 });
 
-test("README demo links identify archive, locus or coordinates, and viewport", async () => {
+test("README leads with the validated preset and retains secondary demo links", async () => {
   const source = await readFile(readmeUrl, "utf8");
+  assert.match(source, /archive=chicken&preset=chicken-igll1-ucd312-deletion/);
   assert.match(source, /archive=hprc&locus=HLA-B/);
   assert.match(source, /archive=hprc&locus=KIR3DL1/);
   assert.match(source, /archive=1000g&sample=NA19239&contig=1/);
   assert.match(source, /archive=rice&locus=Xa7/);
-  assert.match(source, /archive=chicken&locus=IGLL1/);
+  assert.match(source, /Named paths and published preset/);
   assert.doesNotMatch(source, /archive=poplar/);
   assert.match(source, /zoom=[^&]+&center=[^&]+&vscale=/);
-  assert.match(source, /Local file selections cannot be\s+restored/);
+  assert.match(source, /Local files cannot be restored\s+from a URL/);
 });
 
 test("npm docs:dev injects all public archives while preserving overrides", async () => {

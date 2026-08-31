@@ -1,0 +1,22 @@
+{
+  "schemaVersion": 1,
+  "date": "2026-08-31",
+  "source": {
+    "name": "HPRC v2.1 Minigraph-Cactus GRCh38",
+    "bytes": 5492627216,
+    "sha256": "11d6047f79575ffb83757462484bad134ed20928bd2c8171ec52e35a54976e2b"
+  },
+  "interval": {
+    "sample": "GRCh38",
+    "contig": "chr5",
+    "start": 0,
+    "end": 4194304,
+    "windowSize": 16384,
+    "tiles": 256
+  },
+  "sourceCache": "persistent source-cache v2",
+  "pathLocateMaxLfSteps": 8192,
+  "memoryMaxBytes": 5368709120,
+  "memorySwapMaxBytes": 0,
+  "finalWorkerCount": 32
+}

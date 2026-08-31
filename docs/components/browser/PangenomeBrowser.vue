@@ -28,6 +28,7 @@ import {
 import { withBase } from "vitepress";
 import {
   computed,
+  nextTick,
   onBeforeUnmount,
   onMounted,
   ref,
@@ -206,9 +207,14 @@ const demoSources = computed<readonly ArchiveSourceSelection[]>(() => {
       label: configuredLabel,
       key: `url:${configuredArchiveUrl}`,
       description:
-        "Whole HPRC v2.1 graph with GRCh38 and CHM13 references plus GENCODE v50 named-gene search.",
+        "Whole HPRC v2.1 graph with GRCh38 and CHM13 references, GENCODE v50 named-gene search, and exact named GBWT source-path membership.",
       group: "Large human demonstration",
-      badges: ["Gene search", "Whole genome", "Graph only"],
+      badges: [
+        "Named paths",
+        "Gene search",
+        "Whole genome",
+        "Experimental identity",
+      ],
       scope: "whole genome",
       attribution: {
         label: "Human Pangenome Reference Consortium",
@@ -407,6 +413,15 @@ async function openSource(
         ? source.source
         : "";
     metrics.value = { openMs: performance.now() - started };
+    if (
+      restoreUrl &&
+      source.id === "chicken" &&
+      new URLSearchParams(window.location.search).get("preset") ===
+        publishedPreset?.id
+    ) {
+      await openPublishedExample();
+      if (publishedExampleOpen.value) return;
+    }
     const restoredLocus = restoreUrl
       ? await locusFromUrl(opened, sourceController.signal)
       : undefined;
@@ -936,6 +951,7 @@ function updateUrl(mode: "push" | "replace", nextRegion: RegionQuery): void {
   url.searchParams.set("end", String(nextRegion.end));
   if (locus.value === undefined) url.searchParams.delete("locus");
   else url.searchParams.set("locus", locus.value.displayName);
+  url.searchParams.delete("preset");
   writeViewport(url, viewport.value);
   window.history[mode === "push" ? "pushState" : "replaceState"](null, "", url);
 }
@@ -1067,13 +1083,18 @@ async function openPublishedExample(): Promise<void> {
     const highlighted = selectedPatterns.map((pattern) => pattern.id);
     if (new Set(highlighted).size !== preset.traversalGroups.length)
       throw new Error("Expected displayed patterns were not distinct");
+    publishedMembershipEvidence.value = mergeFeatureTraces(located.traces);
+    selection.value = { kind: "pattern", pattern: selectedPatterns[0] };
+    await nextTick();
+    if (!isCurrent()) return;
     highlightedPatternIds.value = highlighted;
     if (highlightedPatternIds.value.length !== preset.traversalGroups.length)
       throw new Error("Expected displayed patterns were not all highlighted");
-    publishedMembershipEvidence.value = mergeFeatureTraces(located.traces);
-    selection.value = { kind: "pattern", pattern: selectedPatterns[0] };
     publishedExampleOpen.value = true;
     message.value = "Validated UCD312 deletion traversal selected";
+    const url = new URL(window.location.href);
+    url.searchParams.set("preset", preset.id);
+    window.history.replaceState(null, "", url);
   } catch (cause) {
     if (!isCurrent()) return;
     clearPublishedExampleState();

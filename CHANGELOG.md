@@ -4,6 +4,27 @@
 
 ### Changed
 
+- Made archive-wide named-membership construction cancellable and observable, with
+  ordered bounded workers, tile/rate/ETA progress, durable HPRC run logs, explicit
+  transient-unit cleanup, and a 30-minute default HPRC encode timeout. Disk-backed
+  LF now resolves only requested offsets while scanning compressed GBWT runs instead
+  of expanding complete records. A 256-tile HPRC chr5 benchmark improved from about
+  65 seconds with one worker and 16 seconds with the prior eight-worker locator to
+  about 5.8 seconds with 32 workers at 1,970,640 KiB peak RSS and zero swap, while
+  preserving the exact archive SHA-256. The subsequent whole-HPRC run completed
+  membership for 363,105 tiles in 1 hour 29 minutes 57 seconds and produced a
+  10,836,425,558-byte archive with SHA-256
+  `82585cb612effbf414b1c8f38b049bc415876866168ccc929f9a885f06d97b0a`.
+  Final validation now reconciles membership tiles through the same bounded worker
+  model, applies a per-worker reconstruction estimate before materialization, and
+  reports tile/group/rate/ETA progress. Full 32-worker validation passed all 363,105
+  membership pages and physical payloads in 51 minutes 10.51 seconds at 9,670,064
+  KiB peak RSS and zero swap. Seven retained GBZ-oracle queries then matched every
+  canonical graph hash and checked haplotype tile in 48.55 seconds at 10,776,088 KiB
+  peak RSS with zero swap. The checksum-pinned archive is published through the
+  range-capable miniserver origin and is now the HPRC source used by the deployed
+  browser demo. A precomputed bounded FastLocate-class structure remains necessary
+  for the requested 20-minute whole encode target.
 - Added a whole-reference-genome archive derived from the published 30-assembly
   chicken graph as the default configured research demo. The 1,498,984,132-byte
   archive covers all 207 `bGalGal1b`
