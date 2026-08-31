@@ -36,8 +36,9 @@ The rice demo explores chromosome 6 from the PPanG rice pangenome, using NATELBO
 
 - [Rice Xa7 — bacterial-blight-resistance locus](https://a-r-d.github.io/pangenome-range/demo?archive=rice&locus=Xa7&zoom=2.856&center=0.600576&vscale=1.45)
 
-The default demo opens the complete published 30-assembly chicken pangenome at
-the chromosome 15 IGLL1 locus. The 1.50 GB whole-genome object includes
+The default demo opens a whole-reference-genome archive derived from the
+published 30-assembly chicken graph at the chromosome 15 IGLL1 locus. The
+1.50 GB object includes
 searchable GRCg7b genes and exact named GBWT source-path membership:
 
 - [Chicken IGLL1 — named paths through an immune-gene locus](https://a-r-d.github.io/pangenome-range/demo?archive=chicken&locus=IGLL1&zoom=0.35&center=0.5&vscale=1.2)

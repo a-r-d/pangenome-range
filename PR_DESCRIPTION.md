@@ -10,9 +10,9 @@
 - Adds a fragment-aware tube-map inspector with exact sample, haplotype,
   fragment, multiplicity, orientation, path sense, filtering, cross-tile path-ID
   highlighting, named-path TSV, and oriented tile-local FASTA.
-- Makes the complete 30-assembly chicken pangenome the default configured
-  research demo, with HPRC, 1000 Genomes, rice, and the offline fixture kept as
-  semantically distinct alternatives.
+- Makes a whole-reference-genome archive derived from the published 30-assembly
+  chicken graph the default configured research demo, with HPRC, 1000 Genomes,
+  rice, and the offline fixture kept as semantically distinct alternatives.
 
 ## Whole chicken result
 
@@ -20,7 +20,7 @@
 - `.pngr`: 1,498,984,132 bytes; 1.102954215x source size.
 - Reference scope: 207 `bGalGal1b` paths; 1,052,949,595 bases.
 - Regional payloads: 64,371; full structural validation passed all 64,371.
-- Named loci: 56,390 searchable records from 25,437 GRCg7b gene rows.
+- 56,390 named-locus search records from 25,437 GRCg7b gene rows.
 - Path catalog: 12,237 GBWT source-path records—not chickens or genomes.
 - Membership: 717,130 traversal groups; 1,850,732 membership records;
   occurrence weight 1,850,762.
@@ -55,6 +55,8 @@
   identity, and binary SHA-256.
 - Checks in the one-line GBWT rvalue-move patch and verifies that it applies to a
   clean pinned submodule checkout.
+- Verifies the existing pinned binary identity; a fresh independent from-zero vg
+  build has not yet been demonstrated.
 - Keeps the measured one-job/20-million-node vg conversion under a 42 GB
   zero-swap cap; `.pngr` construction remains under a 2 GB cap.
 - Large GFA, VCF, GBZ, cache, and `.pngr` objects remain outside git.
@@ -73,13 +75,17 @@
 ## Validation
 
 - Rust and TypeScript golden/corruption/multiplicity tests cover the extension.
-- Mixed forward/reverse FASTA reconstruction and exact TSV columns have focused
-  unit tests.
+- FASTA export preserves forward ASCII IUPAC DNA bytes exactly, complements the
+  full upper/lowercase IUPAC DNA alphabet on reverse nodes, and fails closed on
+  U/u, unsupported ASCII, or non-ASCII bytes. Exact TSV columns have focused tests.
+- The published example fails closed unless both expected tiles, digests,
+  membership facts, and displayed patterns reproduce exactly. Named-path
+  highlight reads are included in displayed byte/range telemetry.
 - Pages smoke covers chicken defaulting, whole-genome labeling, capabilities,
   path counts, first-use hint, exact published preset, filtering/highlighting,
   exports, explicit source overrides, responsive overflow, and retained
   1600×1000 screenshots.
-- Viewer bundle change from the pre-change head: +3,911 raw bytes and +1,112
+- Viewer bundle change from the pre-change head: +11,628 raw bytes and +2,960
   gzip bytes; all bundle budgets pass.
 - `pnpm check:rust`, `pnpm package:cargo`, `pnpm check`, `pnpm build`,
   `pnpm test:browser:ci`, `pnpm test:pages`, configured-archive smoke, and the
@@ -87,3 +93,10 @@
 - Full evidence and retained screenshots are in
   `results/2026-08-30-chicken-merge-hardening/`. This branch does not publish
   packages or merge a normative format change.
+
+## Pre-merge verdict
+
+`READY_TO_MERGE`
+
+Announcement requires merge to main, a successful Pages workflow, the configured
+Chicken/HPRC/1000G/Rice smoke, and deployed chicken default/published-example checks.

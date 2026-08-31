@@ -45,7 +45,10 @@ test("the demo is a single browser shell using public reader and viewer exports"
   assert.match(browser, /"rice"/);
   assert.match(browser, /"chicken"/);
   assert.doesNotMatch(browser, /"poplar"/);
-  assert.match(browser, /Chicken pangenome, 30 assemblies \(whole genome\)/);
+  assert.match(
+    browser,
+    /Chicken pangenome, 30 assemblies \(whole reference genome\)/,
+  );
   assert.match(browser, /namedPathHintVisible/);
   assert.match(browser, /openPublishedExample/);
   assert.match(

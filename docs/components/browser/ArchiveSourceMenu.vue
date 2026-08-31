@@ -85,7 +85,7 @@ function chooseFile(event: Event): void {
     <div class="archive-menu__active"><strong>{{ activeLabel }}</strong><span>{{ info ? `${(Number(info.archiveBytes) / 1e9).toFixed(2)} GB · format v${info.formatVersion}` : 'Opening…' }}</span></div>
     <dl v-if="info" class="archive-menu__facts">
       <div><dt>Scope</dt><dd>{{ presets.find((source) => source.id === activeId)?.scope ?? 'user supplied' }}</dd></div>
-      <div><dt>Named loci</dt><dd>{{ info.namedLoci.recordCount.toLocaleString() }} records</dd></div>
+      <div><dt>Named-locus search</dt><dd>{{ info.namedLoci.recordCount.toLocaleString() }} records</dd></div>
       <div><dt>Path membership</dt><dd>{{ info.pathMembership.state === 'present' ? 'available' : 'absent' }}</dd></div>
       <div><dt>Path catalog</dt><dd>{{ info.pathMembership.pathCount.toLocaleString() }} source-path records</dd></div>
       <div><dt>Reference assembly</dt><dd>{{ info.provenance?.referenceAssembly ?? 'not declared' }}</dd></div>

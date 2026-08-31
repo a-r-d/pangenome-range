@@ -4,14 +4,17 @@
 
 ### Changed
 
-- Added the complete 30-assembly chicken pangenome as the default configured
-  research demo. The 1,498,984,132-byte archive covers all 207 `bGalGal1b`
+- Added a whole-reference-genome archive derived from the published 30-assembly
+  chicken graph as the default configured research demo. The 1,498,984,132-byte
+  archive covers all 207 `bGalGal1b`
   reference paths and contains GRCg7b gene search, summaries, 12,237 exact GBWT
   source-path catalog records, 717,130 tile-local traversal groups, and 1,850,732
   membership records. Full validation passed 64,371 payloads and eight retained
   GBZ-oracle workloads. The exact patched vg source/submodule/compiler/binary is
-  now reproducible through `scripts/chicken/build-pinned-vg.sh`, with the minimal
-  rvalue-move repair checked in under `patches/vg/`. The browser labels the
+  is pinned and checksum-gated through `scripts/chicken/build-pinned-vg.sh`, with
+  clean patch application and the existing binary identity verified; a fresh
+  independent from-zero build was not demonstrated. The minimal rvalue-move
+  repair is checked in under `patches/vg/`. The browser labels the
   archive as whole genome, defaults to IGLL1, explains how to select a named
   traversal, exposes live capabilities/counts/traces, and exports exact path TSV
   plus oriented tile-local FASTA. A checksum-pinned graph VCF independently maps

@@ -17,7 +17,10 @@ import {
   buildTubeMapModel,
   decideGraphRegion,
   EXTENDED_TUBE_MAP_DISPLAY_LIMITS,
+  type ExpectedPresetTraversalGroup,
   formatGenomicCoordinate,
+  locateValidatedPresetGroups,
+  matchValidatedPresetPatterns,
   parseGenomicCommand,
   recommendedGraphRegion,
   type TubeMapModel,
@@ -143,6 +146,7 @@ const options = ref<GraphOptions>({
 const metrics = ref<BrowserMetrics>({});
 const identityEvidence = shallowRef<PatternEvidence>();
 const publishedMembershipEvidence = shallowRef<FeatureQueryTrace>();
+const highlightMembershipEvidence = shallowRef<FeatureQueryTrace>();
 const namedPathHintDismissed = ref(false);
 const publishedExampleOpen = ref(false);
 let sourceOperation = 0;
@@ -154,6 +158,7 @@ let searchTimer: ReturnType<typeof setTimeout> | undefined;
 let suppressedCommand: string | undefined;
 let viewportUrlFrame: number | undefined;
 let highlightOperation = 0;
+let publishedExampleOperation = 0;
 
 const selectedPatternTile = computed(() => {
   const selected = selection.value;
@@ -167,7 +172,8 @@ const selectedPatternTile = computed(() => {
 const configuredLabel = "HPRC v2.1 + GENCODE v50 (GRCh38 / CHM13)";
 const populationLabel = "1000 Genomes hs38d1 (NA19239 haplotype 0)";
 const riceLabel = "PPanG rice chromosome 6 (NATELBORO / Xa7)";
-const chickenLabel = "Chicken pangenome, 30 assemblies (whole genome)";
+const chickenLabel =
+  "Chicken pangenome, 30 assemblies (whole reference genome)";
 const publishedPreset = chickenDemoPresets.presets[0];
 const demoSources = computed<readonly ArchiveSourceSelection[]>(() => {
   const sources: ArchiveSourceSelection[] = [];
@@ -178,7 +184,7 @@ const demoSources = computed<readonly ArchiveSourceSelection[]>(() => {
       label: chickenLabel,
       key: `url:${chickenArchiveUrl}`,
       description:
-        "Whole 30-assembly chicken pangenome with GRCg7b gene search and exact named GBWT source-path membership.",
+        "Whole-reference-genome archive derived from the published 30-assembly chicken graph, with GRCg7b gene search and exact named GBWT source-path membership.",
       group: "Research demonstration",
       badges: [
         "Named paths",
@@ -333,6 +339,8 @@ onMounted(() => {
 onBeforeUnmount(() => {
   sourceOperation += 1;
   regionOperation += 1;
+  highlightOperation += 1;
+  publishedExampleOperation += 1;
   sourceController?.abort();
   regionController?.abort();
   searchController?.abort();
@@ -371,6 +379,8 @@ async function openSource(
   selection.value = undefined;
   identityEvidence.value = undefined;
   publishedMembershipEvidence.value = undefined;
+  highlightMembershipEvidence.value = undefined;
+  highlightedPatternIds.value = [];
   publishedExampleOpen.value = false;
   if (source.id === "chicken") namedPathHintDismissed.value = false;
   const started = performance.now();
@@ -514,6 +524,8 @@ async function loadRegion(nextRegion: RegionQuery): Promise<void> {
   preferredPatterns.value = [];
   identityEvidence.value = undefined;
   publishedMembershipEvidence.value = undefined;
+  highlightMembershipEvidence.value = undefined;
+  highlightedPatternIds.value = [];
   publishedExampleOpen.value = false;
   metrics.value = { openMs: metrics.value.openMs };
   const started = performance.now();
@@ -614,6 +626,7 @@ function rebuildModel(): void {
 async function highlightNamedPath(pathId?: bigint): Promise<void> {
   const current = ++highlightOperation;
   highlightedPatternIds.value = [];
+  highlightMembershipEvidence.value = undefined;
   const opened = archive.value;
   const currentModel = model.value;
   if (
@@ -623,9 +636,16 @@ async function highlightNamedPath(pathId?: bigint): Promise<void> {
   )
     return;
   const highlighted = new Set<string>();
+  const traces: FeatureQueryTrace[] = [];
   for (const tile of tiles.value) {
-    const groups = await opened.tilePathMemberships(tile);
+    let tileTrace: FeatureQueryTrace | undefined;
+    const groups = await opened.tilePathMemberships(tile, {
+      trace: (value) => {
+        tileTrace = value;
+      },
+    });
     if (current !== highlightOperation) return;
+    if (tileTrace !== undefined) traces.push(tileTrace);
     for (const group of groups) {
       if (!group.memberships.some((item) => item.pathId === pathId)) continue;
       for (const pattern of currentModel.patterns) {
@@ -638,8 +658,10 @@ async function highlightNamedPath(pathId?: bigint): Promise<void> {
       }
     }
   }
-  if (current === highlightOperation)
+  if (current === highlightOperation) {
     highlightedPatternIds.value = [...highlighted];
+    highlightMembershipEvidence.value = mergeFeatureTraces(traces);
+  }
 }
 
 function samePatternHandles(
@@ -980,8 +1002,11 @@ function sourceFromUrl(): ArchiveSourceSelection {
 }
 
 async function openPublishedExample(): Promise<void> {
+  const operation = ++publishedExampleOperation;
   const preset = publishedPreset;
   const opened = archive.value;
+  const expectedSourceOperation = sourceOperation;
+  const expectedSourceKey = activeSourceKey.value;
   if (
     preset === undefined ||
     opened === undefined ||
@@ -991,65 +1016,77 @@ async function openPublishedExample(): Promise<void> {
       "The published example is bound to a different archive checksum";
     return;
   }
+  clearPublishedExampleState();
   options.value = { ...options.value, patternCount: 16 };
-  await navigate({ ...preset.region, context: 100 });
-  const membershipTraces: FeatureQueryTrace[] = [];
-  const locatedGroups: Array<{
-    tile: RegionTile;
-    orientedNodes: BigUint64Array;
-  }> = [];
-  for (const expectedGroup of preset.traversalGroups) {
-    const tile = tiles.value.find(
-      (candidate) =>
-        candidate.coreStart === expectedGroup.tile.start &&
-        candidate.coreEnd === expectedGroup.tile.end,
-    );
-    if (tile === undefined) continue;
-    const groups = await opened.tilePathMemberships(tile, {
-      trace: (value) => membershipTraces.push(value),
+  const navigation = navigate({ ...preset.region, context: 100 });
+  const expectedRegionOperation = regionOperation;
+  const isCurrent = () =>
+    operation === publishedExampleOperation &&
+    expectedSourceOperation === sourceOperation &&
+    expectedSourceKey === activeSourceKey.value &&
+    opened === archive.value &&
+    expectedRegionOperation === regionOperation &&
+    region.value?.sample === preset.region.sample &&
+    region.value.contig === preset.region.contig &&
+    region.value.start === preset.region.start &&
+    region.value.end === preset.region.end;
+  try {
+    await navigation;
+    if (!isCurrent()) return;
+    const located = await locateValidatedPresetGroups({
+      tiles: tiles.value,
+      expectedGroups:
+        preset.traversalGroups as readonly ExpectedPresetTraversalGroup[],
+      isCurrent,
+      loadMemberships: async (tile, recordTrace) => {
+        let tileTrace: FeatureQueryTrace | undefined;
+        const groups = await opened.tilePathMemberships(tile, {
+          trace: (value) => {
+            tileTrace = value;
+          },
+        });
+        if (tileTrace !== undefined) recordTrace(tileTrace);
+        return groups;
+      },
     });
-    const group = groups.find(
-      (candidate) =>
-        bytesToHex(candidate.traversalDigest) === expectedGroup.traversalDigest,
+    if (located.status === "cancelled" || !isCurrent()) return;
+    preferredPatterns.value = located.groups.map(({ tile, group }) => ({
+      archiveOffset: tile.provenance.archiveOffset,
+      orientedNodes: Array.from(group.orientedNodes),
+    }));
+    rebuildModel();
+    if (!isCurrent() || model.value === undefined) return;
+    const selectedPatterns = matchValidatedPresetPatterns(
+      located.groups,
+      model.value.patterns,
     );
-    if (group?.orientedNodes === undefined) continue;
-    locatedGroups.push({ tile, orientedNodes: group.orientedNodes });
+    if (selectedPatterns.length !== preset.traversalGroups.length)
+      throw new Error(
+        `Located ${selectedPatterns.length} of ${preset.traversalGroups.length} expected displayed patterns`,
+      );
+    const highlighted = selectedPatterns.map((pattern) => pattern.id);
+    if (new Set(highlighted).size !== preset.traversalGroups.length)
+      throw new Error("Expected displayed patterns were not distinct");
+    highlightedPatternIds.value = highlighted;
+    if (highlightedPatternIds.value.length !== preset.traversalGroups.length)
+      throw new Error("Expected displayed patterns were not all highlighted");
+    publishedMembershipEvidence.value = mergeFeatureTraces(located.traces);
+    selection.value = { kind: "pattern", pattern: selectedPatterns[0] };
+    publishedExampleOpen.value = true;
+    message.value = "Validated UCD312 deletion traversal selected";
+  } catch (cause) {
+    if (!isCurrent()) return;
+    clearPublishedExampleState();
+    message.value = `Validated preset could not be reproduced: ${cause instanceof Error ? cause.message : String(cause)}`;
   }
-  preferredPatterns.value = locatedGroups.map(({ tile, orientedNodes }) => ({
-    archiveOffset: tile.provenance.archiveOffset,
-    orientedNodes: Array.from(orientedNodes),
-  }));
-  rebuildModel();
-  const currentModel = model.value;
-  if (currentModel === undefined) return;
-  const selectedPatterns: string[] = [];
-  let primary: BrowserSelection | undefined;
-  for (const { tile, orientedNodes } of locatedGroups) {
-    const pattern = currentModel.patterns.find(
-      (candidate) =>
-        candidate.source.archiveOffset === tile.provenance.archiveOffset &&
-        samePatternHandles(orientedNodes, candidate.orientedNodes),
-    );
-    if (pattern === undefined) continue;
-    selectedPatterns.push(pattern.id);
-    primary ??= { kind: "pattern", pattern };
-  }
-  if (primary === undefined) {
-    message.value =
-      "The validated published traversal is outside display limits";
-    return;
-  }
-  highlightedPatternIds.value = selectedPatterns;
-  publishedMembershipEvidence.value = mergeFeatureTraces(membershipTraces);
-  publishedExampleOpen.value = true;
-  selection.value = primary;
-  message.value = "Validated UCD312 deletion traversal selected";
 }
 
-function bytesToHex(bytes: Uint8Array): string {
-  return Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join(
-    "",
-  );
+function clearPublishedExampleState(): void {
+  preferredPatterns.value = [];
+  highlightedPatternIds.value = [];
+  publishedMembershipEvidence.value = undefined;
+  publishedExampleOpen.value = false;
+  selection.value = undefined;
 }
 
 function mergeFeatureTraces(
@@ -1293,6 +1330,7 @@ function fail(cause: unknown, prefix: string): void {
       :model="model"
       :metrics="metrics"
       :identity-evidence="statusIdentityEvidence"
+      :highlight-evidence="highlightMembershipEvidence"
       :path-membership-available="namedPathHintAvailable"
     />
     <ShareDialog :open="shareOpen" :url="shareUrl" @close="shareOpen = false" />

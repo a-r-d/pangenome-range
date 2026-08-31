@@ -685,6 +685,61 @@ async function exerciseChickenArchive(browser, baseUrl) {
       path: screenshotPath("chicken-default-igll1"),
       fullPage: true,
     });
+    const defaultPattern = page.locator("[data-pattern-id]").first();
+    await defaultPattern.focus();
+    await defaultPattern.press("Enter");
+    const defaultInspector = page.getByRole("complementary", {
+      name: "Pattern inspector",
+    });
+    await defaultInspector
+      .getByRole("heading", { name: "Named source paths" })
+      .waitFor();
+    assert.match(
+      await defaultInspector.innerText(),
+      /Occurrence weight is tile-local and is not an allele frequency.*not stitched across tiles/s,
+    );
+    const status = page.locator(".browser-status");
+    const beforeHighlightBytes = Number(
+      await status.getAttribute("data-fetched-bytes"),
+    );
+    const beforeHighlightRanges = Number(
+      await status.getAttribute("data-fetched-ranges"),
+    );
+    await defaultInspector
+      .getByRole("button", { name: "Highlight path" })
+      .first()
+      .click();
+    await page.waitForFunction(() => {
+      const value = document
+        .querySelector(".browser-status")
+        ?.getAttribute("data-highlight-ranges");
+      return Number(value) > 0;
+    });
+    const highlightBytes = Number(
+      await status.getAttribute("data-highlight-bytes"),
+    );
+    const highlightRanges = Number(
+      await status.getAttribute("data-highlight-ranges"),
+    );
+    assert(highlightBytes > 0, "named-path highlight read no recorded bytes");
+    assert(highlightRanges > 0, "named-path highlight read no recorded ranges");
+    const afterHighlightBytes = Number(
+      await status.getAttribute("data-fetched-bytes"),
+    );
+    const afterHighlightRanges = Number(
+      await status.getAttribute("data-fetched-ranges"),
+    );
+    assert.equal(
+      afterHighlightBytes,
+      beforeHighlightBytes + highlightBytes,
+      "displayed bytes omitted named-path highlight reads",
+    );
+    assert.equal(
+      afterHighlightRanges,
+      beforeHighlightRanges + highlightRanges,
+      "displayed ranges omitted named-path highlight reads",
+    );
+    await page.getByRole("button", { name: "Close inspector" }).click();
     await page.getByRole("button", { name: "Source" }).click();
     const sourceDialog = page.getByRole("dialog", { name: "Archive source" });
     assert.equal(
@@ -790,6 +845,14 @@ async function exerciseChickenArchive(browser, baseUrl) {
       },
       tsvHeader: tsv.split("\n")[0],
       fastaHeader: fasta.split("\n")[0],
+      highlightTelemetry: {
+        bytesBefore: beforeHighlightBytes,
+        rangesBefore: beforeHighlightRanges,
+        highlightBytes,
+        highlightRanges,
+        bytesAfter: afterHighlightBytes,
+        rangesAfter: afterHighlightRanges,
+      },
     };
   } finally {
     await page.close();

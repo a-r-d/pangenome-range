@@ -178,7 +178,7 @@ try {
         publishedClaim:
           "Approximately 5 kb deletion relative to bGalGal1b found in one UCD312 haplotype.",
         observedArchiveEvidence:
-          "The exact VCF deletion edge maps uniquely to this tile-local traversal group and one named UCD312 GBWT source path.",
+          "The exact VCF deletion edge maps uniquely to these two adjacent tile-local traversal groups and one named UCD312 GBWT source path.",
         trace: {
           graph: result.trace.graph,
           membership: result.trace.membership,

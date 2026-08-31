@@ -27,7 +27,7 @@ The measured objects are:
 | whole `.pngr` | 1,498,984,132 | `93bcd713ccda14bf4e650c1c8d56751e5ed5db7624aecbf76769fa1909d25e4e` |
 
 The archive/source ratio is 1.102954x. It contains 64,371 regional payloads,
-56,390 searchable locus records, 12,237 GBWT source-path catalog records,
+56,390 named-locus search records, 12,237 GBWT source-path catalog records,
 717,130 canonical tile-local traversal groups, and 1,850,732 membership records.
 Catalog records are paths, not chickens or genomes.
 
@@ -48,6 +48,8 @@ scripts/chicken/build-chicken-whole.sh
 
 The script requires the measured vg SHA-256 and preserves the original one-job,
 20-million-node buffer, 42 GB hard memory limit, and zero-swap conversion guard.
+Its pinned recipe, clean patch application, and existing binary identity are
+verified; a fresh independent from-zero build has not yet been demonstrated.
 The `.pngr` stages are capped at 2 GB. `data/chicken/sources.json` records every
 input, derived checksum, conversion command, path-selection rule, upload object,
 and origin result. `data/chicken/vg-tool-manifest.json` records the exact source,

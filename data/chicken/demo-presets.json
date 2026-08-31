@@ -98,7 +98,7 @@
         }
       ],
       "publishedClaim": "Approximately 5 kb deletion relative to bGalGal1b found in one UCD312 haplotype.",
-      "observedArchiveEvidence": "The exact VCF deletion edge maps uniquely to this tile-local traversal group and one named UCD312 GBWT source path.",
+      "observedArchiveEvidence": "The exact VCF deletion edge maps uniquely to these two adjacent tile-local traversal groups and one named UCD312 GBWT source path.",
       "trace": {
         "graph": {
           "dependencyRounds": 4,
@@ -135,11 +135,11 @@
             "directory": 0,
             "payload": 0
           },
-          "decompressionMs": 17.27941500000088,
-          "decompressionTaskMs": 17.27941500000088,
-          "integrityMs": 4.325136999999813,
-          "decodeMs": 56.15929799999867,
-          "mergeMs": 26.036856000000625,
+          "decompressionMs": 16.497224000000642,
+          "decompressionTaskMs": 16.497224000000642,
+          "integrityMs": 4.6111369999980525,
+          "decodeMs": 52.99391000000105,
+          "mergeMs": 21.767308000000412,
           "selectedChunks": 2,
           "selectedNodes": 2836,
           "selectedTraversals": 49,
@@ -181,10 +181,10 @@
           ],
           "totalBytes": 13595,
           "cacheHits": 0,
-          "integrityMs": 0.5742769999997108,
-          "decompressionMs": 0.32858500000111235,
-          "decompressionTaskMs": 0.32858500000111235,
-          "decodeMs": 2.9677150000006804,
+          "integrityMs": 0.46795600000041304,
+          "decompressionMs": 0.3124420000003738,
+          "decompressionTaskMs": 0.3124420000003738,
+          "decodeMs": 3.026419999998325,
           "pagesAvoidedByLimit": 0
         },
         "catalog": {
@@ -199,10 +199,10 @@
           ],
           "totalBytes": 9570,
           "cacheHits": 0,
-          "integrityMs": 0.2450669999998354,
-          "decompressionMs": 2.8637759999983246,
-          "decompressionTaskMs": 2.8637759999983246,
-          "decodeMs": 4.500733999999284,
+          "integrityMs": 0.40716799999972864,
+          "decompressionMs": 2.8187739999993937,
+          "decompressionTaskMs": 2.8187739999993937,
+          "decodeMs": 5.017593000000488,
           "pagesAvoidedByLimit": 0
         }
       }

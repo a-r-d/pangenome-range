@@ -13,11 +13,13 @@ export {
   parseGenomicCommand,
 } from "./navigation.js";
 export type {
+  LocalTraversalExportErrorCode,
   LocalTraversalFastaOptions,
   NamedPathTsvOptions,
 } from "./research-exports.js";
 export {
   bytesToHex,
+  LocalTraversalExportError,
   localTraversalFasta,
   localTraversalSequence,
   namedPathMembershipTsv,
@@ -59,3 +61,14 @@ export type {
   TubeMapRenderResult,
 } from "./tube-map-renderer.js";
 export { renderTubeMapSvg } from "./tube-map-renderer.js";
+export type {
+  ExpectedPresetTraversalGroup,
+  LocatedPresetTraversalGroup,
+  LocateValidatedPresetResult,
+  ValidatedPresetErrorCode,
+} from "./validated-preset.js";
+export {
+  locateValidatedPresetGroups,
+  matchValidatedPresetPatterns,
+  ValidatedPresetError,
+} from "./validated-preset.js";

@@ -81,20 +81,35 @@ const tsv = computed(() => {
     paths: paths.value,
   });
 });
-const sequence = computed(() =>
-  props.tile === undefined
-    ? ""
-    : localTraversalSequence(props.tile, props.pattern.orientedNodes),
-);
-const fasta = computed(() => {
-  if (props.tile === undefined || group.value === undefined) return "";
-  return localTraversalFasta({
-    archiveIdentity: props.archiveIdentity,
-    tile: props.tile,
-    traversalDigest: traversalDigest.value,
-    occurrenceWeight: group.value.occurrenceWeight,
-    orientedNodes: props.pattern.orientedNodes,
-  });
+const sequenceExport = computed<{
+  readonly sequence: string;
+  readonly fasta: string;
+  readonly error: string;
+}>(() => {
+  if (props.tile === undefined) return { sequence: "", fasta: "", error: "" };
+  try {
+    const sequence = localTraversalSequence(
+      props.tile,
+      props.pattern.orientedNodes,
+    );
+    const fasta =
+      group.value === undefined
+        ? ""
+        : localTraversalFasta({
+            archiveIdentity: props.archiveIdentity,
+            tile: props.tile,
+            traversalDigest: traversalDigest.value,
+            occurrenceWeight: group.value.occurrenceWeight,
+            orientedNodes: props.pattern.orientedNodes,
+          });
+    return { sequence, fasta, error: "" };
+  } catch (cause) {
+    return {
+      sequence: "",
+      fasta: "",
+      error: cause instanceof Error ? cause.message : String(cause),
+    };
+  }
 });
 
 watch(
@@ -183,6 +198,7 @@ function sameHandles(
 }
 
 function download(content: string, filename: string, type: string): void {
+  if (content.length === 0) return;
   const url = URL.createObjectURL(new Blob([content], { type }));
   const anchor = document.createElement("a");
   anchor.href = url;
@@ -196,7 +212,7 @@ function download(content: string, filename: string, type: string): void {
   <aside class="browser-inspector" aria-label="Pattern inspector">
     <header><span>Local traversal pattern</span><button type="button" aria-label="Close inspector" @click="emit('close')">×</button></header>
     <h2>{{ pattern.id }} × {{ pattern.weight.toLocaleString() }}</h2>
-    <p class="inspector-warning">Tile-local traversal evidence from {{ pattern.tileKey }}. Named source paths remain fragment-aware and are highlighted only by canonical path ID.</p>
+    <p class="inspector-warning">Tile-local traversal evidence from {{ pattern.tileKey }}. Occurrence weight is tile-local and is not an allele frequency. Named path fragments are not stitched across tiles.</p>
     <dl>
       <div><dt>Source tile</dt><dd>{{ pattern.tileKey }}</dd></div>
       <div><dt>Core interval</dt><dd>{{ pattern.tileStart.toLocaleString() }}–{{ pattern.tileEnd.toLocaleString() }}</dd></div>
@@ -216,9 +232,10 @@ function download(content: string, filename: string, type: string): void {
       <div class="inspector-actions">
         <button type="button" data-testid="copy-path-list" @click="emit('copy', tsv, 'Path list')">Copy path list</button>
         <button type="button" data-testid="download-path-list" @click="download(tsv, `named-paths-${traversalDigest}.tsv`, 'text/tab-separated-values')">Download TSV</button>
-        <button type="button" data-testid="copy-local-sequence" @click="emit('copy', sequence, 'Local traversal sequence')">Copy local sequence</button>
-        <button type="button" data-testid="download-local-fasta" @click="download(fasta, `local-traversal-${traversalDigest}.fa`, 'text/x-fasta')">Download FASTA</button>
+        <button type="button" data-testid="copy-local-sequence" :disabled="sequenceExport.sequence.length === 0" @click="emit('copy', sequenceExport.sequence, 'Local traversal sequence')">Copy local sequence</button>
+        <button type="button" data-testid="download-local-fasta" :disabled="sequenceExport.fasta.length === 0" @click="download(sequenceExport.fasta, `local-traversal-${traversalDigest}.fa`, 'text/x-fasta')">Download FASTA</button>
       </div>
+      <p v-if="sequenceExport.error" class="inspector-warning" data-testid="sequence-export-error">Local sequence export unavailable: {{ sequenceExport.error }}</p>
       <input v-model="filter" type="search" placeholder="Filter sample or path name" aria-label="Filter named source paths" />
       <ul>
         <li v-for="membership in filteredMemberships" :key="`${membership.pathId}:${membership.reversedRelativeToGroup}`">

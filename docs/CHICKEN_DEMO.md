@@ -1,8 +1,9 @@
 # Chicken named-path demonstration
 
-The default configured research demo opens the complete 30-assembly chicken
-pangenome at `bGalGal1b#chr15` near **IGLL1**. Chromosome 15 is the starting
-locus; the remote object is a whole-genome, 1,498,984,132-byte `.pngr` archive.
+The default configured research demo opens a whole-reference-genome archive
+derived from the published 30-assembly chicken graph at `bGalGal1b#chr15` near
+**IGLL1**. Chromosome 15 is the starting locus; the remote object is a
+1,498,984,132-byte `.pngr` archive.
 
 The browser reads regional graph tiles with HTTP byte ranges, displays weighted
 tile-local traversals, and lazily resolves exact GBWT source-path membership only

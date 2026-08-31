@@ -2,12 +2,13 @@
 
 ## Verdict
 
-`READY_TO_MERGE_AND_ANNOUNCE`
+`READY_TO_MERGE`
 
 The checksum-addressed whole-chicken archive is the configured default research
-demo, the exact UCD312 event is independently bound to the archive, the public
-origin passes strict byte-range validation, and every required project gate
-passes.
+demo, the exact UCD312 event is independently bound to the archive, and the
+public origin passes strict byte-range validation. Announcement remains gated on
+merge, the post-merge Pages workflow, configured multi-archive smoke, and
+deployed chicken default/published-example checks.
 
 ## Evidence boundary
 
@@ -19,7 +20,7 @@ This report retains the facts measured from the archive that is actually hosted:
   `93bcd713ccda14bf4e650c1c8d56751e5ed5db7624aecbf76769fa1909d25e4e`;
 - 64,371 physical payloads, 207 reference paths, and 1,052,949,595 reference
   bases;
-- 56,390 named-locus records and 12,237 GBWT source-path catalog records;
+- 56,390 named-locus search records and 12,237 GBWT source-path catalog records;
 - 717,130 tile-local traversal groups and 1,850,732 membership records;
 - 851.339 seconds construction wall time and 173,668 KiB encoder peak RSS;
 - 64,371/64,371 structural validation and 8/8 retained graph/source-oracle
@@ -43,7 +44,7 @@ reader check read 170,002 bytes across 12 ranges. The browser status remains
 cache-aware; after the default IGLL1 view had warmed shared pages, opening the
 published example reported 37.5 KiB across 6 additional ranges.
 
-## Tool reproducibility
+## Tool reproducibility boundary
 
 - vg commit: `32cadf3d3ee45d04c532767158c7dee6243f5713`.
 - Pinned GBWTGraph submodule: `7fac0af212b0502d40cca3d2b2c3a5fd7d85c540`.
@@ -74,7 +75,7 @@ correct `206`, `Content-Range`, CORS, stable ETag, immutable/no-transform cache
 policy, remote size, and local SHA-256.
 
 The viewer bundle changed from 46,679 raw / 12,015 gzip bytes at the pre-change
-head to 50,590 raw / 13,127 gzip bytes: +3,911 raw and +1,112 gzip bytes. All
+head to 58,307 raw / 14,975 gzip bytes: +11,628 raw and +2,960 gzip bytes. All
 bundle budgets pass, and reader/native-launcher isolation remains intact.
 
 See `screenshot-index.json` for the six retained 1600×1000 screenshots and exact
@@ -97,6 +98,26 @@ Passed:
 `package:cargo` and the tests that bind local HTTP origins were rerun outside
 the filesystem/network sandbox after their first sandboxed attempts were denied
 with `EPERM`; the reruns passed.
+
+## Final correctness hardening
+
+- FASTA reconstruction now validates opaque sequence bytes directly. Forward
+  ASCII IUPAC DNA bytes preserve their exact case; reverse nodes complement
+  `ACGTRYSWKMBDHVN` and lowercase equivalents. U/u, unsupported ASCII, and
+  non-ASCII bytes fail with a typed error and are never replaced with `N`.
+- The published preset now requires exactly two expected tiles, digests,
+  occurrence weights, path IDs, multiplicities, orientations, and displayed
+  patterns before highlighting both patterns and opening the claim card. An
+  operation token invalidates the work on source, archive, or region change.
+- The inspector always says occurrence weight is tile-local, is not allele
+  frequency, and named fragments are not stitched across tiles.
+- Named-path highlighting contributes its membership reads to displayed
+  byte/range totals. The configured chicken smoke asserts the total before and
+  after the operation equals the separately exposed highlight trace: 156,438
+  bytes / 6 ranges before, plus 1,450 bytes / 3 ranges for highlighting, equals
+  157,888 bytes / 9 displayed ranges after.
+- Focused browser tests pass 77/77, including the eight strict-preset cases and
+  the full upper/lowercase IUPAC export matrix.
 
 ## Remaining limitations
 
