@@ -145,7 +145,7 @@ try {
     [
       "--input-type=module",
       "--eval",
-      'import { openPangenome } from "pangenome-range"; import { createPangenomeViewer } from "pangenome-range/viewer"; if (typeof openPangenome !== "function" || typeof createPangenomeViewer !== "function") process.exit(1);',
+      'import { openPangenome } from "pangenome-range"; import { buildTubeMapModel } from "pangenome-range/viewer"; if (typeof openPangenome !== "function" || typeof buildTubeMapModel !== "function") process.exit(1);',
     ],
     installedProject,
   );
