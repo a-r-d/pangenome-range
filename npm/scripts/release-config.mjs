@@ -32,12 +32,6 @@ export const releaseTargets = Object.freeze({
     libc: "musl",
     binary: "pangenome-range",
   }),
-  "win32-x64": Object.freeze({
-    packageName: "@pangenome-range/cli-win32-x64",
-    os: "win32",
-    cpu: "x64",
-    binary: "pangenome-range.exe",
-  }),
 });
 
 export function parseArguments(argv) {

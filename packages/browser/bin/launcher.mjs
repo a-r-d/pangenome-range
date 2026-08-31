@@ -26,10 +26,6 @@ export const PLATFORM_PACKAGES = Object.freeze({
     packageName: "@pangenome-range/cli-linux-x64-musl",
     binary: "bin/pangenome-range",
   }),
-  "win32-x64": Object.freeze({
-    packageName: "@pangenome-range/cli-win32-x64",
-    binary: "bin/pangenome-range.exe",
-  }),
 });
 
 const supportedTargets = Object.keys(PLATFORM_PACKAGES).join(", ");

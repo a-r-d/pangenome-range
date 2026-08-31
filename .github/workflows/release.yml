@@ -50,11 +50,6 @@ jobs:
             rust_target: aarch64-unknown-linux-gnu
             binary: pangenome-range
             archive: tar
-          - target_name: win32-x64
-            runner: windows-2025
-            rust_target: x86_64-pc-windows-msvc
-            binary: pangenome-range.exe
-            archive: zip
     runs-on: ${{ matrix.runner }}
     steps:
       - uses: actions/checkout@v7
@@ -80,15 +75,6 @@ jobs:
           cp release-root/bin/${{ matrix.binary }} release-upload/bin/${{ matrix.binary }}
           cp LICENSE crates/pangenome-range-cli/README.md release-root/
           tar -C release-root -czf release-upload/pangenome-range-${{ matrix.target_name }}.tar.gz .
-      - name: Stage Windows native archive
-        if: matrix.archive == 'zip'
-        shell: pwsh
-        run: |
-          New-Item -ItemType Directory -Force release-root/bin, release-upload/bin
-          Copy-Item target/${{ matrix.rust_target }}/release/${{ matrix.binary }} release-root/bin/${{ matrix.binary }}
-          Copy-Item release-root/bin/${{ matrix.binary }} release-upload/bin/${{ matrix.binary }}
-          Copy-Item LICENSE, crates/pangenome-range-cli/README.md release-root/
-          Compress-Archive -Path release-root/* -DestinationPath release-upload/pangenome-range-${{ matrix.target_name }}.zip
       - uses: actions/upload-artifact@v4
         with:
           name: native-${{ matrix.target_name }}

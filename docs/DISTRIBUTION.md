@@ -56,10 +56,9 @@ The main package pins all native packages as exact-version
 | Linux x64 glibc | `@pangenome-range/cli-linux-x64-gnu` | `os=linux`, `cpu=x64`, `libc=glibc` |
 | Linux x64 musl | `@pangenome-range/cli-linux-x64-musl` | `os=linux`, `cpu=x64`, `libc=musl` |
 | Linux arm64 glibc | `@pangenome-range/cli-linux-arm64-gnu` | `os=linux`, `cpu=arm64`, `libc=glibc` |
-| Windows x64 | `@pangenome-range/cli-win32-x64` | `os=win32`, `cpu=x64` |
 
 Each generated platform package contains only `package.json`, `README.md`,
-`LICENSE`, and `bin/pangenome-range` (or `.exe`). There is no `postinstall`,
+`LICENSE`, and `bin/pangenome-range`. There is no `postinstall`,
 runtime download, GitHub API fetch, or local Rust compilation. Linux libc is
 selected from Node's runtime report when it identifies glibc. An explicit
 `PANGENOME_RANGE_LIBC=gnu|musl` override takes precedence. If the report is
@@ -68,16 +67,18 @@ optional package; it never guesses musl from missing glibc metadata. Before spaw
 platform package version and declared executable path. It inherits all three
 standard streams and forwards arguments, termination signals, and exit status.
 
-Linux arm64 musl, Windows arm64, and other operating-system/architecture pairs
-are not in the current build matrix. The launcher fails with a concise supported
-target list; JavaScript imports continue to work. A new target requires a
-reproducible native build runner and the same package/install smoke gates before
-it can be added.
+The native CLI is not currently published for Windows because its upstream
+`simple-sds` dependency requires Unix file descriptors and `mmap`. Linux arm64
+musl and other operating-system/architecture pairs are also outside the current
+build matrix. The launcher fails with a concise supported target list;
+JavaScript imports continue to work on unsupported native targets. A new target
+requires a compilable upstream dependency path, a reproducible native build
+runner, and the same package/install smoke gates before it can be added.
 
 ## Standalone native binaries
 
 The binary remains named `pangenome-range`. The manual release workflow builds
-the same six-target matrix, runs target Rust tests, creates `.tar.gz` or `.zip`
+the same five-target matrix, runs target Rust tests, creates `.tar.gz`
 archives, and emits `SHA256SUMS`. With an explicit boolean input and the
 protected `release` environment, it can attach those files to a draft GitHub
 release for an existing version tag.
@@ -146,7 +147,7 @@ proved by a local package rehearsal:
 2. Establish npm ownership for `pangenome-range` and the `@pangenome-range`
    scope, then bind trusted publishing to the protected release workflow.
 3. Configure the protected GitHub `release` environment and its approval rules.
-4. Run the release workflow and require all six real target artifacts before
+4. Run the release workflow and require all five real target artifacts before
    any publish step.
 
 GitHub Pages is already configured to deploy through Actions. Remote run

@@ -27,6 +27,11 @@ for the current operating system, CPU, and Linux libc. Installing with
 `--omit=optional` leaves every JavaScript entry point usable; invoking the CLI
 then reports how to install the missing native package.
 
+Native CLI packages are available for macOS arm64/x64 and Linux arm64 glibc or
+x64 glibc/musl. The native CLI is not currently available on Windows because
+the upstream `simple-sds` dependency requires Unix file descriptors and `mmap`;
+the JavaScript reader and viewer remain portable.
+
 See the [repository README](https://github.com/a-r-d/pangenome-range#readme) and
 [distribution guide](https://github.com/a-r-d/pangenome-range/blob/main/docs/DISTRIBUTION.md)
 for supported targets and release details.

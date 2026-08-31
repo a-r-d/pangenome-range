@@ -37,7 +37,6 @@ test("selects every supported platform package", () => {
     ["linux", "arm64", "gnu", "@pangenome-range/cli-linux-arm64-gnu"],
     ["linux", "x64", "gnu", "@pangenome-range/cli-linux-x64-gnu"],
     ["linux", "x64", "musl", "@pangenome-range/cli-linux-x64-musl"],
-    ["win32", "x64", undefined, "@pangenome-range/cli-win32-x64"],
   ];
   for (const [platform, arch, libc, packageName] of cases) {
     assert.equal(
@@ -83,6 +82,10 @@ test("rejects unsupported targets with an actionable error", () => {
       error instanceof NativeCliError &&
       /does not support freebsd-x64/.test(error.message) &&
       /JavaScript reader and viewer remain available/.test(error.message),
+  );
+  assert.throws(
+    () => selectPlatformPackage({ platform: "win32", arch: "x64" }),
+    /does not support win32-x64/,
   );
 });
 
