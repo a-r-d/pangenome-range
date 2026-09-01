@@ -535,7 +535,8 @@ manifest MUST fail rather than choose a similar name or alias.
 A normal remote query has three dependency stages: bootstrap header/root,
 arithmetic directory lookup, then one parallel round for the selected payload
 ranges. A 16 KiB bootstrap read may already contain some required directory
-bytes and should be reused.
+bytes and should be reused. The [range-read walkthrough](how-range-reads-work.md)
+animates those rounds.
 
 ## 7. Payload compression
 

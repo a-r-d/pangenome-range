@@ -29,7 +29,8 @@ decompression.
 The root and some first directory pages normally fit in the 16 KiB bootstrap.
 After directory lookup, selected compressed payloads are fetched in one parallel
 round. All file offsets and lengths are unsigned 64-bit values; TypeScript keeps
-them as `bigint`.
+them as `bigint`. The [range-read walkthrough](how-range-reads-work.md) animates
+those three dependency rounds against this layout.
 
 ## Default viewer indexes
 

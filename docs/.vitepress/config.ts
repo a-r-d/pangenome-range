@@ -10,6 +10,7 @@ export default defineConfig({
     nav: [
       { text: "Guide", link: "/" },
       { text: "Demo", link: "/demo" },
+      { text: "How range reads work", link: "/how-range-reads-work" },
       { text: "File Format v1", link: "/FILE_FORMAT_V1" },
       { text: "Architecture", link: "/ARCHITECTURE" },
       { text: "Benchmarks", link: "/BENCHMARKS" },
@@ -20,6 +21,7 @@ export default defineConfig({
         items: [
           { text: "Overview", link: "/" },
           { text: "Demo", link: "/demo" },
+          { text: "How range reads work", link: "/how-range-reads-work" },
           { text: "Hosting", link: "/HOSTING" },
           { text: "Distribution", link: "/DISTRIBUTION" },
           { text: "Architecture", link: "/ARCHITECTURE" },
@@ -32,6 +34,7 @@ export default defineConfig({
         text: "Format and research",
         items: [
           { text: "File Format v1", link: "/FILE_FORMAT_V1" },
+          { text: "How range reads work", link: "/how-range-reads-work" },
           { text: "Fixed-window archive", link: "/FIXED_WINDOW_ARCHIVE" },
           { text: "Format goals", link: "/FORMAT_GOALS" },
           { text: "Research", link: "/RESEARCH" },

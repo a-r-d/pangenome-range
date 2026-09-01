@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
+import { readFile, stat } from "node:fs/promises";
 import test from "node:test";
 import {
   DEFAULT_DEMO_1000G_ARCHIVE_URL,
@@ -22,6 +22,11 @@ const pagesWorkflowUrl = new URL(
 );
 const readmeUrl = new URL("../../README.md", import.meta.url);
 const packageUrl = new URL("../../package.json", import.meta.url);
+const animationUrl = new URL(
+  "../components/RangeReadAnimation.vue",
+  import.meta.url,
+);
+const walkthroughUrl = new URL("../how-range-reads-work.md", import.meta.url);
 
 test("the demo is a single browser shell using public reader and viewer exports", async () => {
   const [shell, browser] = await Promise.all([
@@ -82,6 +87,26 @@ test("the VitePress base path matches the repository Pages path", async () => {
   assert.doesNotMatch(source, /tube-map-lab/);
 });
 
+test("range-read animation teaches the three query rounds", async () => {
+  const [animation, walkthrough, config] = await Promise.all([
+    readFile(animationUrl, "utf8"),
+    readFile(walkthroughUrl, "utf8"),
+    readFile(configUrl, "utf8"),
+  ]);
+  assert.match(animation, /PNGRNG01/);
+  assert.match(animation, /16 KiB bootstrap/);
+  assert.match(animation, /4 KiB/);
+  assert.match(animation, /bucket_span/);
+  assert.match(animation, /__pngrRangeReadAnimation/);
+  assert.match(animation, /Round 3 · payloads/);
+  assert.match(walkthrough, /RangeReadAnimation/);
+  assert.match(walkthrough, /page_offset = first_page_offset/);
+  assert.match(config, /how-range-reads-work/);
+  const gif = new URL("../public/format-range-read.gif", import.meta.url);
+  const info = await stat(gif);
+  assert.ok(info.size > 10_000, "README GIF should be a non-empty animation");
+});
+
 test("Pages defaults to the content-addressed whole-genome demo archive", async () => {
   const source = await readFile(pagesWorkflowUrl, "utf8");
   assert.match(
@@ -115,6 +140,9 @@ test("README leads with the four project parts and useful demo links", async () 
   assert.match(source, /\*\*A TypeScript reader\*\*/);
   assert.match(source, /\*\*A browser viewer\*\*/);
   assert.match(source, /## Why I built this/);
+  assert.match(source, /## How a range query works/);
+  assert.match(source, /docs\/public\/format-range-read\.gif/);
+  assert.match(source, /PNGRNG01/);
   assert.match(source, /https:\/\/github\.com\/a-r-d\/PureJsImage/);
   assert.match(source, /https:\/\/purejsimage\.com\//);
   assert.match(source, /## Live demos/);

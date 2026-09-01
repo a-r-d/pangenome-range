@@ -25,6 +25,18 @@ There are four main pieces:
 - **A TypeScript reader** opens local or remote archives and returns graph data.
 - **A browser viewer** draws the selected region and its local paths.
 
+## How a range query works
+
+![Animation of a .pngr range query: 64-byte header and root, arithmetic 4 KiB directory lookup, then one parallel payload round](docs/public/format-range-read.gif)
+
+A region query is three dependent HTTP rounds against one static file:
+
+1. **Bootstrap** — 16 KiB from offset 0 covers the `PNGRNG01` header and root. The root names each real reference and where its directory pages live.
+2. **Directory** — coordinates map to a 4 KiB page, `page = first + floor((start − grid) / bucket) × 4096`. That page lists payload offsets, lengths, and BLAKE3-128.
+3. **Payloads** — selected tiles are fetched in parallel, decompressed independently, and decoded. The rest of the object is never read.
+
+On the published HPRC demo this is typically 5 range requests and about 74 KB of an 8.8 GB archive. [Interactive version](https://a-r-d.github.io/pangenome-range/how-range-reads-work).
+
 ## Why I built this
 
 This started with recent work I did on

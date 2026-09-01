@@ -9,7 +9,8 @@
     "build": "pnpm fixtures && vitepress build .",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "node --test test/docs.test.mjs",
-    "test:pages": "node test/pages-smoke.mjs"
+    "test:pages": "node test/pages-smoke.mjs",
+    "capture:range-gif": "node scripts/capture-range-read-gif.mjs"
   },
   "dependencies": {
     "pangenome-range": "workspace:*",

@@ -24,6 +24,7 @@ features:
 
 <script setup>
 import PackageVersion from './components/PackageVersion.vue'
+import RangeReadAnimation from './components/RangeReadAnimation.vue'
 </script>
 
 <PackageVersion />
@@ -38,7 +39,18 @@ bounded Canvas 2D viewer are implemented and exercised through exact range
 responses in a built-site Playwright gate. The [demo](./demo.md) also opens
 local files and configurable remote archives.
 
-Start with the [normative file-format v1](./FILE_FORMAT_V1.md), the
+Start with the [range-read walkthrough](./how-range-reads-work.md), the
+[normative file-format v1](./FILE_FORMAT_V1.md), the
 [architecture](./ARCHITECTURE.md), the
 [fixed-window archive description](./FIXED_WINDOW_ARCHIVE.md), and the
 [benchmark definitions](./BENCHMARKS.md).
+
+## How a range query works
+
+A `.pngr` object is laid out so a browser can answer a genomic region with a
+small bootstrap, one arithmetic directory lookup, and one parallel payload
+round. No query server.
+
+<ClientOnly>
+  <RangeReadAnimation />
+</ClientOnly>
