@@ -1,0 +1,32 @@
+README.md
+  h_9f4a25732fa0c1 28-39
+docs/.vitepress/config.ts
+  h_9f4a25732fa0c1 13,24,37
+docs/FILE_FORMAT_V1.md
+  h_9f4a25732fa0c1 538-539
+docs/FIXED_WINDOW_ARCHIVE.md
+  h_9f4a25732fa0c1 32-33
+docs/components/RangeReadAnimation.vue
+  h_9f4a25732fa0c1 1-1174
+docs/how-range-reads-work.md
+  h_9f4a25732fa0c1 1-76
+docs/index.md
+  h_9f4a25732fa0c1 27,42-43,47-56
+docs/package.json
+  h_9f4a25732fa0c1 12-13
+docs/scripts/capture-range-read-gif.mjs
+  h_9f4a25732fa0c1 1-115
+docs/test/docs.test.mjs
+  h_9f4a25732fa0c1 2,25-29,90-109,143-145
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.0",
+  "base_commit_sha": "32838adae0f40e6e1d993f2faa8dc78bb726eb92",
+  "prompts": {},
+  "humans": {
+    "h_9f4a25732fa0c1": {
+      "author": "aaron decker <aaron@ard.ninja>"
+    }
+  }
+}
