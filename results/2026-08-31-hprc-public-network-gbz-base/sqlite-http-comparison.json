@@ -1,0 +1,77 @@
+{
+  "schemaVersion": 1,
+  "status": "loopback SQLite transport complete; public SQLite latency pending explicit publication approval",
+  "workload": {
+    "queryCount": 47,
+    "sha256": "c2a88ba48b0221ed69fc8d7c09c221dedacacf4f2d3a40d44e0faf682aacfaba",
+    "cacheScope": "cold per query"
+  },
+  "objects": {
+    "upstreamSqlite": {
+      "bytes": 10050412544,
+      "sha256": "a5d9a9ec9f4e56f553741de8b5baf9538ef2d7e4a17493f596b145df97c8e8dd",
+      "pathLookupPlan": "SCAN Paths; USE TEMP B-TREE FOR ORDER BY"
+    },
+    "rangeTunedSqlite": {
+      "bytes": 10052300800,
+      "sha256": "5f6d14e12ef4e68ba5823a73f2f93a019f3b8c2b78c8479838defb36fe069fbc",
+      "addedBytes": 1888256,
+      "addedIndexSql": "CREATE INDEX gbz_base_paths_region_lookup ON Paths(sample, contig, haplotype, fragment)",
+      "pathLookupPlan": "SEARCH Paths USING INDEX gbz_base_paths_region_lookup (sample=? AND contig=? AND haplotype=? AND fragment<?)"
+    },
+    "pngr": {
+      "bytes": 10836425558,
+      "sha256": "82585cb612effbf414b1c8f38b049bc415876866168ccc929f9a885f06d97b0a"
+    }
+  },
+  "transportPolicies": {
+    "sqlite": "strict read-only HTTP Range VFS; no-store; stable ETag; 32 MiB byte cache; fresh connection, client, and cache per query",
+    "pngr": "retained public cold-library WASM no-store run; 1 MiB directory cache; 32 MiB compressed-payload cache"
+  },
+  "wholeWorkload": [
+    {
+      "layout": "upstream SQLite",
+      "chunkBytes": 4096,
+      "requests": 40801,
+      "responseBytes": 166928384,
+      "correctQueries": 47
+    },
+    {
+      "layout": "range-tuned SQLite",
+      "chunkBytes": 4096,
+      "requests": 9875,
+      "responseBytes": 40255488,
+      "correctQueries": 47
+    },
+    {
+      "layout": "range-tuned SQLite",
+      "chunkBytes": 65536,
+      "requests": 1249,
+      "responseBytes": 78774272,
+      "correctQueries": 47
+    },
+    {
+      "layout": ".pngr",
+      "chunkBytes": null,
+      "requests": 94,
+      "responseBytes": 18626490,
+      "correctQueries": 47
+    }
+  ],
+  "pngrRelativeToTuned64KiB": {
+    "fewerRequestsFactor": 13.287234042553191,
+    "fewerResponseBytesFactor": 4.22915278187141
+  },
+  "micbChunkSweep": [
+    { "chunkBytes": 4096, "requests": 36, "responseBytes": 143360 },
+    { "chunkBytes": 16384, "requests": 19, "responseBytes": 294912 },
+    { "chunkBytes": 65536, "requests": 15, "responseBytes": 917504 },
+    { "chunkBytes": 262144, "requests": 14, "responseBytes": 3407872 },
+    { "chunkBytes": 1048576, "requests": 12, "responseBytes": 11534336 }
+  ],
+  "limitations": [
+    "SQLite request and byte counts are actual strict loopback HTTP transport, but SQLite latency is not a public-network measurement.",
+    "The formats expose different declared haplotype models and are validated against separate source oracles.",
+    "The fixed-size SQLite fetch sweep is not an adaptive prefetch implementation."
+  ]
+}

@@ -1,0 +1,26 @@
+{
+  "schema_version": 1,
+  "run_started_utc": "2026-09-01T02:17:17Z",
+  "run_finished_utc": "2026-09-01T02:22:02Z",
+  "git_commit": "32838adae0f40e6e1d993f2faa8dc78bb726eb92",
+  "working_tree_note": "The benchmark measurement logic matched the commit. Uncommitted changes were limited to README, benchmark documentation and tests, retained result files, changelog text, and generated-report wording; benchmark construction, query, correctness, and timing code were unchanged.",
+  "os": "Linux 6.17.0-41-generic x86_64 GNU/Linux",
+  "cpu": "Intel(R) Core(TM) i7-10700 CPU @ 2.90GHz",
+  "logical_cpus": 16,
+  "storage": {
+    "device": "/dev/nvme1n1",
+    "filesystem": "xfs",
+    "scope": "source fixture, GBZ-base database, candidate archive, and result files"
+  },
+  "toolchain": {
+    "rustc": "1.97.1 (8bab26f4f 2026-07-14)",
+    "cargo": "1.97.1 (c980f4866 2026-06-30)"
+  },
+  "locked_dependencies": {
+    "gbz": "0.7.0",
+    "gbz-base": "0.6.1",
+    "simple-sds": "0.4.2",
+    "zstd": "0.13.3"
+  },
+  "cache_state": "Uncontrolled warm/mixed operating-system page cache; not a cold-storage measurement."
+}

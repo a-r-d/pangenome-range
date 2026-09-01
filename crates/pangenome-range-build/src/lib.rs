@@ -12,6 +12,8 @@ mod experiment;
 mod features;
 mod fixed;
 mod gbwt_locate;
+#[cfg(feature = "remote-sqlite-benchmark")]
+mod http_sqlite;
 mod local_subgraph;
 mod path_membership;
 mod scale;
@@ -25,15 +27,21 @@ pub use disk_source::{
     inspect_persistent_source_cache, open_persistent_source_cache, prune_persistent_source_cache,
     source_cache_disk_preflight,
 };
-pub use experiment::{ExperimentMode, ExperimentOptions, run_fixed_window_experiment};
+pub use experiment::{
+    ExperimentMode, ExperimentOptions, run_fixed_window_experiment, run_gbz_base_workload_benchmark,
+};
 pub use fixed::{
     ArchiveBuildMetrics, ArchiveBuildOptions, ArchiveValidationSummary, BuildProgressMode,
     ChunkCodec, FixedArchiveConfig, FixedArchiveReader, OracleResult, QueryMeasurement, QuerySpec,
     build_fixed_archive_from_source_with_options, build_fixed_archive_with_options,
-    export_conformance_fixtures, internal_gbz_base_query, query_fixed_archive, source_oracle,
-    source_oracle_for_haplotype, validate_fixed_archive, validate_fixed_archive_with_options,
-    validate_fixed_archive_with_progress,
+    export_conformance_fixtures, internal_build_gbz_base_database, internal_gbz_base_query,
+    query_fixed_archive, source_oracle, source_oracle_for_haplotype, validate_fixed_archive,
+    validate_fixed_archive_with_options, validate_fixed_archive_with_progress,
 };
+#[cfg(feature = "remote-sqlite-benchmark")]
+pub use http_sqlite::run_http_sqlite_workload;
+#[cfg(feature = "remote-sqlite-benchmark")]
+pub use http_sqlite::{HttpSqliteQuery, HttpSqliteQueryReport, run_http_sqlite_query};
 pub use scale::{
     EncodeOptions, EncodeSourceMode, EncodeSummary, EncoderScaleOptions, run_encode,
     run_encoder_scale_experiment,

@@ -4,6 +4,24 @@
 
 ### Changed
 
+- Added an opt-in strict HTTP Range SQLite VFS benchmark and a minimally
+  range-tuned GBZ-base comparator. On the 47-query whole-HPRC workload, `.pngr`
+  used 13.3x fewer requests and 4.23x fewer bytes than the tuned 64 KiB SQLite
+  policy; all retained correctness gates passed.
+- Closed the experiment with a whole-HPRC GBZ-base comparison against the exact
+  10.84 GB `.pngr` served by the public range origin. The fresh 10.05 GB SQLite
+  database build command took 8 minutes 27.40 seconds, including 9.37 seconds
+  of release recompilation, at 12,240,204 KiB peak RSS and zero swaps. GBZ-base
+  won the 1 kb, 10 kb, and 100 kb local medians; `.pngr`
+  crossed ahead at 1 Mb by 1.30x locally and 1.16x over the real public route
+  while fetching a 1.57 MB median in two requests. The named `.pngr` lost
+  storage by 7.8%. All 94 GBZ-base outputs matched source JSON; 47/47 `.pngr`
+  graphs and 730/730 selected haplotype tiles passed the GBZ oracle; all 282
+  Node local/network scenarios passed canonical hashes. The MHC and tiny pinned
+  fixture runs remain qualified local controls rather than the headline. The
+  README now describes the repository as a completed one-week research artifact,
+  states what it proved, names the missing production work, and makes the
+  no-maintenance status explicit.
 - Made archive-wide named-membership construction cancellable and observable, with
   ordered bounded workers, tile/rate/ETA progress, durable HPRC run logs, explicit
   transient-unit cleanup, and a 30-minute default HPRC encode timeout. Disk-backed

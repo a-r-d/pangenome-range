@@ -13,11 +13,16 @@ gbz.workspace = true
 gbz-base.workspace = true
 pangenome-range-format = { version = "0.1.0", path = "../pangenome-range-format" }
 pangenome-range-query = { version = "0.1.0", path = "../pangenome-range-query" }
+reqwest = { workspace = true, optional = true }
 serde.workspace = true
 serde_json.workspace = true
 sha2.workspace = true
 simple-sds.workspace = true
+sqlite-vfs = { workspace = true, optional = true }
 zstd.workspace = true
+
+[features]
+remote-sqlite-benchmark = ["dep:reqwest", "dep:sqlite-vfs"]
 
 [lints]
 workspace = true

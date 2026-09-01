@@ -6,7 +6,7 @@ use super::fixed::{
 use gbz::{FullPathName, GBZ};
 use gbz_base::{GBZBase, GraphInterface, HaplotypeOutput, PathIndex, Subgraph, SubgraphQuery};
 use pangenome_range_format::NetworkProfile;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use serde_json::json;
 use sha2::{Digest, Sha256};
 use simple_sds::serialize;
@@ -511,6 +511,143 @@ pub fn run_fixed_window_experiment(options: &ExperimentOptions) -> ExperimentRes
         process_peak_rss_kib,
     )?;
     eprintln!("retained results in {}", options.results_dir.display());
+    Ok(())
+}
+
+#[derive(Debug, Deserialize)]
+struct ExternalBenchmarkWorkload {
+    #[serde(rename = "archiveSha256")]
+    archive_sha256: String,
+    queries: Vec<QuerySpec>,
+}
+
+/// Runs one checksum-bound coordinate workload against an already constructed
+/// GBZ-base database and checks every JSON subgraph against the source GBZ.
+///
+/// Query timing covers upstream subgraph extraction only; JSON serialization,
+/// hashing, and equality checks are outside the timed section.
+///
+/// # Errors
+///
+/// Returns an error if the workload is invalid, either source cannot be opened,
+/// a query fails, or the retained report cannot be written.
+#[allow(clippy::too_many_lines)]
+pub fn run_gbz_base_workload_benchmark(
+    source_path: &Path,
+    database_path: &Path,
+    workload_path: &Path,
+    output_path: &Path,
+) -> ExperimentResult<()> {
+    let workload_bytes = fs::read(workload_path)?;
+    let workload: ExternalBenchmarkWorkload = serde_json::from_slice(&workload_bytes)?;
+    if workload.queries.is_empty() {
+        return Err(invalid_data("benchmark workload contains no queries").into());
+    }
+    let mut query_ids = BTreeSet::new();
+    for query in &workload.queries {
+        if query.start >= query.end {
+            return Err(invalid_data(format!("query {} has an invalid interval", query.id)).into());
+        }
+        if !query_ids.insert(&query.id) {
+            return Err(invalid_data(format!("duplicate benchmark query id {}", query.id)).into());
+        }
+    }
+
+    eprintln!("loading source GBZ for independent query equality");
+    let source_load_started = Instant::now();
+    let graph: GBZ = serialize::load_from(source_path)?;
+    let path_index = PathIndex::new(&graph, PATH_INDEX_INTERVAL, false)?;
+    let source_load_wall_ms = source_load_started.elapsed().as_secs_f64() * 1_000.0;
+
+    let mut source_hashes = BTreeMap::new();
+    let mut source_query_us = Vec::with_capacity(workload.queries.len());
+    for (index, query) in workload.queries.iter().enumerate() {
+        eprintln!(
+            "source oracle {}/{}: {}",
+            index + 1,
+            workload.queries.len(),
+            query.id
+        );
+        let (output, query_us) = upstream_query_json(&graph, &path_index, query)?;
+        source_query_us.push(query_us);
+        source_hashes.insert(query.id.clone(), format!("{:x}", Sha256::digest(&output)));
+    }
+
+    eprintln!("opening GBZ-base database");
+    let database_open_started = Instant::now();
+    let database = GBZBase::open(database_path)?;
+    let mut interface = GraphInterface::new(&database)?;
+    let database_open_wall_ms = database_open_started.elapsed().as_secs_f64() * 1_000.0;
+
+    let mut rows = Vec::with_capacity(workload.queries.len() * 2);
+    let mut all_correct = true;
+    let mut pass_distributions = BTreeMap::new();
+    for pass in ["first-pass-mixed-os-cache", "second-pass-warm-os-cache"] {
+        let mut query_times = Vec::with_capacity(workload.queries.len());
+        for (index, query) in workload.queries.iter().enumerate() {
+            eprintln!(
+                "{pass} {}/{}: {}",
+                index + 1,
+                workload.queries.len(),
+                query.id
+            );
+            let (output, query_us) = database_query_json(&mut interface, query)?;
+            let output_sha256 = format!("{:x}", Sha256::digest(&output));
+            let source_sha256 = &source_hashes[&query.id];
+            let correctness = output_sha256 == *source_sha256;
+            all_correct &= correctness;
+            query_times.push(query_us);
+            rows.push(json!({
+                "pass": pass,
+                "query_id": query.id,
+                "query_class": query.class,
+                "sample": query.sample,
+                "contig": query.contig,
+                "start": query.start,
+                "end": query.end,
+                "query_size": query.length(),
+                "context": query.context,
+                "query_us": query_us,
+                "source_json_sha256": source_sha256,
+                "database_json_sha256": output_sha256,
+                "correctness": correctness,
+            }));
+        }
+        pass_distributions.insert(pass, distribution(query_times));
+    }
+
+    let summary = json!({
+        "schema_version": 1,
+        "source": {
+            "path": source_path,
+            "bytes": fs::metadata(source_path)?.len(),
+            "load_and_path_index_wall_ms": source_load_wall_ms,
+            "query_us": distribution(source_query_us),
+        },
+        "database": {
+            "path": database_path,
+            "bytes": fs::metadata(database_path)?.len(),
+            "open_wall_ms": database_open_wall_ms,
+            "query_us_by_pass": pass_distributions,
+        },
+        "workload": {
+            "path": workload_path,
+            "sha256": format!("{:x}", Sha256::digest(&workload_bytes)),
+            "archive_sha256": workload.archive_sha256,
+            "query_count": workload.queries.len(),
+        },
+        "timing_scope": "Subgraph::from_db only; database open, JSON serialization, hashing, and source-oracle equality are excluded",
+        "cache_scope": "The database is opened once. Kernel cache state is uncontrolled; the first pass is mixed and the immediately repeated second pass is warm.",
+        "semantics": "GBZ-base path-interval query with workload-declared greedy context, all haplotypes, and no snarls; exact upstream GBZ JSON equality is required",
+        "correctness": {
+            "all_queries_all_passes": all_correct,
+        },
+        "queries": rows,
+    });
+    write_json(output_path, &summary)?;
+    if !all_correct {
+        return Err(invalid_data("GBZ-base workload failed source JSON equality").into());
+    }
     Ok(())
 }
 
@@ -1644,7 +1781,7 @@ fn write_report(
     )?;
     writeln!(
         output,
-        "- GBZ-base remains storage-competitive relative to the materialized candidates at {:.3}x GBZ, but its measured local p95 was {:.1} us and its synchronous SQLite access pattern is poorly matched to static-object range access.",
+        "- GBZ-base remains storage-competitive relative to the range archive at {:.3}x GBZ, but its measured local p95 was {:.1} us and its synchronous SQLite access pattern does not provide the archive's static-object HTTP range behavior.",
         baselines.gbz_base_to_gbz_ratio, baselines.gbz_base_query_us.p95
     )?;
 
@@ -1691,7 +1828,7 @@ fn write_report(
     )?;
     writeln!(
         output,
-        "- This materialized representation does not preserve compressed GBWT records; a GBZ-record-preserving branch remains untested."
+        "- Local query timings used uncontrolled OS page-cache state. They are not cold-storage, browser, or public-network measurements."
     )?;
 
     writeln!(output, "\n## What surprised us\n")?;
@@ -1719,9 +1856,9 @@ fn write_report(
         "{}",
         match options.mode {
             ExperimentMode::FullSweep =>
-                "Run the same retained matrix on one HPRC chromosome, adding a GBZ-record-preserving representation beside this locally materialized encoding. That scale will reveal whether path metadata/halo duplication or decompressed regional materialization is the dominant expansion source, and it enables the required 100 kb, 1 Mb, and 10,000-query workloads.",
+                "If this research resumes, repeat the same current-v1 matrix on a retained chromosome-scale source. That scale can exercise the 100 kb, 1 Mb, and 10,000-query workloads without changing the measured semantics or cache qualifications.",
             ExperimentMode::SingleConfigSmoke =>
-                "Prototype lazy or memory-mapped GBZ source access and repeat the bounded HPRC chr6 pilot. Direct writing is now bounded, while full source deserialization and path-index construction dominate time to first payload and process RSS.",
+                "If this research resumes, repeat this exact current-v1 GBZ-base comparison on a chromosome-scale source. The fixture result is the cheap matched comparison; it is not a projection of chromosome-scale size or latency.",
         }
     )?;
     output.flush()?;

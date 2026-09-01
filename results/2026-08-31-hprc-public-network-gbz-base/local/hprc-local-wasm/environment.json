@@ -1,0 +1,21 @@
+{
+  "schemaVersion": 1,
+  "capturedAt": "2026-09-01T03:11:31.467Z",
+  "gitSha": "32838adae0f40e6e1d993f2faa8dc78bb726eb92",
+  "gitStatus": "M CHANGELOG.md\n M README.md\n M crates/pangenome-range-build/src/experiment.rs\n M crates/pangenome-range-build/src/fixed.rs\n M crates/pangenome-range-build/src/lib.rs\n M crates/pangenome-range-cli/src/main.rs\n M docs/BENCHMARKS.md\n M docs/test/docs.test.mjs\n?? results/2026-08-31-gbz-base-fixture-comparison/\n?? results/2026-08-31-gbz-base-mhc-comparison/\n?? results/2026-08-31-hprc-public-network-gbz-base/",
+  "node": "v24.16.0",
+  "pnpm": "",
+  "platform": "linux 6.17.0-41-generic",
+  "hostname": "apollo",
+  "cpu": "Intel(R) Core(TM) i7-10700 CPU @ 2.90GHz",
+  "logicalCpus": 16,
+  "totalMemoryBytes": 64924504064,
+  "freeMemoryBytesAtStart": 38653530112,
+  "packageVersions": {
+    "benchmark": "0.1.0",
+    "reader": "0.1.0",
+    "playwright": "1.62.1",
+    "wasmZstd": "0.0.27"
+  },
+  "browsers": {}
+}

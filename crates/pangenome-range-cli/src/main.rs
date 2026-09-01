@@ -4,10 +4,13 @@ use pangenome_range_build::{
     BuildProgressMode, ChunkCodec, EncodeOptions, EncodeSourceMode, EncoderScaleOptions,
     ExperimentMode, ExperimentOptions, FixedArchiveConfig, FixedArchiveReader, QueryMeasurement,
     QuerySpec, build_persistent_source_cache, export_conformance_fixtures,
-    inspect_persistent_source_cache, internal_gbz_base_query, prune_persistent_source_cache,
-    run_encode, run_encoder_scale_experiment, run_fixed_window_experiment, source_oracle,
+    inspect_persistent_source_cache, internal_build_gbz_base_database, internal_gbz_base_query,
+    prune_persistent_source_cache, run_encode, run_encoder_scale_experiment,
+    run_fixed_window_experiment, run_gbz_base_workload_benchmark, source_oracle,
     source_oracle_for_haplotype, validate_fixed_archive_with_options,
 };
+#[cfg(feature = "remote-sqlite-benchmark")]
+use pangenome_range_build::{HttpSqliteQuery, run_http_sqlite_query, run_http_sqlite_workload};
 use pangenome_range_format::{
     FileRangeSource, NetworkProfile, RangeSource, TracingRangeSource, ValidationMode,
     ValidationOptions, evaluate_integrity_options,
@@ -55,7 +58,13 @@ fn run(mut args: impl Iterator<Item = String>) -> AppResult<()> {
             benchmark_fixed_windows(&mut args, ExperimentMode::SingleConfigSmoke)
         }
         "benchmark-encoder-scale" => benchmark_encoder_scale(&mut args),
+        "internal-gbz-base-build" => run_internal_gbz_base_build(&mut args),
+        "internal-gbz-base-workload" => run_internal_gbz_base_workload(&mut args),
         "internal-gbz-base-query" => run_internal_gbz_base_query(&mut args),
+        #[cfg(feature = "remote-sqlite-benchmark")]
+        "internal-gbz-base-http-query" => run_internal_gbz_base_http_query(&mut args),
+        #[cfg(feature = "remote-sqlite-benchmark")]
+        "internal-gbz-base-http-workload" => run_internal_gbz_base_http_workload(&mut args),
         "help" | "--help" | "-h" => {
             print_help();
             Ok(())
@@ -1112,4 +1121,87 @@ fn run_internal_gbz_base_query(args: &mut impl Iterator<Item = String>) -> AppRe
         return Err(format!("unexpected argument '{extra}'").into());
     }
     internal_gbz_base_query(&database, &sample, &contig, start, end, context)
+}
+
+#[cfg(feature = "remote-sqlite-benchmark")]
+fn run_internal_gbz_base_http_query(args: &mut impl Iterator<Item = String>) -> AppResult<()> {
+    let url = args.next().ok_or("missing database URL")?;
+    let sample = args.next().ok_or("missing reference sample")?;
+    let contig = args.next().ok_or("missing reference contig")?;
+    let start = args.next().ok_or("missing start")?.parse()?;
+    let end = args.next().ok_or("missing end")?.parse()?;
+    let context = args.next().ok_or("missing context")?.parse()?;
+    let chunk_bytes = args
+        .next()
+        .map(|value| value.parse())
+        .transpose()?
+        .unwrap_or(4096);
+    let cache_bytes = args
+        .next()
+        .map(|value| value.parse())
+        .transpose()?
+        .unwrap_or(32 * 1024 * 1024);
+    if let Some(extra) = args.next() {
+        return Err(format!("unexpected argument '{extra}'").into());
+    }
+    let report = run_http_sqlite_query(&HttpSqliteQuery {
+        url: &url,
+        sample: &sample,
+        contig: &contig,
+        start,
+        end,
+        context,
+        chunk_bytes,
+        cache_bytes,
+    })?;
+    println!("{}", serde_json::to_string_pretty(&report)?);
+    Ok(())
+}
+
+#[cfg(feature = "remote-sqlite-benchmark")]
+fn run_internal_gbz_base_http_workload(args: &mut impl Iterator<Item = String>) -> AppResult<()> {
+    let url = args.next().ok_or("missing database URL")?;
+    let workload = PathBuf::from(args.next().ok_or("missing workload path")?);
+    let oracle = PathBuf::from(args.next().ok_or("missing GBZ-base oracle summary path")?);
+    let output = PathBuf::from(args.next().ok_or("missing output path")?);
+    let chunk_bytes = args
+        .next()
+        .map(|value| value.parse())
+        .transpose()?
+        .unwrap_or(4096);
+    let cache_bytes = args
+        .next()
+        .map(|value| value.parse())
+        .transpose()?
+        .unwrap_or(32 * 1024 * 1024);
+    if let Some(extra) = args.next() {
+        return Err(format!("unexpected argument '{extra}'").into());
+    }
+    run_http_sqlite_workload(&url, &workload, &oracle, &output, chunk_bytes, cache_bytes)?;
+    println!("results: {}", output.display());
+    Ok(())
+}
+
+fn run_internal_gbz_base_build(args: &mut impl Iterator<Item = String>) -> AppResult<()> {
+    let input = PathBuf::from(args.next().ok_or("missing GBZ input path")?);
+    let database = PathBuf::from(args.next().ok_or("missing database output path")?);
+    if let Some(extra) = args.next() {
+        return Err(format!("unexpected argument '{extra}'").into());
+    }
+    internal_build_gbz_base_database(&input, &database)?;
+    println!("database: {}", database.display());
+    Ok(())
+}
+
+fn run_internal_gbz_base_workload(args: &mut impl Iterator<Item = String>) -> AppResult<()> {
+    let source = PathBuf::from(args.next().ok_or("missing GBZ source path")?);
+    let database = PathBuf::from(args.next().ok_or("missing GBZ-base database path")?);
+    let workload = PathBuf::from(args.next().ok_or("missing workload path")?);
+    let output = PathBuf::from(args.next().ok_or("missing report output path")?);
+    if let Some(extra) = args.next() {
+        return Err(format!("unexpected argument '{extra}'").into());
+    }
+    run_gbz_base_workload_benchmark(&source, &database, &workload, &output)?;
+    println!("report: {}", output.display());
+    Ok(())
 }

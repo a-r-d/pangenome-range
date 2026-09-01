@@ -74,6 +74,138 @@ candidate over local positioned reads. When HTTP support exists, serve immutable
 objects from a range-capable origin and distinguish cold CDN, warm CDN, browser
 cache, and origin responses.
 
+## Retained GBZ-base comparison (2026-08-31)
+
+The headline comparison uses the complete 5,492,627,216-byte HPRC v2.1 source
+GBZ, SHA-256
+`11d6047f79575ffb83757462484bad134ed20928bd2c8171ec52e35a54976e2b`.
+A fresh upstream GBZ-base build produced a 10,050,412,544-byte SQLite database.
+The complete command took 8 minutes 27.40 seconds, including 9.37 seconds of
+release recompilation, at 12,240,204 KiB peak RSS and zero swaps. The exact
+published named-membership `.pngr` is 10,836,425,558 bytes with SHA-256
+`82585cb612effbf414b1c8f38b049bc415876866168ccc929f9a885f06d97b0a`.
+It is 7.8% larger than GBZ-base on this corpus.
+
+The checksum-bound workload contains 47 queries: two fixed biological loci,
+five boundary/distance anchors, and ten fixed-seed random intervals at each of
+1 kb, 10 kb, 100 kb, and 1 Mb. GBZ-base ran the workload twice; all 94 outputs
+were exactly equal to independently generated source-GBZ JSON. Rust separately
+verified all 47 `.pngr` canonical graphs and all 730 selected tile-local
+haplotype payloads against the source. Node passed all 188 real public-network
+and 94 local-file scenarios.
+
+| Random interval | GBZ-base local p50 / p95 | `.pngr` local p50 / p95 | `.pngr` public p50 / p95 | Public bytes p50 / p95 |
+| --- | ---: | ---: | ---: | ---: |
+| 1 kb | 6.33 / 998.06 ms | 84.74 / 6,433.98 ms | 384.26 / 6,063.00 ms | 25,847 / 402,128 |
+| 10 kb | 33.54 / 74.94 ms | 140.89 / 314.35 ms | 428.22 / 610.35 ms | 46,117 / 66,191 |
+| 100 kb | 517.71 / 1,992.22 ms | 719.85 / 2,861.75 ms | 1,024.99 / 3,319.19 ms | 196,383 / 481,072 |
+| 1 Mb | 8,617.59 / 15,117.73 ms | 6,652.09 / 13,187.15 ms | 7,397.72 / 14,269.19 ms | 1,570,680 / 2,321,292 |
+
+GBZ-base wins the smaller local classes. At 1 Mb, `.pngr` is 1.30x faster at
+the local median and 1.15x faster at local p95. The real public-range median is
+still 1.16x faster than local GBZ-base while transferring 1.57 MB from the
+10.84 GB object in exactly two actual requests. The public run used Node 24,
+`no-store`, the WASM decoder, a 1 MiB directory cache, and a 32 MiB compressed
+payload cache. It is real HTTP evidence from one host and route, not a browser
+or multi-location CDN benchmark. Each random class has ten queries, so the
+nearest-rank p95 equals the class maximum.
+
+GBZ-base does not ship a static HTTP range VFS, but the retained comparison now
+supplies an opt-in read-only VFS around the unchanged upstream query. The
+range-tuned 10,052,300,800-byte copy adds only
+`Paths(sample, contig, haplotype, fragment)`, increasing size by 1,888,256 bytes
+(0.019%) and removing an otherwise avoidable full `Paths` scan.
+
+Across the 47 cold queries, the tuned SQLite file at the retained 64 KiB fetch
+policy used 1,249 actual HTTP requests and 78,774,272 response bytes. The public
+`.pngr` cold-WASM run used 94 requests and 18,626,490 bytes: 13.3x fewer
+requests and 4.23x fewer bytes. A 4 KiB SQLite policy reduced bytes to
+40,255,488 but required 9,875 requests. All three SQLite runs matched 47/47
+retained source-GBZ JSON hashes. SQLite timings are loopback and are not called
+public-network results; publishing the checksum-bound HPRC-derived databases is
+approval-gated.
+
+The two formats also expose different declared haplotype models, so both are
+checked independently against source semantics rather than falsely described
+as byte-identical outputs. Commands, raw requests, process reports, workload,
+machine-readable comparison, and the full limitations are retained under
+`results/2026-08-31-hprc-public-network-gbz-base/`.
+
+### Medium local control
+
+The closing comparison uses the checked-in 4,511,832-byte `mhc-10.gbz` corpus,
+SHA-256
+`a0b44236852d5659202a6855308020df05efd7c2be90645d341d94fb775df685`.
+The smoke command built a 10,301,440-byte GBZ-base SQLite database and a
+4,807,424-byte current-v1 16 KiB/zstd-3 `.pngr`, then ran 200 deterministic
+queries with 100 bp context: 50 each at 1 kb, 10 kb, 100 kb, and 1 Mb.
+GBZ-base output matched the loaded GBZ. All 1,200 `.pngr` measurements across
+six coalescing settings passed both canonical graph and exact weighted
+tile-local haplotype gates, including 21,546 freshly checked tile payloads.
+
+| Query class | GBZ-base p95 | `.pngr` p95 | `.pngr` relative to GBZ-base |
+| --- | ---: | ---: | ---: |
+| 1 kb | 2.94 ms | 16.05 ms | 5.47x slower |
+| 10 kb | 14.49 ms | 49.02 ms | 3.38x slower |
+| 100 kb | 287.23 ms | 295.08 ms | 1.03x slower |
+| 1 Mb | 1,336.85 ms | 1,171.80 ms | 1.14x faster |
+| Balanced 200-query workload | 1,249.00 ms | 1,069.58 ms | 1.17x faster |
+
+The `.pngr` archive was 53.3% smaller than the GBZ-base database and 6.6%
+larger than the source GBZ. Its p95 fetched bytes were 33,881, 89,591, 413,945,
+and 1,762,610 across the four query-size classes. GBZ-base won small-query local
+latency, the 100 kb class was close, and `.pngr` crossed ahead at 1 Mb. This is
+a measured crossover on a medium fixture, not a projection of chromosome-scale
+performance.
+
+```bash
+cargo run --release -p pangenome-range-cli -- \
+  benchmark-fixed-window-smoke test-data/mhc-10.gbz \
+  2026-08-31-gbz-base-mhc-comparison 50
+```
+
+The complete config, environment, machine-readable summary, raw query table,
+and report are retained under
+`results/2026-08-31-gbz-base-mhc-comparison/`.
+
+### Tiny upstream-fixture control
+
+The tiny control uses the exact 73,920-byte `micb-kir3dl1.gbz` fixture
+published with GBZ-base, SHA-256
+`1d574ede7533150eb87f6837a7763d4eac120aa03f34877392ecdd53b0410788`.
+The smoke command built a 172,032-byte GBZ-base SQLite database and a
+165,052-byte current-v1 16 KiB/zstd-3 `.pngr`, then ran 102 deterministic
+queries with 100 bp context. GBZ-base output matched the loaded GBZ, and all 612
+`.pngr` measurements across six coalescing settings passed both canonical graph
+and exact weighted tile-local haplotype gates.
+
+| Local measurement | GBZ-base | `.pngr` | `.pngr` relative to GBZ-base |
+| --- | ---: | ---: | ---: |
+| Stored bytes | 172,032 | 165,052 | 4.1% smaller |
+| MICB, `GRCh38#chr6:31498145-31511124` | 19.61 ms | 35.19 ms | 1.79x slower |
+| KIR3DL1, `GRCh38#chr19:54816436-54830779` | 67.93 ms | 105.73 ms | 1.56x slower |
+| 102-query p95 | 50.51 ms | 104.62 ms | 2.07x slower |
+
+The `.pngr` MICB and KIR3DL1 queries fetched 37,797 and 52,327 bytes in two
+positioned reads. GBZ-base won local latency; `.pngr` was slightly smaller and
+retained its static-object range contract. Timings used release Rust code with
+uncontrolled OS page-cache state, exclude correctness serialization and
+comparison work, and are not cold-storage, browser, or public-network results.
+The fixture cannot exercise the skipped 100 kb and 1 Mb classes or establish a
+chromosome-scale projection.
+
+```bash
+cargo run --release -p pangenome-range-cli -- \
+  benchmark-fixed-window-smoke test-data/micb-kir3dl1.gbz \
+  2026-08-31-gbz-base-fixture-comparison 50
+```
+
+This tiny run is retained because it uses GBZ-base's own fixture, but fixed
+archive metadata and small-query decoding dominate it. It must not be used as
+the repository's headline performance result. The complete config,
+environment, machine-readable summary, raw query table, and report are under
+`results/2026-08-31-gbz-base-fixture-comparison/`.
+
 ## Experiment modes
 
 For the first run on a multi-gigabyte source, use the encoder-only scale mode:

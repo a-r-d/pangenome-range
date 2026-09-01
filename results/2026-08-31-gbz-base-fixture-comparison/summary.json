@@ -1,0 +1,5199 @@
+{
+  "baseline_query_aggregates": [
+    {
+      "local_query_us": {
+        "count": 102,
+        "max": 42720.043,
+        "mean": 10638.092774509803,
+        "p50": 7769.3859999999995,
+        "p90": 27482.863,
+        "p95": 30158.416,
+        "p99": 34657.92
+      },
+      "query_group": "all",
+      "storage_kind": "gbz"
+    },
+    {
+      "local_query_us": {
+        "count": 1,
+        "max": 42720.043,
+        "mean": 42720.043,
+        "p50": 42720.043,
+        "p90": 42720.043,
+        "p95": 42720.043,
+        "p99": 42720.043
+      },
+      "query_group": "hard-KIR3DL1",
+      "storage_kind": "gbz"
+    },
+    {
+      "local_query_us": {
+        "count": 1,
+        "max": 11789.637,
+        "mean": 11789.637,
+        "p50": 11789.637,
+        "p90": 11789.637,
+        "p95": 11789.637,
+        "p99": 11789.637
+      },
+      "query_group": "hard-MICB",
+      "storage_kind": "gbz"
+    },
+    {
+      "local_query_us": {
+        "count": 50,
+        "max": 5082.608,
+        "mean": 1259.47102,
+        "p50": 612.4989999999999,
+        "p90": 4073.3669999999997,
+        "p95": 4495.119,
+        "p99": 5082.608
+      },
+      "query_group": "random-1000",
+      "storage_kind": "gbz"
+    },
+    {
+      "local_query_us": {
+        "count": 50,
+        "max": 34657.92,
+        "mean": 19352.04464,
+        "p50": 19683.237999999998,
+        "p90": 30158.416,
+        "p95": 31521.270999999997,
+        "p99": 34657.92
+      },
+      "query_group": "random-10000",
+      "storage_kind": "gbz"
+    },
+    {
+      "local_query_us": {
+        "count": 102,
+        "max": 67930.327,
+        "mean": 18624.928803921568,
+        "p50": 14025.163999999999,
+        "p90": 46456.085,
+        "p95": 50511.792,
+        "p99": 58163.854
+      },
+      "query_group": "all",
+      "storage_kind": "gbz-base"
+    },
+    {
+      "local_query_us": {
+        "count": 1,
+        "max": 67930.327,
+        "mean": 67930.327,
+        "p50": 67930.327,
+        "p90": 67930.327,
+        "p95": 67930.327,
+        "p99": 67930.327
+      },
+      "query_group": "hard-KIR3DL1",
+      "storage_kind": "gbz-base"
+    },
+    {
+      "local_query_us": {
+        "count": 1,
+        "max": 19605.016,
+        "mean": 19605.016,
+        "p50": 19605.016,
+        "p90": 19605.016,
+        "p95": 19605.016,
+        "p99": 19605.016
+      },
+      "query_group": "hard-MICB",
+      "storage_kind": "gbz-base"
+    },
+    {
+      "local_query_us": {
+        "count": 50,
+        "max": 11805.721,
+        "mean": 3231.20268,
+        "p50": 1829.3509999999999,
+        "p90": 9219.732,
+        "p95": 10836.396999999999,
+        "p99": 11805.721
+      },
+      "query_group": "random-1000",
+      "storage_kind": "gbz-base"
+    },
+    {
+      "local_query_us": {
+        "count": 50,
+        "max": 58163.854,
+        "mean": 33012.94522,
+        "p50": 33847.893,
+        "p90": 50511.792,
+        "p95": 55727.657999999996,
+        "p99": 58163.854
+      },
+      "query_group": "random-10000",
+      "storage_kind": "gbz-base"
+    }
+  ],
+  "baselines": {
+    "gbz_base_build_wall_ms": 81.461809,
+    "gbz_base_bytes": 172032,
+    "gbz_base_correctness": true,
+    "gbz_base_open_wall_ms": 0.263727,
+    "gbz_base_query_us": {
+      "count": 102,
+      "max": 67930.327,
+      "mean": 18624.928803921568,
+      "p50": 14025.163999999999,
+      "p90": 46456.085,
+      "p95": 50511.792,
+      "p99": 58163.854
+    },
+    "gbz_base_to_gbz_ratio": 2.327272727272727,
+    "gbz_bytes": 73920,
+    "gbz_load_behavior": "The complete compressed GBZ is deserialized before interval queries; cold object access therefore requires the whole object.",
+    "gbz_load_wall_ms": 0.353259,
+    "gbz_query_limitations": "GBZ is the compression oracle, but it is not range-addressable by reference interval in this prototype.",
+    "gbz_query_us": {
+      "count": 102,
+      "max": 42720.043,
+      "mean": 10638.092774509803,
+      "p50": 7769.3859999999995,
+      "p90": 27482.863,
+      "p95": 30158.416,
+      "p99": 34657.92
+    },
+    "sqlite_io_observation": {
+      "bytes_returned": 0,
+      "nonsequential_transitions": 0,
+      "note": "strace child exited with exit status: 1",
+      "observable": false,
+      "page_sized_reads": 0,
+      "pread_calls": 0,
+      "query_id": null,
+      "sqlite_header_checks": 0
+    }
+  },
+  "candidate_archives": [
+    {
+      "build": {
+        "adaptive_splits": 0,
+        "annotation_checksum_wall_ms": 0.0,
+        "annotation_expanded_records": 0,
+        "annotation_feature_rows": 0,
+        "annotation_input_bytes": 0,
+        "annotation_parse_expand_wall_ms": 0.0,
+        "annotation_sort_dedup_wall_ms": 0.0,
+        "archive_bytes": 165052,
+        "archive_validation_wall_ms": 3.755245,
+        "avoidable_compressed_payload_bytes": 0,
+        "compression_wall_ms": 2.0518670000000006,
+        "construction_wall_ms": 34.138169000000005,
+        "deduplicated_entries": 0,
+        "directory_entries": 8,
+        "directory_pages": 4,
+        "duplicate_payload_entries_observed": 0,
+        "expansion_ratio": 2.2328463203463205,
+        "experiment_id": "fixed-w16k-zstd-3",
+        "extension_decoded_bytes": 800,
+        "extension_encoded_bytes": 697,
+        "final_copy_wall_ms": 0.0,
+        "first_payload_wall_ms": 8.305173,
+        "haplotype_extraction_evidence": null,
+        "index_bytes": 16944,
+        "index_ratio": 0.10265855609141361,
+        "largest_rejected_parent_bytes": 0,
+        "local_haplotype_extraction_wall_ms": 0.0,
+        "max_chunk_bytes": 42764,
+        "max_uncompressed_chunk_bytes": 201916,
+        "mean_chunk_bytes": 18426.375,
+        "median_chunk_bytes": 14771,
+        "named_locus_descriptor_encoded_bytes": 0,
+        "named_locus_descriptor_wall_ms": 0.0,
+        "named_locus_page_build_wall_ms": 0.0,
+        "named_locus_page_decoded_bytes": 0,
+        "named_locus_page_encoded_bytes": 0,
+        "named_locus_pages": 0,
+        "named_locus_records": 0,
+        "p95_chunk_bytes": 42764,
+        "path_membership_catalog_pages": 0,
+        "path_membership_catalog_records": 0,
+        "path_membership_delta_groups": 0,
+        "path_membership_descriptor_encoded_bytes": 0,
+        "path_membership_directory_pages": 0,
+        "path_membership_group_unique_path_count_sum": 0,
+        "path_membership_groups": 0,
+        "path_membership_locate_wall_ms": 0.0,
+        "path_membership_located_positions": 0,
+        "path_membership_maximum_lf_steps": 0,
+        "path_membership_memberships": 0,
+        "path_membership_occurrence_total": 0,
+        "path_membership_page_decoded_bytes": 0,
+        "path_membership_page_encoded_bytes": 0,
+        "path_membership_run_groups": 0,
+        "path_membership_tile_pages": 0,
+        "path_occurrence_index_bytes": 0,
+        "path_occurrence_index_wall_ms": 0.0,
+        "payload_bytes": 148108,
+        "payload_pipeline_wall_ms": 17.004087000000002,
+        "payload_spool_bytes": 0,
+        "peak_compressed_chunk_bytes": 42764,
+        "peak_queued_compressed_bytes": 42764,
+        "peak_queued_raw_bytes": 201916,
+        "peak_queued_total_bytes": 244680,
+        "peak_raw_chunk_bytes": 201916,
+        "peak_ready_raw_bytes": 201916,
+        "physical_chunks": 8,
+        "post_materialization_splits": 0,
+        "preflight_selection_wall_ms": 0.0,
+        "preflight_splits": 0,
+        "progress_events_emitted": 0,
+        "reference_bases_processed": 54748,
+        "reference_manifest_discovery_wall_ms": 0.0024980000000000002,
+        "references_processed": 4,
+        "regional_encoding_worker_ms": 1.2523399999999998,
+        "regional_materialization_worker_ms": 3.252563,
+        "root_index_bytes": 464,
+        "scratch_bytes": 0,
+        "scratch_bytes_before_first_payload": 0,
+        "source_gbz_bytes": 73920,
+        "subgraph_selection_worker_ms": 7.490821,
+        "summary_bins": 4,
+        "summary_series": 4,
+        "temporary_file_bytes_before_first_payload": 16944,
+        "temporary_file_peak_bytes": 165052,
+        "total_reference_bases": 54748,
+        "writer_finalization_wall_ms": 2.888032
+      },
+      "config": {
+        "codec": "zstd3",
+        "deduplicate_chunks": false,
+        "experiment_id": "fixed-w16k-zstd-3",
+        "max_uncompressed_chunk_bytes": 8388608,
+        "min_window_size": 1024,
+        "window_size": 16384
+      },
+      "structural_improvement": false
+    }
+  ],
+  "construction": {
+    "path_index_wall_ms": 0.325119,
+    "peak_rss_scope": "whole benchmark process; per-phase RSS is not inferred",
+    "process_peak_rss_kib": 214032,
+    "temporary_disk_bytes_at_completion": 337084
+  },
+  "correctness": {
+    "candidate_all_queries": true,
+    "gbz_base_all_queries": true
+  },
+  "experiment_mode": "single-config-smoke",
+  "fixture_scale_warning": "Results are input-specific. Archive/index behavior must be revalidated at chromosome and whole-genome scale; smoke mode does not establish a new layout winner.",
+  "latency_first_pareto_point": {
+    "archive_bytes": 165052,
+    "expansion_ratio": 2.2328463203463205,
+    "experiment_id": "fixed-w16k-zstd-3",
+    "p95_bytes_fetched": 52327.0,
+    "p95_local_query_us": 104617.768,
+    "p95_physical_reads": 1.0,
+    "p95_simulated_20ms_ms": 21.907466666666668
+  },
+  "pareto_frontier": [
+    {
+      "archive_bytes": 165052,
+      "expansion_ratio": 2.2328463203463205,
+      "experiment_id": "fixed-w16k-zstd-3",
+      "p95_bytes_fetched": 52327.0,
+      "p95_local_query_us": 104617.768,
+      "p95_physical_reads": 1.0,
+      "p95_simulated_20ms_ms": 21.907466666666668
+    }
+  ],
+  "query_aggregates": [
+    {
+      "bytes_fetched": {
+        "count": 102,
+        "max": 52780.0,
+        "mean": 33207.07843137255,
+        "p50": 42136.0,
+        "p90": 51767.0,
+        "p95": 52327.0,
+        "p99": 52780.0
+      },
+      "coalescing_gap": 0,
+      "correctness": true,
+      "decode_us": {
+        "count": 102,
+        "max": 18954.416999999998,
+        "mean": 9337.27287254902,
+        "p50": 12346.842999999999,
+        "p90": 15438.965,
+        "p95": 15995.248,
+        "p99": 16559.891
+      },
+      "decompression_us": {
+        "count": 102,
+        "max": 214.889,
+        "mean": 131.9457647058823,
+        "p50": 158.78,
+        "p90": 207.68800000000002,
+        "p95": 211.252,
+        "p99": 214.663
+      },
+      "directory_page_bytes_fetched": {
+        "count": 102,
+        "max": 560.0,
+        "mean": 5.490196078431373,
+        "p50": 0.0,
+        "p90": 0.0,
+        "p95": 0.0,
+        "p99": 0.0
+      },
+      "directory_page_cache_hits": {
+        "count": 102,
+        "max": 1.0,
+        "mean": 0.9607843137254902,
+        "p50": 1.0,
+        "p90": 1.0,
+        "p95": 1.0,
+        "p99": 1.0
+      },
+      "directory_pages_selected": {
+        "count": 102,
+        "max": 1.0,
+        "mean": 1.0,
+        "p50": 1.0,
+        "p90": 1.0,
+        "p95": 1.0,
+        "p99": 1.0
+      },
+      "experiment_id": "fixed-w16k-zstd-3",
+      "graph_reconstruction_us": {
+        "count": 102,
+        "max": 3310.633,
+        "mean": 1298.8562941176467,
+        "p50": 976.699,
+        "p90": 2673.587,
+        "p95": 2809.895,
+        "p99": 3280.033
+      },
+      "index_lookup_us": {
+        "count": 102,
+        "max": 21.773,
+        "mean": 3.750931372549019,
+        "p50": 3.397,
+        "p90": 4.071,
+        "p95": 4.522,
+        "p99": 17.583000000000002
+      },
+      "local_query_us": {
+        "count": 102,
+        "max": 107807.837,
+        "mean": 63358.65341176473,
+        "p50": 85338.697,
+        "p90": 102969.489,
+        "p95": 103424.153,
+        "p99": 105324.753
+      },
+      "physical_reads": {
+        "count": 102,
+        "max": 2.0,
+        "mean": 1.0196078431372548,
+        "p50": 1.0,
+        "p90": 1.0,
+        "p95": 1.0,
+        "p99": 2.0
+      },
+      "query_group": "all",
+      "read_amplification": {
+        "count": 102,
+        "max": 36.99385425812116,
+        "mean": 9.526600428579401,
+        "p50": 4.678022772456172,
+        "p90": 23.94090909090909,
+        "p95": 33.68185451638689,
+        "p99": 36.60816681146829
+      },
+      "simulated_100ms_ms": {
+        "count": 102,
+        "max": 217.95386666666667,
+        "mean": 112.85522091503285,
+        "p50": 113.23626666666667,
+        "p90": 115.80453333333334,
+        "p95": 116.07466666666667,
+        "p99": 214.07920000000001
+      },
+      "simulated_20ms_ms": {
+        "count": 102,
+        "max": 42.39538666666667,
+        "mean": 21.78748287581703,
+        "p50": 21.623626666666667,
+        "p90": 21.88045333333333,
+        "p95": 21.907466666666668,
+        "p99": 42.00792
+      },
+      "simulated_50ms_ms": {
+        "count": 102,
+        "max": 106.18616,
+        "mean": 54.656566274509736,
+        "p50": 54.37088,
+        "p90": 55.14136,
+        "p95": 55.2224,
+        "p99": 105.02376
+      }
+    },
+    {
+      "bytes_fetched": {
+        "count": 1,
+        "max": 52327.0,
+        "mean": 52327.0,
+        "p50": 52327.0,
+        "p90": 52327.0,
+        "p95": 52327.0,
+        "p99": 52327.0
+      },
+      "coalescing_gap": 0,
+      "correctness": true,
+      "decode_us": {
+        "count": 1,
+        "max": 16031.586,
+        "mean": 16031.586,
+        "p50": 16031.586,
+        "p90": 16031.586,
+        "p95": 16031.586,
+        "p99": 16031.586
+      },
+      "decompression_us": {
+        "count": 1,
+        "max": 206.245,
+        "mean": 206.245,
+        "p50": 206.245,
+        "p90": 206.245,
+        "p95": 206.245,
+        "p99": 206.245
+      },
+      "directory_page_bytes_fetched": {
+        "count": 1,
+        "max": 560.0,
+        "mean": 560.0,
+        "p50": 560.0,
+        "p90": 560.0,
+        "p95": 560.0,
+        "p99": 560.0
+      },
+      "directory_page_cache_hits": {
+        "count": 1,
+        "max": 0.0,
+        "mean": 0.0,
+        "p50": 0.0,
+        "p90": 0.0,
+        "p95": 0.0,
+        "p99": 0.0
+      },
+      "directory_pages_selected": {
+        "count": 1,
+        "max": 1.0,
+        "mean": 1.0,
+        "p50": 1.0,
+        "p90": 1.0,
+        "p95": 1.0,
+        "p99": 1.0
+      },
+      "experiment_id": "fixed-w16k-zstd-3",
+      "graph_reconstruction_us": {
+        "count": 1,
+        "max": 3280.033,
+        "mean": 3280.033,
+        "p50": 3280.033,
+        "p90": 3280.033,
+        "p95": 3280.033,
+        "p99": 3280.033
+      },
+      "index_lookup_us": {
+        "count": 1,
+        "max": 21.773,
+        "mean": 21.773,
+        "p50": 21.773,
+        "p90": 21.773,
+        "p95": 21.773,
+        "p99": 21.773
+      },
+      "local_query_us": {
+        "count": 1,
+        "max": 104520.302,
+        "mean": 104520.302,
+        "p50": 104520.302,
+        "p90": 104520.302,
+        "p95": 104520.302,
+        "p99": 104520.302
+      },
+      "physical_reads": {
+        "count": 1,
+        "max": 2.0,
+        "mean": 2.0,
+        "p50": 2.0,
+        "p90": 2.0,
+        "p95": 2.0,
+        "p99": 2.0
+      },
+      "query_group": "hard-KIR3DL1",
+      "read_amplification": {
+        "count": 1,
+        "max": 2.311671673440537,
+        "mean": 2.311671673440537,
+        "p50": 2.311671673440537,
+        "p90": 2.311671673440537,
+        "p95": 2.311671673440537,
+        "p99": 2.311671673440537
+      },
+      "simulated_100ms_ms": {
+        "count": 1,
+        "max": 217.95386666666667,
+        "mean": 217.95386666666667,
+        "p50": 217.95386666666667,
+        "p90": 217.95386666666667,
+        "p95": 217.95386666666667,
+        "p99": 217.95386666666667
+      },
+      "simulated_20ms_ms": {
+        "count": 1,
+        "max": 42.39538666666667,
+        "mean": 42.39538666666667,
+        "p50": 42.39538666666667,
+        "p90": 42.39538666666667,
+        "p95": 42.39538666666667,
+        "p99": 42.39538666666667
+      },
+      "simulated_50ms_ms": {
+        "count": 1,
+        "max": 106.18616,
+        "mean": 106.18616,
+        "p50": 106.18616,
+        "p90": 106.18616,
+        "p95": 106.18616,
+        "p99": 106.18616
+      }
+    },
+    {
+      "bytes_fetched": {
+        "count": 1,
+        "max": 37797.0,
+        "mean": 37797.0,
+        "p50": 37797.0,
+        "p90": 37797.0,
+        "p95": 37797.0,
+        "p99": 37797.0
+      },
+      "coalescing_gap": 0,
+      "correctness": true,
+      "decode_us": {
+        "count": 1,
+        "max": 5041.376,
+        "mean": 5041.376,
+        "p50": 5041.376,
+        "p90": 5041.376,
+        "p95": 5041.376,
+        "p99": 5041.376
+      },
+      "decompression_us": {
+        "count": 1,
+        "max": 94.156,
+        "mean": 94.156,
+        "p50": 94.156,
+        "p90": 94.156,
+        "p95": 94.156,
+        "p99": 94.156
+      },
+      "directory_page_bytes_fetched": {
+        "count": 1,
+        "max": 0.0,
+        "mean": 0.0,
+        "p50": 0.0,
+        "p90": 0.0,
+        "p95": 0.0,
+        "p99": 0.0
+      },
+      "directory_page_cache_hits": {
+        "count": 1,
+        "max": 0.0,
+        "mean": 0.0,
+        "p50": 0.0,
+        "p90": 0.0,
+        "p95": 0.0,
+        "p99": 0.0
+      },
+      "directory_pages_selected": {
+        "count": 1,
+        "max": 1.0,
+        "mean": 1.0,
+        "p50": 1.0,
+        "p90": 1.0,
+        "p95": 1.0,
+        "p99": 1.0
+      },
+      "experiment_id": "fixed-w16k-zstd-3",
+      "graph_reconstruction_us": {
+        "count": 1,
+        "max": 961.063,
+        "mean": 961.063,
+        "p50": 961.063,
+        "p90": 961.063,
+        "p95": 961.063,
+        "p99": 961.063
+      },
+      "index_lookup_us": {
+        "count": 1,
+        "max": 5.978,
+        "mean": 5.978,
+        "p50": 5.978,
+        "p90": 5.978,
+        "p95": 5.978,
+        "p99": 5.978
+      },
+      "local_query_us": {
+        "count": 1,
+        "max": 36092.195,
+        "mean": 36092.195,
+        "p50": 36092.195,
+        "p90": 36092.195,
+        "p95": 36092.195,
+        "p99": 36092.195
+      },
+      "physical_reads": {
+        "count": 1,
+        "max": 2.0,
+        "mean": 2.0,
+        "p50": 2.0,
+        "p90": 2.0,
+        "p95": 2.0,
+        "p99": 2.0
+      },
+      "query_group": "hard-MICB",
+      "read_amplification": {
+        "count": 1,
+        "max": 3.6179764525701157,
+        "mean": 3.6179764525701157,
+        "p50": 3.6179764525701157,
+        "p90": 3.6179764525701157,
+        "p95": 3.6179764525701157,
+        "p99": 3.6179764525701157
+      },
+      "simulated_100ms_ms": {
+        "count": 1,
+        "max": 214.07920000000001,
+        "mean": 214.07920000000001,
+        "p50": 214.07920000000001,
+        "p90": 214.07920000000001,
+        "p95": 214.07920000000001,
+        "p99": 214.07920000000001
+      },
+      "simulated_20ms_ms": {
+        "count": 1,
+        "max": 42.00792,
+        "mean": 42.00792,
+        "p50": 42.00792,
+        "p90": 42.00792,
+        "p95": 42.00792,
+        "p99": 42.00792
+      },
+      "simulated_50ms_ms": {
+        "count": 1,
+        "max": 105.02376,
+        "mean": 105.02376,
+        "p50": 105.02376,
+        "p90": 105.02376,
+        "p95": 105.02376,
+        "p99": 105.02376
+      }
+    },
+    {
+      "bytes_fetched": {
+        "count": 50,
+        "max": 52780.0,
+        "mean": 25331.88,
+        "p50": 21413.0,
+        "p90": 42764.0,
+        "p95": 42764.0,
+        "p99": 52780.0
+      },
+      "coalescing_gap": 0,
+      "correctness": true,
+      "decode_us": {
+        "count": 50,
+        "max": 16559.891,
+        "mean": 7088.479839999999,
+        "p50": 4534.275,
+        "p90": 13544.225,
+        "p95": 13982.558,
+        "p99": 16559.891
+      },
+      "decompression_us": {
+        "count": 50,
+        "max": 214.663,
+        "mean": 100.36854,
+        "p50": 93.032,
+        "p90": 162.953,
+        "p95": 166.061,
+        "p99": 214.663
+      },
+      "directory_page_bytes_fetched": {
+        "count": 50,
+        "max": 0.0,
+        "mean": 0.0,
+        "p50": 0.0,
+        "p90": 0.0,
+        "p95": 0.0,
+        "p99": 0.0
+      },
+      "directory_page_cache_hits": {
+        "count": 50,
+        "max": 1.0,
+        "mean": 0.96,
+        "p50": 1.0,
+        "p90": 1.0,
+        "p95": 1.0,
+        "p99": 1.0
+      },
+      "directory_pages_selected": {
+        "count": 50,
+        "max": 1.0,
+        "mean": 1.0,
+        "p50": 1.0,
+        "p90": 1.0,
+        "p95": 1.0,
+        "p99": 1.0
+      },
+      "experiment_id": "fixed-w16k-zstd-3",
+      "graph_reconstruction_us": {
+        "count": 50,
+        "max": 1377.71,
+        "mean": 606.8672200000001,
+        "p50": 342.647,
+        "p90": 1284.238,
+        "p95": 1313.6599999999999,
+        "p99": 1377.71
+      },
+      "index_lookup_us": {
+        "count": 50,
+        "max": 17.583000000000002,
+        "mean": 3.668280000000001,
+        "p50": 3.399,
+        "p90": 4.056,
+        "p95": 4.3229999999999995,
+        "p99": 17.583000000000002
+      },
+      "local_query_us": {
+        "count": 50,
+        "max": 107807.837,
+        "mean": 48365.95372,
+        "p50": 32556.283,
+        "p90": 91024.833,
+        "p95": 100357.252,
+        "p99": 107807.837
+      },
+      "physical_reads": {
+        "count": 50,
+        "max": 1.0,
+        "mean": 1.0,
+        "p50": 1.0,
+        "p90": 1.0,
+        "p95": 1.0,
+        "p99": 1.0
+      },
+      "query_group": "random-1000",
+      "read_amplification": {
+        "count": 50,
+        "max": 36.99385425812116,
+        "mean": 16.177516930952912,
+        "p50": 13.264267990074442,
+        "p90": 33.72555205047318,
+        "p95": 36.20999153259949,
+        "p99": 36.99385425812116
+      },
+      "simulated_100ms_ms": {
+        "count": 50,
+        "max": 116.07466666666667,
+        "mean": 108.75516800000005,
+        "p50": 107.71013333333333,
+        "p90": 113.40373333333334,
+        "p95": 113.40373333333334,
+        "p99": 116.07466666666667
+      },
+      "simulated_20ms_ms": {
+        "count": 50,
+        "max": 21.907466666666668,
+        "mean": 21.175516800000004,
+        "p50": 21.071013333333333,
+        "p90": 21.640373333333333,
+        "p95": 21.640373333333333,
+        "p99": 21.907466666666668
+      },
+      "simulated_50ms_ms": {
+        "count": 50,
+        "max": 55.2224,
+        "mean": 53.0265504,
+        "p50": 52.71304,
+        "p90": 54.42112,
+        "p95": 54.42112,
+        "p99": 55.2224
+      }
+    },
+    {
+      "bytes_fetched": {
+        "count": 50,
+        "max": 52780.0,
+        "mean": 40608.08,
+        "p50": 42136.0,
+        "p90": 51767.0,
+        "p95": 52780.0,
+        "p99": 52780.0
+      },
+      "coalescing_gap": 0,
+      "correctness": true,
+      "decode_us": {
+        "count": 50,
+        "max": 18954.416999999998,
+        "mean": 11538.097580000001,
+        "p50": 12803.274,
+        "p90": 15809.812000000002,
+        "p95": 16247.182,
+        "p99": 18954.416999999998
+      },
+      "decompression_us": {
+        "count": 50,
+        "max": 214.889,
+        "mean": 162.79279999999997,
+        "p50": 164.193,
+        "p90": 211.252,
+        "p95": 211.89000000000001,
+        "p99": 214.889
+      },
+      "directory_page_bytes_fetched": {
+        "count": 50,
+        "max": 0.0,
+        "mean": 0.0,
+        "p50": 0.0,
+        "p90": 0.0,
+        "p95": 0.0,
+        "p99": 0.0
+      },
+      "directory_page_cache_hits": {
+        "count": 50,
+        "max": 1.0,
+        "mean": 1.0,
+        "p50": 1.0,
+        "p90": 1.0,
+        "p95": 1.0,
+        "p99": 1.0
+      },
+      "directory_pages_selected": {
+        "count": 50,
+        "max": 1.0,
+        "mean": 1.0,
+        "p50": 1.0,
+        "p90": 1.0,
+        "p95": 1.0,
+        "p99": 1.0
+      },
+      "experiment_id": "fixed-w16k-zstd-3",
+      "graph_reconstruction_us": {
+        "count": 50,
+        "max": 3310.633,
+        "mean": 1957.9777000000004,
+        "p50": 2267.713,
+        "p90": 2809.895,
+        "p95": 2866.188,
+        "p99": 3310.633
+      },
+      "index_lookup_us": {
+        "count": 50,
+        "max": 4.782,
+        "mean": 3.4285999999999994,
+        "p50": 3.394,
+        "p90": 4.071,
+        "p95": 4.322,
+        "p99": 4.782
+      },
+      "local_query_us": {
+        "count": 50,
+        "max": 105324.753,
+        "mean": 78073.4493,
+        "p50": 88479.187,
+        "p90": 103262.39600000001,
+        "p95": 103669.045,
+        "p99": 105324.753
+      },
+      "physical_reads": {
+        "count": 50,
+        "max": 1.0,
+        "mean": 1.0,
+        "p50": 1.0,
+        "p90": 1.0,
+        "p95": 1.0,
+        "p99": 1.0
+      },
+      "query_group": "random-10000",
+      "read_amplification": {
+        "count": 50,
+        "max": 4.678022772456172,
+        "mean": 3.138154980828857,
+        "p50": 3.1201856428183956,
+        "p90": 4.032325907462222,
+        "p95": 4.103281547241598,
+        "p99": 4.678022772456172
+      },
+      "simulated_100ms_ms": {
+        "count": 50,
+        "max": 116.07466666666667,
+        "mean": 112.8288213333333,
+        "p50": 113.23626666666667,
+        "p90": 115.80453333333334,
+        "p95": 116.07466666666667,
+        "p99": 116.07466666666667
+      },
+      "simulated_20ms_ms": {
+        "count": 50,
+        "max": 21.907466666666668,
+        "mean": 21.58288213333333,
+        "p50": 21.623626666666667,
+        "p90": 21.88045333333333,
+        "p95": 21.907466666666668,
+        "p99": 21.907466666666668
+      },
+      "simulated_50ms_ms": {
+        "count": 50,
+        "max": 55.2224,
+        "mean": 54.24864640000003,
+        "p50": 54.37088,
+        "p90": 55.14136,
+        "p95": 55.2224,
+        "p99": 55.2224
+      }
+    },
+    {
+      "bytes_fetched": {
+        "count": 102,
+        "max": 52780.0,
+        "mean": 33207.07843137255,
+        "p50": 42136.0,
+        "p90": 51767.0,
+        "p95": 52327.0,
+        "p99": 52780.0
+      },
+      "coalescing_gap": 4096,
+      "correctness": true,
+      "decode_us": {
+        "count": 102,
+        "max": 17777.261,
+        "mean": 9342.810833333337,
+        "p50": 12430.392,
+        "p90": 15268.686,
+        "p95": 15599.673999999999,
+        "p99": 16417.479
+      },
+      "decompression_us": {
+        "count": 102,
+        "max": 226.13500000000002,
+        "mean": 131.99000980392154,
+        "p50": 158.12800000000001,
+        "p90": 205.793,
+        "p95": 209.234,
+        "p99": 211.95499999999998
+      },
+      "directory_page_bytes_fetched": {
+        "count": 102,
+        "max": 560.0,
+        "mean": 5.490196078431373,
+        "p50": 0.0,
+        "p90": 0.0,
+        "p95": 0.0,
+        "p99": 0.0
+      },
+      "directory_page_cache_hits": {
+        "count": 102,
+        "max": 1.0,
+        "mean": 0.9607843137254902,
+        "p50": 1.0,
+        "p90": 1.0,
+        "p95": 1.0,
+        "p99": 1.0
+      },
+      "directory_pages_selected": {
+        "count": 102,
+        "max": 1.0,
+        "mean": 1.0,
+        "p50": 1.0,
+        "p90": 1.0,
+        "p95": 1.0,
+        "p99": 1.0
+      },
+      "experiment_id": "fixed-w16k-zstd-3",
+      "graph_reconstruction_us": {
+        "count": 102,
+        "max": 3459.831,
+        "mean": 1315.8012745098038,
+        "p50": 1003.887,
+        "p90": 2684.0789999999997,
+        "p95": 2832.3269999999998,
+        "p99": 3114.991
+      },
+      "index_lookup_us": {
+        "count": 102,
+        "max": 24.929000000000002,
+        "mean": 3.7041274509803914,
+        "p50": 3.168,
+        "p90": 4.221,
+        "p95": 4.603,
+        "p99": 18.52
+      },
+      "local_query_us": {
+        "count": 102,
+        "max": 119090.88399999999,
+        "mean": 63776.683480392145,
+        "p50": 86264.60699999999,
+        "p90": 102085.609,
+        "p95": 103920.559,
+        "p99": 112493.164
+      },
+      "physical_reads": {
+        "count": 102,
+        "max": 2.0,
+        "mean": 1.0196078431372548,
+        "p50": 1.0,
+        "p90": 1.0,
+        "p95": 1.0,
+        "p99": 2.0
+      },
+      "query_group": "all",
+      "read_amplification": {
+        "count": 102,
+        "max": 36.99385425812116,
+        "mean": 9.526600428579401,
+        "p50": 4.678022772456172,
+        "p90": 23.94090909090909,
+        "p95": 33.68185451638689,
+        "p99": 36.60816681146829
+      },
+      "simulated_100ms_ms": {
+        "count": 102,
+        "max": 217.95386666666667,
+        "mean": 112.85522091503285,
+        "p50": 113.23626666666667,
+        "p90": 115.80453333333334,
+        "p95": 116.07466666666667,
+        "p99": 214.07920000000001
+      },
+      "simulated_20ms_ms": {
+        "count": 102,
+        "max": 42.39538666666667,
+        "mean": 21.78748287581703,
+        "p50": 21.623626666666667,
+        "p90": 21.88045333333333,
+        "p95": 21.907466666666668,
+        "p99": 42.00792
+      },
+      "simulated_50ms_ms": {
+        "count": 102,
+        "max": 106.18616,
+        "mean": 54.656566274509736,
+        "p50": 54.37088,
+        "p90": 55.14136,
+        "p95": 55.2224,
+        "p99": 105.02376
+      }
+    },
+    {
+      "bytes_fetched": {
+        "count": 1,
+        "max": 52327.0,
+        "mean": 52327.0,
+        "p50": 52327.0,
+        "p90": 52327.0,
+        "p95": 52327.0,
+        "p99": 52327.0
+      },
+      "coalescing_gap": 4096,
+      "correctness": true,
+      "decode_us": {
+        "count": 1,
+        "max": 15268.686,
+        "mean": 15268.686,
+        "p50": 15268.686,
+        "p90": 15268.686,
+        "p95": 15268.686,
+        "p99": 15268.686
+      },
+      "decompression_us": {
+        "count": 1,
+        "max": 201.419,
+        "mean": 201.419,
+        "p50": 201.419,
+        "p90": 201.419,
+        "p95": 201.419,
+        "p99": 201.419
+      },
+      "directory_page_bytes_fetched": {
+        "count": 1,
+        "max": 560.0,
+        "mean": 560.0,
+        "p50": 560.0,
+        "p90": 560.0,
+        "p95": 560.0,
+        "p99": 560.0
+      },
+      "directory_page_cache_hits": {
+        "count": 1,
+        "max": 0.0,
+        "mean": 0.0,
+        "p50": 0.0,
+        "p90": 0.0,
+        "p95": 0.0,
+        "p99": 0.0
+      },
+      "directory_pages_selected": {
+        "count": 1,
+        "max": 1.0,
+        "mean": 1.0,
+        "p50": 1.0,
+        "p90": 1.0,
+        "p95": 1.0,
+        "p99": 1.0
+      },
+      "experiment_id": "fixed-w16k-zstd-3",
+      "graph_reconstruction_us": {
+        "count": 1,
+        "max": 3459.831,
+        "mean": 3459.831,
+        "p50": 3459.831,
+        "p90": 3459.831,
+        "p95": 3459.831,
+        "p99": 3459.831
+      },
+      "index_lookup_us": {
+        "count": 1,
+        "max": 24.929000000000002,
+        "mean": 24.929000000000002,
+        "p50": 24.929000000000002,
+        "p90": 24.929000000000002,
+        "p95": 24.929000000000002,
+        "p99": 24.929000000000002
+      },
+      "local_query_us": {
+        "count": 1,
+        "max": 103847.98700000001,
+        "mean": 103847.98700000001,
+        "p50": 103847.98700000001,
+        "p90": 103847.98700000001,
+        "p95": 103847.98700000001,
+        "p99": 103847.98700000001
+      },
+      "physical_reads": {
+        "count": 1,
+        "max": 2.0,
+        "mean": 2.0,
+        "p50": 2.0,
+        "p90": 2.0,
+        "p95": 2.0,
+        "p99": 2.0
+      },
+      "query_group": "hard-KIR3DL1",
+      "read_amplification": {
+        "count": 1,
+        "max": 2.311671673440537,
+        "mean": 2.311671673440537,
+        "p50": 2.311671673440537,
+        "p90": 2.311671673440537,
+        "p95": 2.311671673440537,
+        "p99": 2.311671673440537
+      },
+      "simulated_100ms_ms": {
+        "count": 1,
+        "max": 217.95386666666667,
+        "mean": 217.95386666666667,
+        "p50": 217.95386666666667,
+        "p90": 217.95386666666667,
+        "p95": 217.95386666666667,
+        "p99": 217.95386666666667
+      },
+      "simulated_20ms_ms": {
+        "count": 1,
+        "max": 42.39538666666667,
+        "mean": 42.39538666666667,
+        "p50": 42.39538666666667,
+        "p90": 42.39538666666667,
+        "p95": 42.39538666666667,
+        "p99": 42.39538666666667
+      },
+      "simulated_50ms_ms": {
+        "count": 1,
+        "max": 106.18616,
+        "mean": 106.18616,
+        "p50": 106.18616,
+        "p90": 106.18616,
+        "p95": 106.18616,
+        "p99": 106.18616
+      }
+    },
+    {
+      "bytes_fetched": {
+        "count": 1,
+        "max": 37797.0,
+        "mean": 37797.0,
+        "p50": 37797.0,
+        "p90": 37797.0,
+        "p95": 37797.0,
+        "p99": 37797.0
+      },
+      "coalescing_gap": 4096,
+      "correctness": true,
+      "decode_us": {
+        "count": 1,
+        "max": 4558.687,
+        "mean": 4558.687,
+        "p50": 4558.687,
+        "p90": 4558.687,
+        "p95": 4558.687,
+        "p99": 4558.687
+      },
+      "decompression_us": {
+        "count": 1,
+        "max": 95.274,
+        "mean": 95.274,
+        "p50": 95.274,
+        "p90": 95.274,
+        "p95": 95.274,
+        "p99": 95.274
+      },
+      "directory_page_bytes_fetched": {
+        "count": 1,
+        "max": 0.0,
+        "mean": 0.0,
+        "p50": 0.0,
+        "p90": 0.0,
+        "p95": 0.0,
+        "p99": 0.0
+      },
+      "directory_page_cache_hits": {
+        "count": 1,
+        "max": 0.0,
+        "mean": 0.0,
+        "p50": 0.0,
+        "p90": 0.0,
+        "p95": 0.0,
+        "p99": 0.0
+      },
+      "directory_pages_selected": {
+        "count": 1,
+        "max": 1.0,
+        "mean": 1.0,
+        "p50": 1.0,
+        "p90": 1.0,
+        "p95": 1.0,
+        "p99": 1.0
+      },
+      "experiment_id": "fixed-w16k-zstd-3",
+      "graph_reconstruction_us": {
+        "count": 1,
+        "max": 965.394,
+        "mean": 965.394,
+        "p50": 965.394,
+        "p90": 965.394,
+        "p95": 965.394,
+        "p99": 965.394
+      },
+      "index_lookup_us": {
+        "count": 1,
+        "max": 5.958,
+        "mean": 5.958,
+        "p50": 5.958,
+        "p90": 5.958,
+        "p95": 5.958,
+        "p99": 5.958
+      },
+      "local_query_us": {
+        "count": 1,
+        "max": 33363.063,
+        "mean": 33363.063,
+        "p50": 33363.063,
+        "p90": 33363.063,
+        "p95": 33363.063,
+        "p99": 33363.063
+      },
+      "physical_reads": {
+        "count": 1,
+        "max": 2.0,
+        "mean": 2.0,
+        "p50": 2.0,
+        "p90": 2.0,
+        "p95": 2.0,
+        "p99": 2.0
+      },
+      "query_group": "hard-MICB",
+      "read_amplification": {
+        "count": 1,
+        "max": 3.6179764525701157,
+        "mean": 3.6179764525701157,
+        "p50": 3.6179764525701157,
+        "p90": 3.6179764525701157,
+        "p95": 3.6179764525701157,
+        "p99": 3.6179764525701157
+      },
+      "simulated_100ms_ms": {
+        "count": 1,
+        "max": 214.07920000000001,
+        "mean": 214.07920000000001,
+        "p50": 214.07920000000001,
+        "p90": 214.07920000000001,
+        "p95": 214.07920000000001,
+        "p99": 214.07920000000001
+      },
+      "simulated_20ms_ms": {
+        "count": 1,
+        "max": 42.00792,
+        "mean": 42.00792,
+        "p50": 42.00792,
+        "p90": 42.00792,
+        "p95": 42.00792,
+        "p99": 42.00792
+      },
+      "simulated_50ms_ms": {
+        "count": 1,
+        "max": 105.02376,
+        "mean": 105.02376,
+        "p50": 105.02376,
+        "p90": 105.02376,
+        "p95": 105.02376,
+        "p99": 105.02376
+      }
+    },
+    {
+      "bytes_fetched": {
+        "count": 50,
+        "max": 52780.0,
+        "mean": 25331.88,
+        "p50": 21413.0,
+        "p90": 42764.0,
+        "p95": 42764.0,
+        "p99": 52780.0
+      },
+      "coalescing_gap": 4096,
+      "correctness": true,
+      "decode_us": {
+        "count": 50,
+        "max": 17777.261,
+        "mean": 7220.879440000001,
+        "p50": 4610.815,
+        "p90": 14019.322,
+        "p95": 14138.846,
+        "p99": 17777.261
+      },
+      "decompression_us": {
+        "count": 50,
+        "max": 211.95499999999998,
+        "mean": 100.66268,
+        "p50": 90.575,
+        "p90": 163.322,
+        "p95": 182.07799999999997,
+        "p99": 211.95499999999998
+      },
+      "directory_page_bytes_fetched": {
+        "count": 50,
+        "max": 0.0,
+        "mean": 0.0,
+        "p50": 0.0,
+        "p90": 0.0,
+        "p95": 0.0,
+        "p99": 0.0
+      },
+      "directory_page_cache_hits": {
+        "count": 50,
+        "max": 1.0,
+        "mean": 0.96,
+        "p50": 1.0,
+        "p90": 1.0,
+        "p95": 1.0,
+        "p99": 1.0
+      },
+      "directory_pages_selected": {
+        "count": 50,
+        "max": 1.0,
+        "mean": 1.0,
+        "p50": 1.0,
+        "p90": 1.0,
+        "p95": 1.0,
+        "p99": 1.0
+      },
+      "experiment_id": "fixed-w16k-zstd-3",
+      "graph_reconstruction_us": {
+        "count": 50,
+        "max": 1408.011,
+        "mean": 629.9618,
+        "p50": 389.96000000000004,
+        "p90": 1299.124,
+        "p95": 1329.088,
+        "p99": 1408.011
+      },
+      "index_lookup_us": {
+        "count": 50,
+        "max": 18.52,
+        "mean": 3.725660000000001,
+        "p50": 3.237,
+        "p90": 4.447,
+        "p95": 9.661,
+        "p99": 18.52
+      },
+      "local_query_us": {
+        "count": 50,
+        "max": 112493.164,
+        "mean": 48900.37086000001,
+        "p50": 32462.114999999998,
+        "p90": 92187.014,
+        "p95": 92620.399,
+        "p99": 112493.164
+      },
+      "physical_reads": {
+        "count": 50,
+        "max": 1.0,
+        "mean": 1.0,
+        "p50": 1.0,
+        "p90": 1.0,
+        "p95": 1.0,
+        "p99": 1.0
+      },
+      "query_group": "random-1000",
+      "read_amplification": {
+        "count": 50,
+        "max": 36.99385425812116,
+        "mean": 16.177516930952912,
+        "p50": 13.264267990074442,
+        "p90": 33.72555205047318,
+        "p95": 36.20999153259949,
+        "p99": 36.99385425812116
+      },
+      "simulated_100ms_ms": {
+        "count": 50,
+        "max": 116.07466666666667,
+        "mean": 108.75516800000005,
+        "p50": 107.71013333333333,
+        "p90": 113.40373333333334,
+        "p95": 113.40373333333334,
+        "p99": 116.07466666666667
+      },
+      "simulated_20ms_ms": {
+        "count": 50,
+        "max": 21.907466666666668,
+        "mean": 21.175516800000004,
+        "p50": 21.071013333333333,
+        "p90": 21.640373333333333,
+        "p95": 21.640373333333333,
+        "p99": 21.907466666666668
+      },
+      "simulated_50ms_ms": {
+        "count": 50,
+        "max": 55.2224,
+        "mean": 53.0265504,
+        "p50": 52.71304,
+        "p90": 54.42112,
+        "p95": 54.42112,
+        "p99": 55.2224
+      }
+    },
+    {
+      "bytes_fetched": {
+        "count": 50,
+        "max": 52780.0,
+        "mean": 40608.08,
+        "p50": 42136.0,
+        "p90": 51767.0,
+        "p95": 52780.0,
+        "p99": 52780.0
+      },
+      "coalescing_gap": 4096,
+      "correctness": true,
+      "decode_us": {
+        "count": 50,
+        "max": 15903.101,
+        "mean": 11441.9072,
+        "p50": 13328.595000000001,
+        "p90": 15503.625999999998,
+        "p95": 15625.252,
+        "p99": 15903.101
+      },
+      "decompression_us": {
+        "count": 50,
+        "max": 226.13500000000002,
+        "mean": 162.66308,
+        "p50": 164.647,
+        "p90": 209.104,
+        "p95": 210.17,
+        "p99": 226.13500000000002
+      },
+      "directory_page_bytes_fetched": {
+        "count": 50,
+        "max": 0.0,
+        "mean": 0.0,
+        "p50": 0.0,
+        "p90": 0.0,
+        "p95": 0.0,
+        "p99": 0.0
+      },
+      "directory_page_cache_hits": {
+        "count": 50,
+        "max": 1.0,
+        "mean": 1.0,
+        "p50": 1.0,
+        "p90": 1.0,
+        "p95": 1.0,
+        "p99": 1.0
+      },
+      "directory_pages_selected": {
+        "count": 50,
+        "max": 1.0,
+        "mean": 1.0,
+        "p50": 1.0,
+        "p90": 1.0,
+        "p95": 1.0,
+        "p99": 1.0
+      },
+      "experiment_id": "fixed-w16k-zstd-3",
+      "graph_reconstruction_us": {
+        "count": 50,
+        "max": 3114.991,
+        "mean": 1965.7683000000002,
+        "p50": 2303.44,
+        "p90": 2832.3269999999998,
+        "p95": 3002.0530000000003,
+        "p99": 3114.991
+      },
+      "index_lookup_us": {
+        "count": 50,
+        "max": 4.603,
+        "mean": 3.2130200000000015,
+        "p50": 3.1420000000000003,
+        "p90": 3.672,
+        "p95": 3.9179999999999997,
+        "p99": 4.603
+      },
+      "local_query_us": {
+        "count": 50,
+        "max": 119090.88399999999,
+        "mean": 78459.84244,
+        "p50": 88660.07400000001,
+        "p90": 103743.361,
+        "p95": 103990.38100000001,
+        "p99": 119090.88399999999
+      },
+      "physical_reads": {
+        "count": 50,
+        "max": 1.0,
+        "mean": 1.0,
+        "p50": 1.0,
+        "p90": 1.0,
+        "p95": 1.0,
+        "p99": 1.0
+      },
+      "query_group": "random-10000",
+      "read_amplification": {
+        "count": 50,
+        "max": 4.678022772456172,
+        "mean": 3.138154980828857,
+        "p50": 3.1201856428183956,
+        "p90": 4.032325907462222,
+        "p95": 4.103281547241598,
+        "p99": 4.678022772456172
+      },
+      "simulated_100ms_ms": {
+        "count": 50,
+        "max": 116.07466666666667,
+        "mean": 112.8288213333333,
+        "p50": 113.23626666666667,
+        "p90": 115.80453333333334,
+        "p95": 116.07466666666667,
+        "p99": 116.07466666666667
+      },
+      "simulated_20ms_ms": {
+        "count": 50,
+        "max": 21.907466666666668,
+        "mean": 21.58288213333333,
+        "p50": 21.623626666666667,
+        "p90": 21.88045333333333,
+        "p95": 21.907466666666668,
+        "p99": 21.907466666666668
+      },
+      "simulated_50ms_ms": {
+        "count": 50,
+        "max": 55.2224,
+        "mean": 54.24864640000003,
+        "p50": 54.37088,
+        "p90": 55.14136,
+        "p95": 55.2224,
+        "p99": 55.2224
+      }
+    },
+    {
+      "bytes_fetched": {
+        "count": 102,
+        "max": 52780.0,
+        "mean": 33207.07843137255,
+        "p50": 42136.0,
+        "p90": 51767.0,
+        "p95": 52327.0,
+        "p99": 52780.0
+      },
+      "coalescing_gap": 16384,
+      "correctness": true,
+      "decode_us": {
+        "count": 102,
+        "max": 18207.541,
+        "mean": 9424.120813725489,
+        "p50": 12433.506000000001,
+        "p90": 15630.622,
+        "p95": 15891.654,
+        "p99": 17179.814
+      },
+      "decompression_us": {
+        "count": 102,
+        "max": 299.769,
+        "mean": 132.83144117647058,
+        "p50": 158.363,
+        "p90": 207.315,
+        "p95": 210.308,
+        "p99": 221.488
+      },
+      "directory_page_bytes_fetched": {
+        "count": 102,
+        "max": 560.0,
+        "mean": 5.490196078431373,
+        "p50": 0.0,
+        "p90": 0.0,
+        "p95": 0.0,
+        "p99": 0.0
+      },
+      "directory_page_cache_hits": {
+        "count": 102,
+        "max": 1.0,
+        "mean": 0.9607843137254902,
+        "p50": 1.0,
+        "p90": 1.0,
+        "p95": 1.0,
+        "p99": 1.0
+      },
+      "directory_pages_selected": {
+        "count": 102,
+        "max": 1.0,
+        "mean": 1.0,
+        "p50": 1.0,
+        "p90": 1.0,
+        "p95": 1.0,
+        "p99": 1.0
+      },
+      "experiment_id": "fixed-w16k-zstd-3",
+      "graph_reconstruction_us": {
+        "count": 102,
+        "max": 3406.307,
+        "mean": 1337.3145686274509,
+        "p50": 1023.749,
+        "p90": 2714.1330000000003,
+        "p95": 2821.5860000000002,
+        "p99": 3175.004
+      },
+      "index_lookup_us": {
+        "count": 102,
+        "max": 26.020000000000003,
+        "mean": 4.0769803921568615,
+        "p50": 3.334,
+        "p90": 8.369000000000002,
+        "p95": 9.729,
+        "p99": 11.745000000000001
+      },
+      "local_query_us": {
+        "count": 102,
+        "max": 113610.35,
+        "mean": 63905.84445098036,
+        "p50": 86380.503,
+        "p90": 104340.816,
+        "p95": 105676.08,
+        "p99": 108355.322
+      },
+      "physical_reads": {
+        "count": 102,
+        "max": 2.0,
+        "mean": 1.0196078431372548,
+        "p50": 1.0,
+        "p90": 1.0,
+        "p95": 1.0,
+        "p99": 2.0
+      },
+      "query_group": "all",
+      "read_amplification": {
+        "count": 102,
+        "max": 36.99385425812116,
+        "mean": 9.526600428579401,
+        "p50": 4.678022772456172,
+        "p90": 23.94090909090909,
+        "p95": 33.68185451638689,
+        "p99": 36.60816681146829
+      },
+      "simulated_100ms_ms": {
+        "count": 102,
+        "max": 217.95386666666667,
+        "mean": 112.85522091503285,
+        "p50": 113.23626666666667,
+        "p90": 115.80453333333334,
+        "p95": 116.07466666666667,
+        "p99": 214.07920000000001
+      },
+      "simulated_20ms_ms": {
+        "count": 102,
+        "max": 42.39538666666667,
+        "mean": 21.78748287581703,
+        "p50": 21.623626666666667,
+        "p90": 21.88045333333333,
+        "p95": 21.907466666666668,
+        "p99": 42.00792
+      },
+      "simulated_50ms_ms": {
+        "count": 102,
+        "max": 106.18616,
+        "mean": 54.656566274509736,
+        "p50": 54.37088,
+        "p90": 55.14136,
+        "p95": 55.2224,
+        "p99": 105.02376
+      }
+    },
+    {
+      "bytes_fetched": {
+        "count": 1,
+        "max": 52327.0,
+        "mean": 52327.0,
+        "p50": 52327.0,
+        "p90": 52327.0,
+        "p95": 52327.0,
+        "p99": 52327.0
+      },
+      "coalescing_gap": 16384,
+      "correctness": true,
+      "decode_us": {
+        "count": 1,
+        "max": 14902.808,
+        "mean": 14902.808,
+        "p50": 14902.808,
+        "p90": 14902.808,
+        "p95": 14902.808,
+        "p99": 14902.808
+      },
+      "decompression_us": {
+        "count": 1,
+        "max": 202.81500000000003,
+        "mean": 202.81500000000003,
+        "p50": 202.81500000000003,
+        "p90": 202.81500000000003,
+        "p95": 202.81500000000003,
+        "p99": 202.81500000000003
+      },
+      "directory_page_bytes_fetched": {
+        "count": 1,
+        "max": 560.0,
+        "mean": 560.0,
+        "p50": 560.0,
+        "p90": 560.0,
+        "p95": 560.0,
+        "p99": 560.0
+      },
+      "directory_page_cache_hits": {
+        "count": 1,
+        "max": 0.0,
+        "mean": 0.0,
+        "p50": 0.0,
+        "p90": 0.0,
+        "p95": 0.0,
+        "p99": 0.0
+      },
+      "directory_pages_selected": {
+        "count": 1,
+        "max": 1.0,
+        "mean": 1.0,
+        "p50": 1.0,
+        "p90": 1.0,
+        "p95": 1.0,
+        "p99": 1.0
+      },
+      "experiment_id": "fixed-w16k-zstd-3",
+      "graph_reconstruction_us": {
+        "count": 1,
+        "max": 3406.307,
+        "mean": 3406.307,
+        "p50": 3406.307,
+        "p90": 3406.307,
+        "p95": 3406.307,
+        "p99": 3406.307
+      },
+      "index_lookup_us": {
+        "count": 1,
+        "max": 26.020000000000003,
+        "mean": 26.020000000000003,
+        "p50": 26.020000000000003,
+        "p90": 26.020000000000003,
+        "p95": 26.020000000000003,
+        "p99": 26.020000000000003
+      },
+      "local_query_us": {
+        "count": 1,
+        "max": 101628.258,
+        "mean": 101628.258,
+        "p50": 101628.258,
+        "p90": 101628.258,
+        "p95": 101628.258,
+        "p99": 101628.258
+      },
+      "physical_reads": {
+        "count": 1,
+        "max": 2.0,
+        "mean": 2.0,
+        "p50": 2.0,
+        "p90": 2.0,
+        "p95": 2.0,
+        "p99": 2.0
+      },
+      "query_group": "hard-KIR3DL1",
+      "read_amplification": {
+        "count": 1,
+        "max": 2.311671673440537,
+        "mean": 2.311671673440537,
+        "p50": 2.311671673440537,
+        "p90": 2.311671673440537,
+        "p95": 2.311671673440537,
+        "p99": 2.311671673440537
+      },
+      "simulated_100ms_ms": {
+        "count": 1,
+        "max": 217.95386666666667,
+        "mean": 217.95386666666667,
+        "p50": 217.95386666666667,
+        "p90": 217.95386666666667,
+        "p95": 217.95386666666667,
+        "p99": 217.95386666666667
+      },
+      "simulated_20ms_ms": {
+        "count": 1,
+        "max": 42.39538666666667,
+        "mean": 42.39538666666667,
+        "p50": 42.39538666666667,
+        "p90": 42.39538666666667,
+        "p95": 42.39538666666667,
+        "p99": 42.39538666666667
+      },
+      "simulated_50ms_ms": {
+        "count": 1,
+        "max": 106.18616,
+        "mean": 106.18616,
+        "p50": 106.18616,
+        "p90": 106.18616,
+        "p95": 106.18616,
+        "p99": 106.18616
+      }
+    },
+    {
+      "bytes_fetched": {
+        "count": 1,
+        "max": 37797.0,
+        "mean": 37797.0,
+        "p50": 37797.0,
+        "p90": 37797.0,
+        "p95": 37797.0,
+        "p99": 37797.0
+      },
+      "coalescing_gap": 16384,
+      "correctness": true,
+      "decode_us": {
+        "count": 1,
+        "max": 4569.963,
+        "mean": 4569.963,
+        "p50": 4569.963,
+        "p90": 4569.963,
+        "p95": 4569.963,
+        "p99": 4569.963
+      },
+      "decompression_us": {
+        "count": 1,
+        "max": 93.17599999999999,
+        "mean": 93.17599999999999,
+        "p50": 93.17599999999999,
+        "p90": 93.17599999999999,
+        "p95": 93.17599999999999,
+        "p99": 93.17599999999999
+      },
+      "directory_page_bytes_fetched": {
+        "count": 1,
+        "max": 0.0,
+        "mean": 0.0,
+        "p50": 0.0,
+        "p90": 0.0,
+        "p95": 0.0,
+        "p99": 0.0
+      },
+      "directory_page_cache_hits": {
+        "count": 1,
+        "max": 0.0,
+        "mean": 0.0,
+        "p50": 0.0,
+        "p90": 0.0,
+        "p95": 0.0,
+        "p99": 0.0
+      },
+      "directory_pages_selected": {
+        "count": 1,
+        "max": 1.0,
+        "mean": 1.0,
+        "p50": 1.0,
+        "p90": 1.0,
+        "p95": 1.0,
+        "p99": 1.0
+      },
+      "experiment_id": "fixed-w16k-zstd-3",
+      "graph_reconstruction_us": {
+        "count": 1,
+        "max": 966.587,
+        "mean": 966.587,
+        "p50": 966.587,
+        "p90": 966.587,
+        "p95": 966.587,
+        "p99": 966.587
+      },
+      "index_lookup_us": {
+        "count": 1,
+        "max": 5.647,
+        "mean": 5.647,
+        "p50": 5.647,
+        "p90": 5.647,
+        "p95": 5.647,
+        "p99": 5.647
+      },
+      "local_query_us": {
+        "count": 1,
+        "max": 33151.288,
+        "mean": 33151.288,
+        "p50": 33151.288,
+        "p90": 33151.288,
+        "p95": 33151.288,
+        "p99": 33151.288
+      },
+      "physical_reads": {
+        "count": 1,
+        "max": 2.0,
+        "mean": 2.0,
+        "p50": 2.0,
+        "p90": 2.0,
+        "p95": 2.0,
+        "p99": 2.0
+      },
+      "query_group": "hard-MICB",
+      "read_amplification": {
+        "count": 1,
+        "max": 3.6179764525701157,
+        "mean": 3.6179764525701157,
+        "p50": 3.6179764525701157,
+        "p90": 3.6179764525701157,
+        "p95": 3.6179764525701157,
+        "p99": 3.6179764525701157
+      },
+      "simulated_100ms_ms": {
+        "count": 1,
+        "max": 214.07920000000001,
+        "mean": 214.07920000000001,
+        "p50": 214.07920000000001,
+        "p90": 214.07920000000001,
+        "p95": 214.07920000000001,
+        "p99": 214.07920000000001
+      },
+      "simulated_20ms_ms": {
+        "count": 1,
+        "max": 42.00792,
+        "mean": 42.00792,
+        "p50": 42.00792,
+        "p90": 42.00792,
+        "p95": 42.00792,
+        "p99": 42.00792
+      },
+      "simulated_50ms_ms": {
+        "count": 1,
+        "max": 105.02376,
+        "mean": 105.02376,
+        "p50": 105.02376,
+        "p90": 105.02376,
+        "p95": 105.02376,
+        "p99": 105.02376
+      }
+    },
+    {
+      "bytes_fetched": {
+        "count": 50,
+        "max": 52780.0,
+        "mean": 25331.88,
+        "p50": 21413.0,
+        "p90": 42764.0,
+        "p95": 42764.0,
+        "p99": 52780.0
+      },
+      "coalescing_gap": 16384,
+      "correctness": true,
+      "decode_us": {
+        "count": 50,
+        "max": 17179.814,
+        "mean": 7155.87334,
+        "p50": 4552.19,
+        "p90": 13758.377,
+        "p95": 13816.177000000001,
+        "p99": 17179.814
+      },
+      "decompression_us": {
+        "count": 50,
+        "max": 214.953,
+        "mean": 100.0835,
+        "p50": 93.432,
+        "p90": 162.69,
+        "p95": 163.173,
+        "p99": 214.953
+      },
+      "directory_page_bytes_fetched": {
+        "count": 50,
+        "max": 0.0,
+        "mean": 0.0,
+        "p50": 0.0,
+        "p90": 0.0,
+        "p95": 0.0,
+        "p99": 0.0
+      },
+      "directory_page_cache_hits": {
+        "count": 50,
+        "max": 1.0,
+        "mean": 0.96,
+        "p50": 1.0,
+        "p90": 1.0,
+        "p95": 1.0,
+        "p99": 1.0
+      },
+      "directory_pages_selected": {
+        "count": 50,
+        "max": 1.0,
+        "mean": 1.0,
+        "p50": 1.0,
+        "p90": 1.0,
+        "p95": 1.0,
+        "p99": 1.0
+      },
+      "experiment_id": "fixed-w16k-zstd-3",
+      "graph_reconstruction_us": {
+        "count": 50,
+        "max": 1454.65,
+        "mean": 628.9214200000001,
+        "p50": 356.41200000000003,
+        "p90": 1281.0059999999999,
+        "p95": 1395.189,
+        "p99": 1454.65
+      },
+      "index_lookup_us": {
+        "count": 50,
+        "max": 11.745000000000001,
+        "mean": 4.31634,
+        "p50": 3.349,
+        "p90": 9.729,
+        "p95": 11.094999999999999,
+        "p99": 11.745000000000001
+      },
+      "local_query_us": {
+        "count": 50,
+        "max": 104340.816,
+        "mean": 48481.503720000015,
+        "p50": 32567.613,
+        "p90": 90778.167,
+        "p95": 91352.17700000001,
+        "p99": 104340.816
+      },
+      "physical_reads": {
+        "count": 50,
+        "max": 1.0,
+        "mean": 1.0,
+        "p50": 1.0,
+        "p90": 1.0,
+        "p95": 1.0,
+        "p99": 1.0
+      },
+      "query_group": "random-1000",
+      "read_amplification": {
+        "count": 50,
+        "max": 36.99385425812116,
+        "mean": 16.177516930952912,
+        "p50": 13.264267990074442,
+        "p90": 33.72555205047318,
+        "p95": 36.20999153259949,
+        "p99": 36.99385425812116
+      },
+      "simulated_100ms_ms": {
+        "count": 50,
+        "max": 116.07466666666667,
+        "mean": 108.75516800000005,
+        "p50": 107.71013333333333,
+        "p90": 113.40373333333334,
+        "p95": 113.40373333333334,
+        "p99": 116.07466666666667
+      },
+      "simulated_20ms_ms": {
+        "count": 50,
+        "max": 21.907466666666668,
+        "mean": 21.175516800000004,
+        "p50": 21.071013333333333,
+        "p90": 21.640373333333333,
+        "p95": 21.640373333333333,
+        "p99": 21.907466666666668
+      },
+      "simulated_50ms_ms": {
+        "count": 50,
+        "max": 55.2224,
+        "mean": 53.0265504,
+        "p50": 52.71304,
+        "p90": 54.42112,
+        "p95": 54.42112,
+        "p99": 55.2224
+      }
+    },
+    {
+      "bytes_fetched": {
+        "count": 50,
+        "max": 52780.0,
+        "mean": 40608.08,
+        "p50": 42136.0,
+        "p90": 51767.0,
+        "p95": 52780.0,
+        "p99": 52780.0
+      },
+      "coalescing_gap": 16384,
+      "correctness": true,
+      "decode_us": {
+        "count": 50,
+        "max": 18207.541,
+        "mean": 11679.877700000003,
+        "p50": 13869.378,
+        "p90": 15891.654,
+        "p95": 16105.949,
+        "p99": 18207.541
+      },
+      "decompression_us": {
+        "count": 50,
+        "max": 299.769,
+        "mean": 164.97282000000004,
+        "p50": 162.329,
+        "p90": 210.308,
+        "p95": 211.484,
+        "p99": 299.769
+      },
+      "directory_page_bytes_fetched": {
+        "count": 50,
+        "max": 0.0,
+        "mean": 0.0,
+        "p50": 0.0,
+        "p90": 0.0,
+        "p95": 0.0,
+        "p99": 0.0
+      },
+      "directory_page_cache_hits": {
+        "count": 50,
+        "max": 1.0,
+        "mean": 1.0,
+        "p50": 1.0,
+        "p90": 1.0,
+        "p95": 1.0,
+        "p99": 1.0
+      },
+      "directory_pages_selected": {
+        "count": 50,
+        "max": 1.0,
+        "mean": 1.0,
+        "p50": 1.0,
+        "p90": 1.0,
+        "p95": 1.0,
+        "p99": 1.0
+      },
+      "experiment_id": "fixed-w16k-zstd-3",
+      "graph_reconstruction_us": {
+        "count": 50,
+        "max": 3175.004,
+        "mean": 2011.7424199999996,
+        "p50": 2375.277,
+        "p90": 2821.5860000000002,
+        "p95": 2885.65,
+        "p99": 3175.004
+      },
+      "index_lookup_us": {
+        "count": 50,
+        "max": 4.053,
+        "mean": 3.3673599999999997,
+        "p50": 3.3280000000000003,
+        "p90": 3.9519999999999995,
+        "p95": 4.001,
+        "p99": 4.053
+      },
+      "local_query_us": {
+        "count": 50,
+        "max": 113610.35,
+        "mean": 79190.82804000001,
+        "p50": 91701.022,
+        "p90": 105885.5,
+        "p95": 107395.382,
+        "p99": 113610.35
+      },
+      "physical_reads": {
+        "count": 50,
+        "max": 1.0,
+        "mean": 1.0,
+        "p50": 1.0,
+        "p90": 1.0,
+        "p95": 1.0,
+        "p99": 1.0
+      },
+      "query_group": "random-10000",
+      "read_amplification": {
+        "count": 50,
+        "max": 4.678022772456172,
+        "mean": 3.138154980828857,
+        "p50": 3.1201856428183956,
+        "p90": 4.032325907462222,
+        "p95": 4.103281547241598,
+        "p99": 4.678022772456172
+      },
+      "simulated_100ms_ms": {
+        "count": 50,
+        "max": 116.07466666666667,
+        "mean": 112.8288213333333,
+        "p50": 113.23626666666667,
+        "p90": 115.80453333333334,
+        "p95": 116.07466666666667,
+        "p99": 116.07466666666667
+      },
+      "simulated_20ms_ms": {
+        "count": 50,
+        "max": 21.907466666666668,
+        "mean": 21.58288213333333,
+        "p50": 21.623626666666667,
+        "p90": 21.88045333333333,
+        "p95": 21.907466666666668,
+        "p99": 21.907466666666668
+      },
+      "simulated_50ms_ms": {
+        "count": 50,
+        "max": 55.2224,
+        "mean": 54.24864640000003,
+        "p50": 54.37088,
+        "p90": 55.14136,
+        "p95": 55.2224,
+        "p99": 55.2224
+      }
+    },
+    {
+      "bytes_fetched": {
+        "count": 102,
+        "max": 52780.0,
+        "mean": 33207.07843137255,
+        "p50": 42136.0,
+        "p90": 51767.0,
+        "p95": 52327.0,
+        "p99": 52780.0
+      },
+      "coalescing_gap": 65536,
+      "correctness": true,
+      "decode_us": {
+        "count": 102,
+        "max": 16389.252,
+        "mean": 9590.486303921567,
+        "p50": 12706.627999999999,
+        "p90": 16003.059000000001,
+        "p95": 16226.355000000001,
+        "p99": 16315.785
+      },
+      "decompression_us": {
+        "count": 102,
+        "max": 247.242,
+        "mean": 134.23328431372548,
+        "p50": 158.005,
+        "p90": 206.73200000000003,
+        "p95": 210.502,
+        "p99": 217.677
+      },
+      "directory_page_bytes_fetched": {
+        "count": 102,
+        "max": 560.0,
+        "mean": 5.490196078431373,
+        "p50": 0.0,
+        "p90": 0.0,
+        "p95": 0.0,
+        "p99": 0.0
+      },
+      "directory_page_cache_hits": {
+        "count": 102,
+        "max": 1.0,
+        "mean": 0.9607843137254902,
+        "p50": 1.0,
+        "p90": 1.0,
+        "p95": 1.0,
+        "p99": 1.0
+      },
+      "directory_pages_selected": {
+        "count": 102,
+        "max": 1.0,
+        "mean": 1.0,
+        "p50": 1.0,
+        "p90": 1.0,
+        "p95": 1.0,
+        "p99": 1.0
+      },
+      "experiment_id": "fixed-w16k-zstd-3",
+      "graph_reconstruction_us": {
+        "count": 102,
+        "max": 3853.243,
+        "mean": 1368.107274509804,
+        "p50": 1034.903,
+        "p90": 2709.013,
+        "p95": 3031.393,
+        "p99": 3359.451
+      },
+      "index_lookup_us": {
+        "count": 102,
+        "max": 16.74,
+        "mean": 3.810460784313726,
+        "p50": 3.239,
+        "p90": 4.333,
+        "p95": 8.087000000000002,
+        "p99": 14.538
+      },
+      "local_query_us": {
+        "count": 102,
+        "max": 108853.75,
+        "mean": 65021.07196078434,
+        "p50": 88592.855,
+        "p90": 104217.60200000001,
+        "p95": 104617.768,
+        "p99": 106295.604
+      },
+      "physical_reads": {
+        "count": 102,
+        "max": 2.0,
+        "mean": 1.0196078431372548,
+        "p50": 1.0,
+        "p90": 1.0,
+        "p95": 1.0,
+        "p99": 2.0
+      },
+      "query_group": "all",
+      "read_amplification": {
+        "count": 102,
+        "max": 36.99385425812116,
+        "mean": 9.526600428579401,
+        "p50": 4.678022772456172,
+        "p90": 23.94090909090909,
+        "p95": 33.68185451638689,
+        "p99": 36.60816681146829
+      },
+      "simulated_100ms_ms": {
+        "count": 102,
+        "max": 217.95386666666667,
+        "mean": 112.85522091503285,
+        "p50": 113.23626666666667,
+        "p90": 115.80453333333334,
+        "p95": 116.07466666666667,
+        "p99": 214.07920000000001
+      },
+      "simulated_20ms_ms": {
+        "count": 102,
+        "max": 42.39538666666667,
+        "mean": 21.78748287581703,
+        "p50": 21.623626666666667,
+        "p90": 21.88045333333333,
+        "p95": 21.907466666666668,
+        "p99": 42.00792
+      },
+      "simulated_50ms_ms": {
+        "count": 102,
+        "max": 106.18616,
+        "mean": 54.656566274509736,
+        "p50": 54.37088,
+        "p90": 55.14136,
+        "p95": 55.2224,
+        "p99": 105.02376
+      }
+    },
+    {
+      "bytes_fetched": {
+        "count": 1,
+        "max": 52327.0,
+        "mean": 52327.0,
+        "p50": 52327.0,
+        "p90": 52327.0,
+        "p95": 52327.0,
+        "p99": 52327.0
+      },
+      "coalescing_gap": 65536,
+      "correctness": true,
+      "decode_us": {
+        "count": 1,
+        "max": 15628.229,
+        "mean": 15628.229,
+        "p50": 15628.229,
+        "p90": 15628.229,
+        "p95": 15628.229,
+        "p99": 15628.229
+      },
+      "decompression_us": {
+        "count": 1,
+        "max": 202.935,
+        "mean": 202.935,
+        "p50": 202.935,
+        "p90": 202.935,
+        "p95": 202.935,
+        "p99": 202.935
+      },
+      "directory_page_bytes_fetched": {
+        "count": 1,
+        "max": 560.0,
+        "mean": 560.0,
+        "p50": 560.0,
+        "p90": 560.0,
+        "p95": 560.0,
+        "p99": 560.0
+      },
+      "directory_page_cache_hits": {
+        "count": 1,
+        "max": 0.0,
+        "mean": 0.0,
+        "p50": 0.0,
+        "p90": 0.0,
+        "p95": 0.0,
+        "p99": 0.0
+      },
+      "directory_pages_selected": {
+        "count": 1,
+        "max": 1.0,
+        "mean": 1.0,
+        "p50": 1.0,
+        "p90": 1.0,
+        "p95": 1.0,
+        "p99": 1.0
+      },
+      "experiment_id": "fixed-w16k-zstd-3",
+      "graph_reconstruction_us": {
+        "count": 1,
+        "max": 3853.243,
+        "mean": 3853.243,
+        "p50": 3853.243,
+        "p90": 3853.243,
+        "p95": 3853.243,
+        "p99": 3853.243
+      },
+      "index_lookup_us": {
+        "count": 1,
+        "max": 13.254000000000001,
+        "mean": 13.254000000000001,
+        "p50": 13.254000000000001,
+        "p90": 13.254000000000001,
+        "p95": 13.254000000000001,
+        "p99": 13.254000000000001
+      },
+      "local_query_us": {
+        "count": 1,
+        "max": 105728.72899999999,
+        "mean": 105728.72899999999,
+        "p50": 105728.72899999999,
+        "p90": 105728.72899999999,
+        "p95": 105728.72899999999,
+        "p99": 105728.72899999999
+      },
+      "physical_reads": {
+        "count": 1,
+        "max": 2.0,
+        "mean": 2.0,
+        "p50": 2.0,
+        "p90": 2.0,
+        "p95": 2.0,
+        "p99": 2.0
+      },
+      "query_group": "hard-KIR3DL1",
+      "read_amplification": {
+        "count": 1,
+        "max": 2.311671673440537,
+        "mean": 2.311671673440537,
+        "p50": 2.311671673440537,
+        "p90": 2.311671673440537,
+        "p95": 2.311671673440537,
+        "p99": 2.311671673440537
+      },
+      "simulated_100ms_ms": {
+        "count": 1,
+        "max": 217.95386666666667,
+        "mean": 217.95386666666667,
+        "p50": 217.95386666666667,
+        "p90": 217.95386666666667,
+        "p95": 217.95386666666667,
+        "p99": 217.95386666666667
+      },
+      "simulated_20ms_ms": {
+        "count": 1,
+        "max": 42.39538666666667,
+        "mean": 42.39538666666667,
+        "p50": 42.39538666666667,
+        "p90": 42.39538666666667,
+        "p95": 42.39538666666667,
+        "p99": 42.39538666666667
+      },
+      "simulated_50ms_ms": {
+        "count": 1,
+        "max": 106.18616,
+        "mean": 106.18616,
+        "p50": 106.18616,
+        "p90": 106.18616,
+        "p95": 106.18616,
+        "p99": 106.18616
+      }
+    },
+    {
+      "bytes_fetched": {
+        "count": 1,
+        "max": 37797.0,
+        "mean": 37797.0,
+        "p50": 37797.0,
+        "p90": 37797.0,
+        "p95": 37797.0,
+        "p99": 37797.0
+      },
+      "coalescing_gap": 65536,
+      "correctness": true,
+      "decode_us": {
+        "count": 1,
+        "max": 4986.989,
+        "mean": 4986.989,
+        "p50": 4986.989,
+        "p90": 4986.989,
+        "p95": 4986.989,
+        "p99": 4986.989
+      },
+      "decompression_us": {
+        "count": 1,
+        "max": 124.981,
+        "mean": 124.981,
+        "p50": 124.981,
+        "p90": 124.981,
+        "p95": 124.981,
+        "p99": 124.981
+      },
+      "directory_page_bytes_fetched": {
+        "count": 1,
+        "max": 0.0,
+        "mean": 0.0,
+        "p50": 0.0,
+        "p90": 0.0,
+        "p95": 0.0,
+        "p99": 0.0
+      },
+      "directory_page_cache_hits": {
+        "count": 1,
+        "max": 0.0,
+        "mean": 0.0,
+        "p50": 0.0,
+        "p90": 0.0,
+        "p95": 0.0,
+        "p99": 0.0
+      },
+      "directory_pages_selected": {
+        "count": 1,
+        "max": 1.0,
+        "mean": 1.0,
+        "p50": 1.0,
+        "p90": 1.0,
+        "p95": 1.0,
+        "p99": 1.0
+      },
+      "experiment_id": "fixed-w16k-zstd-3",
+      "graph_reconstruction_us": {
+        "count": 1,
+        "max": 971.175,
+        "mean": 971.175,
+        "p50": 971.175,
+        "p90": 971.175,
+        "p95": 971.175,
+        "p99": 971.175
+      },
+      "index_lookup_us": {
+        "count": 1,
+        "max": 7.734999999999999,
+        "mean": 7.734999999999999,
+        "p50": 7.734999999999999,
+        "p90": 7.734999999999999,
+        "p95": 7.734999999999999,
+        "p99": 7.734999999999999
+      },
+      "local_query_us": {
+        "count": 1,
+        "max": 35187.378,
+        "mean": 35187.378,
+        "p50": 35187.378,
+        "p90": 35187.378,
+        "p95": 35187.378,
+        "p99": 35187.378
+      },
+      "physical_reads": {
+        "count": 1,
+        "max": 2.0,
+        "mean": 2.0,
+        "p50": 2.0,
+        "p90": 2.0,
+        "p95": 2.0,
+        "p99": 2.0
+      },
+      "query_group": "hard-MICB",
+      "read_amplification": {
+        "count": 1,
+        "max": 3.6179764525701157,
+        "mean": 3.6179764525701157,
+        "p50": 3.6179764525701157,
+        "p90": 3.6179764525701157,
+        "p95": 3.6179764525701157,
+        "p99": 3.6179764525701157
+      },
+      "simulated_100ms_ms": {
+        "count": 1,
+        "max": 214.07920000000001,
+        "mean": 214.07920000000001,
+        "p50": 214.07920000000001,
+        "p90": 214.07920000000001,
+        "p95": 214.07920000000001,
+        "p99": 214.07920000000001
+      },
+      "simulated_20ms_ms": {
+        "count": 1,
+        "max": 42.00792,
+        "mean": 42.00792,
+        "p50": 42.00792,
+        "p90": 42.00792,
+        "p95": 42.00792,
+        "p99": 42.00792
+      },
+      "simulated_50ms_ms": {
+        "count": 1,
+        "max": 105.02376,
+        "mean": 105.02376,
+        "p50": 105.02376,
+        "p90": 105.02376,
+        "p95": 105.02376,
+        "p99": 105.02376
+      }
+    },
+    {
+      "bytes_fetched": {
+        "count": 50,
+        "max": 52780.0,
+        "mean": 25331.88,
+        "p50": 21413.0,
+        "p90": 42764.0,
+        "p95": 42764.0,
+        "p99": 52780.0
+      },
+      "coalescing_gap": 65536,
+      "correctness": true,
+      "decode_us": {
+        "count": 50,
+        "max": 16238.524,
+        "mean": 7369.0378200000005,
+        "p50": 4578.385,
+        "p90": 14342.548,
+        "p95": 15357.706,
+        "p99": 16238.524
+      },
+      "decompression_us": {
+        "count": 50,
+        "max": 247.242,
+        "mean": 103.26242,
+        "p50": 91.09,
+        "p90": 164.962,
+        "p95": 210.502,
+        "p99": 247.242
+      },
+      "directory_page_bytes_fetched": {
+        "count": 50,
+        "max": 0.0,
+        "mean": 0.0,
+        "p50": 0.0,
+        "p90": 0.0,
+        "p95": 0.0,
+        "p99": 0.0
+      },
+      "directory_page_cache_hits": {
+        "count": 50,
+        "max": 1.0,
+        "mean": 0.96,
+        "p50": 1.0,
+        "p90": 1.0,
+        "p95": 1.0,
+        "p99": 1.0
+      },
+      "directory_pages_selected": {
+        "count": 50,
+        "max": 1.0,
+        "mean": 1.0,
+        "p50": 1.0,
+        "p90": 1.0,
+        "p95": 1.0,
+        "p99": 1.0
+      },
+      "experiment_id": "fixed-w16k-zstd-3",
+      "graph_reconstruction_us": {
+        "count": 50,
+        "max": 1601.385,
+        "mean": 652.3666799999999,
+        "p50": 368.04900000000004,
+        "p90": 1378.2569999999998,
+        "p95": 1399.333,
+        "p99": 1601.385
+      },
+      "index_lookup_us": {
+        "count": 50,
+        "max": 16.74,
+        "mean": 4.0594600000000005,
+        "p50": 3.171,
+        "p90": 8.087000000000002,
+        "p95": 13.037,
+        "p99": 16.74
+      },
+      "local_query_us": {
+        "count": 50,
+        "max": 104250.212,
+        "mean": 49801.57634,
+        "p50": 33060.159,
+        "p90": 94233.988,
+        "p95": 95021.287,
+        "p99": 104250.212
+      },
+      "physical_reads": {
+        "count": 50,
+        "max": 1.0,
+        "mean": 1.0,
+        "p50": 1.0,
+        "p90": 1.0,
+        "p95": 1.0,
+        "p99": 1.0
+      },
+      "query_group": "random-1000",
+      "read_amplification": {
+        "count": 50,
+        "max": 36.99385425812116,
+        "mean": 16.177516930952912,
+        "p50": 13.264267990074442,
+        "p90": 33.72555205047318,
+        "p95": 36.20999153259949,
+        "p99": 36.99385425812116
+      },
+      "simulated_100ms_ms": {
+        "count": 50,
+        "max": 116.07466666666667,
+        "mean": 108.75516800000005,
+        "p50": 107.71013333333333,
+        "p90": 113.40373333333334,
+        "p95": 113.40373333333334,
+        "p99": 116.07466666666667
+      },
+      "simulated_20ms_ms": {
+        "count": 50,
+        "max": 21.907466666666668,
+        "mean": 21.175516800000004,
+        "p50": 21.071013333333333,
+        "p90": 21.640373333333333,
+        "p95": 21.640373333333333,
+        "p99": 21.907466666666668
+      },
+      "simulated_50ms_ms": {
+        "count": 50,
+        "max": 55.2224,
+        "mean": 53.0265504,
+        "p50": 52.71304,
+        "p90": 54.42112,
+        "p95": 54.42112,
+        "p99": 55.2224
+      }
+    },
+    {
+      "bytes_fetched": {
+        "count": 50,
+        "max": 52780.0,
+        "mean": 40608.08,
+        "p50": 42136.0,
+        "p90": 51767.0,
+        "p95": 52780.0,
+        "p99": 52780.0
+      },
+      "coalescing_gap": 65536,
+      "correctness": true,
+      "decode_us": {
+        "count": 50,
+        "max": 16389.252,
+        "mean": 11783.24988,
+        "p50": 13351.036,
+        "p90": 16226.355000000001,
+        "p95": 16249.157,
+        "p99": 16389.252
+      },
+      "decompression_us": {
+        "count": 50,
+        "max": 214.195,
+        "mean": 164.01516,
+        "p50": 200.401,
+        "p90": 210.168,
+        "p95": 210.779,
+        "p99": 214.195
+      },
+      "directory_page_bytes_fetched": {
+        "count": 50,
+        "max": 0.0,
+        "mean": 0.0,
+        "p50": 0.0,
+        "p90": 0.0,
+        "p95": 0.0,
+        "p99": 0.0
+      },
+      "directory_page_cache_hits": {
+        "count": 50,
+        "max": 1.0,
+        "mean": 1.0,
+        "p50": 1.0,
+        "p90": 1.0,
+        "p95": 1.0,
+        "p99": 1.0
+      },
+      "directory_pages_selected": {
+        "count": 50,
+        "max": 1.0,
+        "mean": 1.0,
+        "p50": 1.0,
+        "p90": 1.0,
+        "p95": 1.0,
+        "p99": 1.0
+      },
+      "experiment_id": "fixed-w16k-zstd-3",
+      "graph_reconstruction_us": {
+        "count": 50,
+        "max": 3359.451,
+        "mean": 2042.0838000000006,
+        "p50": 2402.485,
+        "p90": 3031.393,
+        "p95": 3116.211,
+        "p99": 3359.451
+      },
+      "index_lookup_us": {
+        "count": 50,
+        "max": 5.789,
+        "mean": 3.294099999999999,
+        "p50": 3.256,
+        "p90": 3.9709999999999996,
+        "p95": 4.122,
+        "p99": 5.789
+      },
+      "local_query_us": {
+        "count": 50,
+        "max": 108853.75,
+        "mean": 80023.08831999998,
+        "p50": 98495.037,
+        "p90": 104617.768,
+        "p95": 106157.199,
+        "p99": 108853.75
+      },
+      "physical_reads": {
+        "count": 50,
+        "max": 1.0,
+        "mean": 1.0,
+        "p50": 1.0,
+        "p90": 1.0,
+        "p95": 1.0,
+        "p99": 1.0
+      },
+      "query_group": "random-10000",
+      "read_amplification": {
+        "count": 50,
+        "max": 4.678022772456172,
+        "mean": 3.138154980828857,
+        "p50": 3.1201856428183956,
+        "p90": 4.032325907462222,
+        "p95": 4.103281547241598,
+        "p99": 4.678022772456172
+      },
+      "simulated_100ms_ms": {
+        "count": 50,
+        "max": 116.07466666666667,
+        "mean": 112.8288213333333,
+        "p50": 113.23626666666667,
+        "p90": 115.80453333333334,
+        "p95": 116.07466666666667,
+        "p99": 116.07466666666667
+      },
+      "simulated_20ms_ms": {
+        "count": 50,
+        "max": 21.907466666666668,
+        "mean": 21.58288213333333,
+        "p50": 21.623626666666667,
+        "p90": 21.88045333333333,
+        "p95": 21.907466666666668,
+        "p99": 21.907466666666668
+      },
+      "simulated_50ms_ms": {
+        "count": 50,
+        "max": 55.2224,
+        "mean": 54.24864640000003,
+        "p50": 54.37088,
+        "p90": 55.14136,
+        "p95": 55.2224,
+        "p99": 55.2224
+      }
+    },
+    {
+      "bytes_fetched": {
+        "count": 102,
+        "max": 52780.0,
+        "mean": 33207.07843137255,
+        "p50": 42136.0,
+        "p90": 51767.0,
+        "p95": 52327.0,
+        "p99": 52780.0
+      },
+      "coalescing_gap": 262144,
+      "correctness": true,
+      "decode_us": {
+        "count": 102,
+        "max": 16445.635000000002,
+        "mean": 9451.810323529411,
+        "p50": 12595.913999999999,
+        "p90": 15398.392,
+        "p95": 15564.015,
+        "p99": 16164.365999999998
+      },
+      "decompression_us": {
+        "count": 102,
+        "max": 220.139,
+        "mean": 133.64342156862742,
+        "p50": 158.49099999999999,
+        "p90": 208.533,
+        "p95": 210.588,
+        "p99": 219.517
+      },
+      "directory_page_bytes_fetched": {
+        "count": 102,
+        "max": 560.0,
+        "mean": 5.490196078431373,
+        "p50": 0.0,
+        "p90": 0.0,
+        "p95": 0.0,
+        "p99": 0.0
+      },
+      "directory_page_cache_hits": {
+        "count": 102,
+        "max": 1.0,
+        "mean": 0.9607843137254902,
+        "p50": 1.0,
+        "p90": 1.0,
+        "p95": 1.0,
+        "p99": 1.0
+      },
+      "directory_pages_selected": {
+        "count": 102,
+        "max": 1.0,
+        "mean": 1.0,
+        "p50": 1.0,
+        "p90": 1.0,
+        "p95": 1.0,
+        "p99": 1.0
+      },
+      "experiment_id": "fixed-w16k-zstd-3",
+      "graph_reconstruction_us": {
+        "count": 102,
+        "max": 3409.407,
+        "mean": 1334.4436960784312,
+        "p50": 1028.713,
+        "p90": 2707.1259999999997,
+        "p95": 2835.036,
+        "p99": 3214.77
+      },
+      "index_lookup_us": {
+        "count": 102,
+        "max": 31.619999999999997,
+        "mean": 3.9402843137254897,
+        "p50": 3.291,
+        "p90": 4.174,
+        "p95": 8.91,
+        "p99": 17.099
+      },
+      "local_query_us": {
+        "count": 102,
+        "max": 105531.994,
+        "mean": 64165.19095098039,
+        "p50": 87268.523,
+        "p90": 102815.947,
+        "p95": 103390.108,
+        "p99": 104807.03199999999
+      },
+      "physical_reads": {
+        "count": 102,
+        "max": 2.0,
+        "mean": 1.0196078431372548,
+        "p50": 1.0,
+        "p90": 1.0,
+        "p95": 1.0,
+        "p99": 2.0
+      },
+      "query_group": "all",
+      "read_amplification": {
+        "count": 102,
+        "max": 36.99385425812116,
+        "mean": 9.526600428579401,
+        "p50": 4.678022772456172,
+        "p90": 23.94090909090909,
+        "p95": 33.68185451638689,
+        "p99": 36.60816681146829
+      },
+      "simulated_100ms_ms": {
+        "count": 102,
+        "max": 217.95386666666667,
+        "mean": 112.85522091503285,
+        "p50": 113.23626666666667,
+        "p90": 115.80453333333334,
+        "p95": 116.07466666666667,
+        "p99": 214.07920000000001
+      },
+      "simulated_20ms_ms": {
+        "count": 102,
+        "max": 42.39538666666667,
+        "mean": 21.78748287581703,
+        "p50": 21.623626666666667,
+        "p90": 21.88045333333333,
+        "p95": 21.907466666666668,
+        "p99": 42.00792
+      },
+      "simulated_50ms_ms": {
+        "count": 102,
+        "max": 106.18616,
+        "mean": 54.656566274509736,
+        "p50": 54.37088,
+        "p90": 55.14136,
+        "p95": 55.2224,
+        "p99": 105.02376
+      }
+    },
+    {
+      "bytes_fetched": {
+        "count": 1,
+        "max": 52327.0,
+        "mean": 52327.0,
+        "p50": 52327.0,
+        "p90": 52327.0,
+        "p95": 52327.0,
+        "p99": 52327.0
+      },
+      "coalescing_gap": 262144,
+      "correctness": true,
+      "decode_us": {
+        "count": 1,
+        "max": 14843.383,
+        "mean": 14843.383,
+        "p50": 14843.383,
+        "p90": 14843.383,
+        "p95": 14843.383,
+        "p99": 14843.383
+      },
+      "decompression_us": {
+        "count": 1,
+        "max": 203.277,
+        "mean": 203.277,
+        "p50": 203.277,
+        "p90": 203.277,
+        "p95": 203.277,
+        "p99": 203.277
+      },
+      "directory_page_bytes_fetched": {
+        "count": 1,
+        "max": 560.0,
+        "mean": 560.0,
+        "p50": 560.0,
+        "p90": 560.0,
+        "p95": 560.0,
+        "p99": 560.0
+      },
+      "directory_page_cache_hits": {
+        "count": 1,
+        "max": 0.0,
+        "mean": 0.0,
+        "p50": 0.0,
+        "p90": 0.0,
+        "p95": 0.0,
+        "p99": 0.0
+      },
+      "directory_pages_selected": {
+        "count": 1,
+        "max": 1.0,
+        "mean": 1.0,
+        "p50": 1.0,
+        "p90": 1.0,
+        "p95": 1.0,
+        "p99": 1.0
+      },
+      "experiment_id": "fixed-w16k-zstd-3",
+      "graph_reconstruction_us": {
+        "count": 1,
+        "max": 3409.407,
+        "mean": 3409.407,
+        "p50": 3409.407,
+        "p90": 3409.407,
+        "p95": 3409.407,
+        "p99": 3409.407
+      },
+      "index_lookup_us": {
+        "count": 1,
+        "max": 31.619999999999997,
+        "mean": 31.619999999999997,
+        "p50": 31.619999999999997,
+        "p90": 31.619999999999997,
+        "p95": 31.619999999999997,
+        "p99": 31.619999999999997
+      },
+      "local_query_us": {
+        "count": 1,
+        "max": 102815.947,
+        "mean": 102815.947,
+        "p50": 102815.947,
+        "p90": 102815.947,
+        "p95": 102815.947,
+        "p99": 102815.947
+      },
+      "physical_reads": {
+        "count": 1,
+        "max": 2.0,
+        "mean": 2.0,
+        "p50": 2.0,
+        "p90": 2.0,
+        "p95": 2.0,
+        "p99": 2.0
+      },
+      "query_group": "hard-KIR3DL1",
+      "read_amplification": {
+        "count": 1,
+        "max": 2.311671673440537,
+        "mean": 2.311671673440537,
+        "p50": 2.311671673440537,
+        "p90": 2.311671673440537,
+        "p95": 2.311671673440537,
+        "p99": 2.311671673440537
+      },
+      "simulated_100ms_ms": {
+        "count": 1,
+        "max": 217.95386666666667,
+        "mean": 217.95386666666667,
+        "p50": 217.95386666666667,
+        "p90": 217.95386666666667,
+        "p95": 217.95386666666667,
+        "p99": 217.95386666666667
+      },
+      "simulated_20ms_ms": {
+        "count": 1,
+        "max": 42.39538666666667,
+        "mean": 42.39538666666667,
+        "p50": 42.39538666666667,
+        "p90": 42.39538666666667,
+        "p95": 42.39538666666667,
+        "p99": 42.39538666666667
+      },
+      "simulated_50ms_ms": {
+        "count": 1,
+        "max": 106.18616,
+        "mean": 106.18616,
+        "p50": 106.18616,
+        "p90": 106.18616,
+        "p95": 106.18616,
+        "p99": 106.18616
+      }
+    },
+    {
+      "bytes_fetched": {
+        "count": 1,
+        "max": 37797.0,
+        "mean": 37797.0,
+        "p50": 37797.0,
+        "p90": 37797.0,
+        "p95": 37797.0,
+        "p99": 37797.0
+      },
+      "coalescing_gap": 262144,
+      "correctness": true,
+      "decode_us": {
+        "count": 1,
+        "max": 4600.669,
+        "mean": 4600.669,
+        "p50": 4600.669,
+        "p90": 4600.669,
+        "p95": 4600.669,
+        "p99": 4600.669
+      },
+      "decompression_us": {
+        "count": 1,
+        "max": 124.15,
+        "mean": 124.15,
+        "p50": 124.15,
+        "p90": 124.15,
+        "p95": 124.15,
+        "p99": 124.15
+      },
+      "directory_page_bytes_fetched": {
+        "count": 1,
+        "max": 0.0,
+        "mean": 0.0,
+        "p50": 0.0,
+        "p90": 0.0,
+        "p95": 0.0,
+        "p99": 0.0
+      },
+      "directory_page_cache_hits": {
+        "count": 1,
+        "max": 0.0,
+        "mean": 0.0,
+        "p50": 0.0,
+        "p90": 0.0,
+        "p95": 0.0,
+        "p99": 0.0
+      },
+      "directory_pages_selected": {
+        "count": 1,
+        "max": 1.0,
+        "mean": 1.0,
+        "p50": 1.0,
+        "p90": 1.0,
+        "p95": 1.0,
+        "p99": 1.0
+      },
+      "experiment_id": "fixed-w16k-zstd-3",
+      "graph_reconstruction_us": {
+        "count": 1,
+        "max": 981.2099999999999,
+        "mean": 981.2099999999999,
+        "p50": 981.2099999999999,
+        "p90": 981.2099999999999,
+        "p95": 981.2099999999999,
+        "p99": 981.2099999999999
+      },
+      "index_lookup_us": {
+        "count": 1,
+        "max": 8.91,
+        "mean": 8.91,
+        "p50": 8.91,
+        "p90": 8.91,
+        "p95": 8.91,
+        "p99": 8.91
+      },
+      "local_query_us": {
+        "count": 1,
+        "max": 33802.512,
+        "mean": 33802.512,
+        "p50": 33802.512,
+        "p90": 33802.512,
+        "p95": 33802.512,
+        "p99": 33802.512
+      },
+      "physical_reads": {
+        "count": 1,
+        "max": 2.0,
+        "mean": 2.0,
+        "p50": 2.0,
+        "p90": 2.0,
+        "p95": 2.0,
+        "p99": 2.0
+      },
+      "query_group": "hard-MICB",
+      "read_amplification": {
+        "count": 1,
+        "max": 3.6179764525701157,
+        "mean": 3.6179764525701157,
+        "p50": 3.6179764525701157,
+        "p90": 3.6179764525701157,
+        "p95": 3.6179764525701157,
+        "p99": 3.6179764525701157
+      },
+      "simulated_100ms_ms": {
+        "count": 1,
+        "max": 214.07920000000001,
+        "mean": 214.07920000000001,
+        "p50": 214.07920000000001,
+        "p90": 214.07920000000001,
+        "p95": 214.07920000000001,
+        "p99": 214.07920000000001
+      },
+      "simulated_20ms_ms": {
+        "count": 1,
+        "max": 42.00792,
+        "mean": 42.00792,
+        "p50": 42.00792,
+        "p90": 42.00792,
+        "p95": 42.00792,
+        "p99": 42.00792
+      },
+      "simulated_50ms_ms": {
+        "count": 1,
+        "max": 105.02376,
+        "mean": 105.02376,
+        "p50": 105.02376,
+        "p90": 105.02376,
+        "p95": 105.02376,
+        "p99": 105.02376
+      }
+    },
+    {
+      "bytes_fetched": {
+        "count": 50,
+        "max": 52780.0,
+        "mean": 25331.88,
+        "p50": 21413.0,
+        "p90": 42764.0,
+        "p95": 42764.0,
+        "p99": 52780.0
+      },
+      "coalescing_gap": 262144,
+      "correctness": true,
+      "decode_us": {
+        "count": 50,
+        "max": 16164.365999999998,
+        "mean": 7203.92104,
+        "p50": 4585.765,
+        "p90": 13918.672,
+        "p95": 14495.153,
+        "p99": 16164.365999999998
+      },
+      "decompression_us": {
+        "count": 50,
+        "max": 210.588,
+        "mean": 102.30390000000001,
+        "p50": 93.28999999999999,
+        "p90": 166.84,
+        "p95": 208.533,
+        "p99": 210.588
+      },
+      "directory_page_bytes_fetched": {
+        "count": 50,
+        "max": 0.0,
+        "mean": 0.0,
+        "p50": 0.0,
+        "p90": 0.0,
+        "p95": 0.0,
+        "p99": 0.0
+      },
+      "directory_page_cache_hits": {
+        "count": 50,
+        "max": 1.0,
+        "mean": 0.96,
+        "p50": 1.0,
+        "p90": 1.0,
+        "p95": 1.0,
+        "p99": 1.0
+      },
+      "directory_pages_selected": {
+        "count": 50,
+        "max": 1.0,
+        "mean": 1.0,
+        "p50": 1.0,
+        "p90": 1.0,
+        "p95": 1.0,
+        "p99": 1.0
+      },
+      "experiment_id": "fixed-w16k-zstd-3",
+      "graph_reconstruction_us": {
+        "count": 50,
+        "max": 1429.537,
+        "mean": 640.61724,
+        "p50": 378.84700000000004,
+        "p90": 1291.5349999999999,
+        "p95": 1392.5739999999998,
+        "p99": 1429.537
+      },
+      "index_lookup_us": {
+        "count": 50,
+        "max": 17.099,
+        "mean": 3.8098600000000005,
+        "p50": 3.267,
+        "p90": 4.7330000000000005,
+        "p95": 11.104000000000001,
+        "p99": 17.099
+      },
+      "local_query_us": {
+        "count": 50,
+        "max": 103652.818,
+        "mean": 48924.316920000005,
+        "p50": 33204.957,
+        "p90": 91686.877,
+        "p95": 92927.685,
+        "p99": 103652.818
+      },
+      "physical_reads": {
+        "count": 50,
+        "max": 1.0,
+        "mean": 1.0,
+        "p50": 1.0,
+        "p90": 1.0,
+        "p95": 1.0,
+        "p99": 1.0
+      },
+      "query_group": "random-1000",
+      "read_amplification": {
+        "count": 50,
+        "max": 36.99385425812116,
+        "mean": 16.177516930952912,
+        "p50": 13.264267990074442,
+        "p90": 33.72555205047318,
+        "p95": 36.20999153259949,
+        "p99": 36.99385425812116
+      },
+      "simulated_100ms_ms": {
+        "count": 50,
+        "max": 116.07466666666667,
+        "mean": 108.75516800000005,
+        "p50": 107.71013333333333,
+        "p90": 113.40373333333334,
+        "p95": 113.40373333333334,
+        "p99": 116.07466666666667
+      },
+      "simulated_20ms_ms": {
+        "count": 50,
+        "max": 21.907466666666668,
+        "mean": 21.175516800000004,
+        "p50": 21.071013333333333,
+        "p90": 21.640373333333333,
+        "p95": 21.640373333333333,
+        "p99": 21.907466666666668
+      },
+      "simulated_50ms_ms": {
+        "count": 50,
+        "max": 55.2224,
+        "mean": 53.0265504,
+        "p50": 52.71304,
+        "p90": 54.42112,
+        "p95": 54.42112,
+        "p99": 55.2224
+      }
+    },
+    {
+      "bytes_fetched": {
+        "count": 50,
+        "max": 52780.0,
+        "mean": 40608.08,
+        "p50": 42136.0,
+        "p90": 51767.0,
+        "p95": 52780.0,
+        "p99": 52780.0
+      },
+      "coalescing_gap": 262144,
+      "correctness": true,
+      "decode_us": {
+        "count": 50,
+        "max": 16445.635000000002,
+        "mean": 11688.89098,
+        "p50": 14469.998,
+        "p90": 15564.015,
+        "p95": 15696.404,
+        "p99": 16445.635000000002
+      },
+      "decompression_us": {
+        "count": 50,
+        "max": 220.139,
+        "mean": 163.78014,
+        "p50": 201.15200000000002,
+        "p90": 211.441,
+        "p95": 214.194,
+        "p99": 220.139
+      },
+      "directory_page_bytes_fetched": {
+        "count": 50,
+        "max": 0.0,
+        "mean": 0.0,
+        "p50": 0.0,
+        "p90": 0.0,
+        "p95": 0.0,
+        "p99": 0.0
+      },
+      "directory_page_cache_hits": {
+        "count": 50,
+        "max": 1.0,
+        "mean": 1.0,
+        "p50": 1.0,
+        "p90": 1.0,
+        "p95": 1.0,
+        "p99": 1.0
+      },
+      "directory_pages_selected": {
+        "count": 50,
+        "max": 1.0,
+        "mean": 1.0,
+        "p50": 1.0,
+        "p90": 1.0,
+        "p95": 1.0,
+        "p99": 1.0
+      },
+      "experiment_id": "fixed-w16k-zstd-3",
+      "graph_reconstruction_us": {
+        "count": 50,
+        "max": 3214.77,
+        "mean": 1993.8355600000007,
+        "p50": 2329.916,
+        "p90": 2835.036,
+        "p95": 2889.239,
+        "p99": 3214.77
+      },
+      "index_lookup_us": {
+        "count": 50,
+        "max": 8.236,
+        "mean": 3.417719999999999,
+        "p50": 3.4010000000000002,
+        "p90": 3.87,
+        "p95": 4.48,
+        "p99": 8.236
+      },
+      "local_query_us": {
+        "count": 50,
+        "max": 105531.994,
+        "mean": 79240.30343999999,
+        "p50": 91762.708,
+        "p90": 103390.108,
+        "p95": 104410.721,
+        "p99": 105531.994
+      },
+      "physical_reads": {
+        "count": 50,
+        "max": 1.0,
+        "mean": 1.0,
+        "p50": 1.0,
+        "p90": 1.0,
+        "p95": 1.0,
+        "p99": 1.0
+      },
+      "query_group": "random-10000",
+      "read_amplification": {
+        "count": 50,
+        "max": 4.678022772456172,
+        "mean": 3.138154980828857,
+        "p50": 3.1201856428183956,
+        "p90": 4.032325907462222,
+        "p95": 4.103281547241598,
+        "p99": 4.678022772456172
+      },
+      "simulated_100ms_ms": {
+        "count": 50,
+        "max": 116.07466666666667,
+        "mean": 112.8288213333333,
+        "p50": 113.23626666666667,
+        "p90": 115.80453333333334,
+        "p95": 116.07466666666667,
+        "p99": 116.07466666666667
+      },
+      "simulated_20ms_ms": {
+        "count": 50,
+        "max": 21.907466666666668,
+        "mean": 21.58288213333333,
+        "p50": 21.623626666666667,
+        "p90": 21.88045333333333,
+        "p95": 21.907466666666668,
+        "p99": 21.907466666666668
+      },
+      "simulated_50ms_ms": {
+        "count": 50,
+        "max": 55.2224,
+        "mean": 54.24864640000003,
+        "p50": 54.37088,
+        "p90": 55.14136,
+        "p95": 55.2224,
+        "p99": 55.2224
+      }
+    },
+    {
+      "bytes_fetched": {
+        "count": 102,
+        "max": 52780.0,
+        "mean": 33207.07843137255,
+        "p50": 42136.0,
+        "p90": 51767.0,
+        "p95": 52327.0,
+        "p99": 52780.0
+      },
+      "coalescing_gap": 1048576,
+      "correctness": true,
+      "decode_us": {
+        "count": 102,
+        "max": 16589.901,
+        "mean": 9354.919225490197,
+        "p50": 12485.684000000001,
+        "p90": 15374.421,
+        "p95": 15630.534000000001,
+        "p99": 16370.717999999999
+      },
+      "decompression_us": {
+        "count": 102,
+        "max": 213.98999999999998,
+        "mean": 132.31254901960784,
+        "p50": 159.211,
+        "p90": 206.31000000000003,
+        "p95": 209.56099999999998,
+        "p99": 212.156
+      },
+      "directory_page_bytes_fetched": {
+        "count": 102,
+        "max": 560.0,
+        "mean": 5.490196078431373,
+        "p50": 0.0,
+        "p90": 0.0,
+        "p95": 0.0,
+        "p99": 0.0
+      },
+      "directory_page_cache_hits": {
+        "count": 102,
+        "max": 1.0,
+        "mean": 0.9607843137254902,
+        "p50": 1.0,
+        "p90": 1.0,
+        "p95": 1.0,
+        "p99": 1.0
+      },
+      "directory_pages_selected": {
+        "count": 102,
+        "max": 1.0,
+        "mean": 1.0,
+        "p50": 1.0,
+        "p90": 1.0,
+        "p95": 1.0,
+        "p99": 1.0
+      },
+      "experiment_id": "fixed-w16k-zstd-3",
+      "graph_reconstruction_us": {
+        "count": 102,
+        "max": 3455.016,
+        "mean": 1327.5216372549019,
+        "p50": 1025.78,
+        "p90": 2729.2309999999998,
+        "p95": 2867.4579999999996,
+        "p99": 3109.6600000000003
+      },
+      "index_lookup_us": {
+        "count": 102,
+        "max": 43.429,
+        "mean": 4.349529411764705,
+        "p50": 3.259,
+        "p90": 4.502000000000001,
+        "p95": 10.477,
+        "p99": 19.114
+      },
+      "local_query_us": {
+        "count": 102,
+        "max": 106163.47499999999,
+        "mean": 63868.996745098026,
+        "p50": 86990.16900000001,
+        "p90": 102214.782,
+        "p95": 103241.881,
+        "p99": 105968.972
+      },
+      "physical_reads": {
+        "count": 102,
+        "max": 2.0,
+        "mean": 1.0196078431372548,
+        "p50": 1.0,
+        "p90": 1.0,
+        "p95": 1.0,
+        "p99": 2.0
+      },
+      "query_group": "all",
+      "read_amplification": {
+        "count": 102,
+        "max": 36.99385425812116,
+        "mean": 9.526600428579401,
+        "p50": 4.678022772456172,
+        "p90": 23.94090909090909,
+        "p95": 33.68185451638689,
+        "p99": 36.60816681146829
+      },
+      "simulated_100ms_ms": {
+        "count": 102,
+        "max": 217.95386666666667,
+        "mean": 112.85522091503285,
+        "p50": 113.23626666666667,
+        "p90": 115.80453333333334,
+        "p95": 116.07466666666667,
+        "p99": 214.07920000000001
+      },
+      "simulated_20ms_ms": {
+        "count": 102,
+        "max": 42.39538666666667,
+        "mean": 21.78748287581703,
+        "p50": 21.623626666666667,
+        "p90": 21.88045333333333,
+        "p95": 21.907466666666668,
+        "p99": 42.00792
+      },
+      "simulated_50ms_ms": {
+        "count": 102,
+        "max": 106.18616,
+        "mean": 54.656566274509736,
+        "p50": 54.37088,
+        "p90": 55.14136,
+        "p95": 55.2224,
+        "p99": 105.02376
+      }
+    },
+    {
+      "bytes_fetched": {
+        "count": 1,
+        "max": 52327.0,
+        "mean": 52327.0,
+        "p50": 52327.0,
+        "p90": 52327.0,
+        "p95": 52327.0,
+        "p99": 52327.0
+      },
+      "coalescing_gap": 1048576,
+      "correctness": true,
+      "decode_us": {
+        "count": 1,
+        "max": 15374.421,
+        "mean": 15374.421,
+        "p50": 15374.421,
+        "p90": 15374.421,
+        "p95": 15374.421,
+        "p99": 15374.421
+      },
+      "decompression_us": {
+        "count": 1,
+        "max": 204.672,
+        "mean": 204.672,
+        "p50": 204.672,
+        "p90": 204.672,
+        "p95": 204.672,
+        "p99": 204.672
+      },
+      "directory_page_bytes_fetched": {
+        "count": 1,
+        "max": 560.0,
+        "mean": 560.0,
+        "p50": 560.0,
+        "p90": 560.0,
+        "p95": 560.0,
+        "p99": 560.0
+      },
+      "directory_page_cache_hits": {
+        "count": 1,
+        "max": 0.0,
+        "mean": 0.0,
+        "p50": 0.0,
+        "p90": 0.0,
+        "p95": 0.0,
+        "p99": 0.0
+      },
+      "directory_pages_selected": {
+        "count": 1,
+        "max": 1.0,
+        "mean": 1.0,
+        "p50": 1.0,
+        "p90": 1.0,
+        "p95": 1.0,
+        "p99": 1.0
+      },
+      "experiment_id": "fixed-w16k-zstd-3",
+      "graph_reconstruction_us": {
+        "count": 1,
+        "max": 3455.016,
+        "mean": 3455.016,
+        "p50": 3455.016,
+        "p90": 3455.016,
+        "p95": 3455.016,
+        "p99": 3455.016
+      },
+      "index_lookup_us": {
+        "count": 1,
+        "max": 43.429,
+        "mean": 43.429,
+        "p50": 43.429,
+        "p90": 43.429,
+        "p95": 43.429,
+        "p99": 43.429
+      },
+      "local_query_us": {
+        "count": 1,
+        "max": 103579.966,
+        "mean": 103579.966,
+        "p50": 103579.966,
+        "p90": 103579.966,
+        "p95": 103579.966,
+        "p99": 103579.966
+      },
+      "physical_reads": {
+        "count": 1,
+        "max": 2.0,
+        "mean": 2.0,
+        "p50": 2.0,
+        "p90": 2.0,
+        "p95": 2.0,
+        "p99": 2.0
+      },
+      "query_group": "hard-KIR3DL1",
+      "read_amplification": {
+        "count": 1,
+        "max": 2.311671673440537,
+        "mean": 2.311671673440537,
+        "p50": 2.311671673440537,
+        "p90": 2.311671673440537,
+        "p95": 2.311671673440537,
+        "p99": 2.311671673440537
+      },
+      "simulated_100ms_ms": {
+        "count": 1,
+        "max": 217.95386666666667,
+        "mean": 217.95386666666667,
+        "p50": 217.95386666666667,
+        "p90": 217.95386666666667,
+        "p95": 217.95386666666667,
+        "p99": 217.95386666666667
+      },
+      "simulated_20ms_ms": {
+        "count": 1,
+        "max": 42.39538666666667,
+        "mean": 42.39538666666667,
+        "p50": 42.39538666666667,
+        "p90": 42.39538666666667,
+        "p95": 42.39538666666667,
+        "p99": 42.39538666666667
+      },
+      "simulated_50ms_ms": {
+        "count": 1,
+        "max": 106.18616,
+        "mean": 106.18616,
+        "p50": 106.18616,
+        "p90": 106.18616,
+        "p95": 106.18616,
+        "p99": 106.18616
+      }
+    },
+    {
+      "bytes_fetched": {
+        "count": 1,
+        "max": 37797.0,
+        "mean": 37797.0,
+        "p50": 37797.0,
+        "p90": 37797.0,
+        "p95": 37797.0,
+        "p99": 37797.0
+      },
+      "coalescing_gap": 1048576,
+      "correctness": true,
+      "decode_us": {
+        "count": 1,
+        "max": 4728.191999999999,
+        "mean": 4728.191999999999,
+        "p50": 4728.191999999999,
+        "p90": 4728.191999999999,
+        "p95": 4728.191999999999,
+        "p99": 4728.191999999999
+      },
+      "decompression_us": {
+        "count": 1,
+        "max": 113.116,
+        "mean": 113.116,
+        "p50": 113.116,
+        "p90": 113.116,
+        "p95": 113.116,
+        "p99": 113.116
+      },
+      "directory_page_bytes_fetched": {
+        "count": 1,
+        "max": 0.0,
+        "mean": 0.0,
+        "p50": 0.0,
+        "p90": 0.0,
+        "p95": 0.0,
+        "p99": 0.0
+      },
+      "directory_page_cache_hits": {
+        "count": 1,
+        "max": 0.0,
+        "mean": 0.0,
+        "p50": 0.0,
+        "p90": 0.0,
+        "p95": 0.0,
+        "p99": 0.0
+      },
+      "directory_pages_selected": {
+        "count": 1,
+        "max": 1.0,
+        "mean": 1.0,
+        "p50": 1.0,
+        "p90": 1.0,
+        "p95": 1.0,
+        "p99": 1.0
+      },
+      "experiment_id": "fixed-w16k-zstd-3",
+      "graph_reconstruction_us": {
+        "count": 1,
+        "max": 982.052,
+        "mean": 982.052,
+        "p50": 982.052,
+        "p90": 982.052,
+        "p95": 982.052,
+        "p99": 982.052
+      },
+      "index_lookup_us": {
+        "count": 1,
+        "max": 5.839,
+        "mean": 5.839,
+        "p50": 5.839,
+        "p90": 5.839,
+        "p95": 5.839,
+        "p99": 5.839
+      },
+      "local_query_us": {
+        "count": 1,
+        "max": 34523.787,
+        "mean": 34523.787,
+        "p50": 34523.787,
+        "p90": 34523.787,
+        "p95": 34523.787,
+        "p99": 34523.787
+      },
+      "physical_reads": {
+        "count": 1,
+        "max": 2.0,
+        "mean": 2.0,
+        "p50": 2.0,
+        "p90": 2.0,
+        "p95": 2.0,
+        "p99": 2.0
+      },
+      "query_group": "hard-MICB",
+      "read_amplification": {
+        "count": 1,
+        "max": 3.6179764525701157,
+        "mean": 3.6179764525701157,
+        "p50": 3.6179764525701157,
+        "p90": 3.6179764525701157,
+        "p95": 3.6179764525701157,
+        "p99": 3.6179764525701157
+      },
+      "simulated_100ms_ms": {
+        "count": 1,
+        "max": 214.07920000000001,
+        "mean": 214.07920000000001,
+        "p50": 214.07920000000001,
+        "p90": 214.07920000000001,
+        "p95": 214.07920000000001,
+        "p99": 214.07920000000001
+      },
+      "simulated_20ms_ms": {
+        "count": 1,
+        "max": 42.00792,
+        "mean": 42.00792,
+        "p50": 42.00792,
+        "p90": 42.00792,
+        "p95": 42.00792,
+        "p99": 42.00792
+      },
+      "simulated_50ms_ms": {
+        "count": 1,
+        "max": 105.02376,
+        "mean": 105.02376,
+        "p50": 105.02376,
+        "p90": 105.02376,
+        "p95": 105.02376,
+        "p99": 105.02376
+      }
+    },
+    {
+      "bytes_fetched": {
+        "count": 50,
+        "max": 52780.0,
+        "mean": 25331.88,
+        "p50": 21413.0,
+        "p90": 42764.0,
+        "p95": 42764.0,
+        "p99": 52780.0
+      },
+      "coalescing_gap": 1048576,
+      "correctness": true,
+      "decode_us": {
+        "count": 50,
+        "max": 16370.717999999999,
+        "mean": 7218.73268,
+        "p50": 4583.197999999999,
+        "p90": 13898.256,
+        "p95": 15630.534000000001,
+        "p99": 16370.717999999999
+      },
+      "decompression_us": {
+        "count": 50,
+        "max": 211.03,
+        "mean": 100.61311999999998,
+        "p50": 93.39099999999999,
+        "p90": 165.459,
+        "p95": 176.692,
+        "p99": 211.03
+      },
+      "directory_page_bytes_fetched": {
+        "count": 50,
+        "max": 0.0,
+        "mean": 0.0,
+        "p50": 0.0,
+        "p90": 0.0,
+        "p95": 0.0,
+        "p99": 0.0
+      },
+      "directory_page_cache_hits": {
+        "count": 50,
+        "max": 1.0,
+        "mean": 0.96,
+        "p50": 1.0,
+        "p90": 1.0,
+        "p95": 1.0,
+        "p99": 1.0
+      },
+      "directory_pages_selected": {
+        "count": 50,
+        "max": 1.0,
+        "mean": 1.0,
+        "p50": 1.0,
+        "p90": 1.0,
+        "p95": 1.0,
+        "p99": 1.0
+      },
+      "experiment_id": "fixed-w16k-zstd-3",
+      "graph_reconstruction_us": {
+        "count": 50,
+        "max": 1466.462,
+        "mean": 633.1364199999999,
+        "p50": 358.25800000000004,
+        "p90": 1308.081,
+        "p95": 1388.896,
+        "p99": 1466.462
+      },
+      "index_lookup_us": {
+        "count": 50,
+        "max": 19.114,
+        "mean": 4.591240000000002,
+        "p50": 3.17,
+        "p90": 10.477,
+        "p95": 13.061,
+        "p99": 19.114
+      },
+      "local_query_us": {
+        "count": 50,
+        "max": 105968.972,
+        "mean": 49039.912500000006,
+        "p50": 33106.573,
+        "p90": 91393.21,
+        "p95": 101101.916,
+        "p99": 105968.972
+      },
+      "physical_reads": {
+        "count": 50,
+        "max": 1.0,
+        "mean": 1.0,
+        "p50": 1.0,
+        "p90": 1.0,
+        "p95": 1.0,
+        "p99": 1.0
+      },
+      "query_group": "random-1000",
+      "read_amplification": {
+        "count": 50,
+        "max": 36.99385425812116,
+        "mean": 16.177516930952912,
+        "p50": 13.264267990074442,
+        "p90": 33.72555205047318,
+        "p95": 36.20999153259949,
+        "p99": 36.99385425812116
+      },
+      "simulated_100ms_ms": {
+        "count": 50,
+        "max": 116.07466666666667,
+        "mean": 108.75516800000005,
+        "p50": 107.71013333333333,
+        "p90": 113.40373333333334,
+        "p95": 113.40373333333334,
+        "p99": 116.07466666666667
+      },
+      "simulated_20ms_ms": {
+        "count": 50,
+        "max": 21.907466666666668,
+        "mean": 21.175516800000004,
+        "p50": 21.071013333333333,
+        "p90": 21.640373333333333,
+        "p95": 21.640373333333333,
+        "p99": 21.907466666666668
+      },
+      "simulated_50ms_ms": {
+        "count": 50,
+        "max": 55.2224,
+        "mean": 53.0265504,
+        "p50": 52.71304,
+        "p90": 54.42112,
+        "p95": 54.42112,
+        "p99": 55.2224
+      }
+    },
+    {
+      "bytes_fetched": {
+        "count": 50,
+        "max": 52780.0,
+        "mean": 40608.08,
+        "p50": 42136.0,
+        "p90": 51767.0,
+        "p95": 52780.0,
+        "p99": 52780.0
+      },
+      "coalescing_gap": 1048576,
+      "correctness": true,
+      "decode_us": {
+        "count": 50,
+        "max": 16589.901,
+        "mean": 11463.250279999997,
+        "p50": 13080.708,
+        "p90": 15512.941,
+        "p95": 15729.04,
+        "p99": 16589.901
+      },
+      "decompression_us": {
+        "count": 50,
+        "max": 213.98999999999998,
+        "mean": 162.94871999999998,
+        "p50": 166.64499999999998,
+        "p90": 209.56099999999998,
+        "p95": 210.09500000000003,
+        "p99": 213.98999999999998
+      },
+      "directory_page_bytes_fetched": {
+        "count": 50,
+        "max": 0.0,
+        "mean": 0.0,
+        "p50": 0.0,
+        "p90": 0.0,
+        "p95": 0.0,
+        "p99": 0.0
+      },
+      "directory_page_cache_hits": {
+        "count": 50,
+        "max": 1.0,
+        "mean": 1.0,
+        "p50": 1.0,
+        "p90": 1.0,
+        "p95": 1.0,
+        "p99": 1.0
+      },
+      "directory_pages_selected": {
+        "count": 50,
+        "max": 1.0,
+        "mean": 1.0,
+        "p50": 1.0,
+        "p90": 1.0,
+        "p95": 1.0,
+        "p99": 1.0
+      },
+      "experiment_id": "fixed-w16k-zstd-3",
+      "graph_reconstruction_us": {
+        "count": 50,
+        "max": 3109.6600000000003,
+        "mean": 1986.26636,
+        "p50": 2258.843,
+        "p90": 2867.4579999999996,
+        "p95": 3009.5260000000003,
+        "p99": 3109.6600000000003
+      },
+      "index_lookup_us": {
+        "count": 50,
+        "max": 4.242999999999999,
+        "mean": 3.29644,
+        "p50": 3.279,
+        "p90": 4.053999999999999,
+        "p95": 4.192,
+        "p99": 4.242999999999999
+      },
+      "local_query_us": {
+        "count": 50,
+        "max": 106163.47499999999,
+        "mean": 78490.76579999998,
+        "p50": 89125.48000000001,
+        "p90": 102809.831,
+        "p95": 103893.948,
+        "p99": 106163.47499999999
+      },
+      "physical_reads": {
+        "count": 50,
+        "max": 1.0,
+        "mean": 1.0,
+        "p50": 1.0,
+        "p90": 1.0,
+        "p95": 1.0,
+        "p99": 1.0
+      },
+      "query_group": "random-10000",
+      "read_amplification": {
+        "count": 50,
+        "max": 4.678022772456172,
+        "mean": 3.138154980828857,
+        "p50": 3.1201856428183956,
+        "p90": 4.032325907462222,
+        "p95": 4.103281547241598,
+        "p99": 4.678022772456172
+      },
+      "simulated_100ms_ms": {
+        "count": 50,
+        "max": 116.07466666666667,
+        "mean": 112.8288213333333,
+        "p50": 113.23626666666667,
+        "p90": 115.80453333333334,
+        "p95": 116.07466666666667,
+        "p99": 116.07466666666667
+      },
+      "simulated_20ms_ms": {
+        "count": 50,
+        "max": 21.907466666666668,
+        "mean": 21.58288213333333,
+        "p50": 21.623626666666667,
+        "p90": 21.88045333333333,
+        "p95": 21.907466666666668,
+        "p99": 21.907466666666668
+      },
+      "simulated_50ms_ms": {
+        "count": 50,
+        "max": 55.2224,
+        "mean": 54.24864640000003,
+        "p50": 54.37088,
+        "p90": 55.14136,
+        "p95": 55.2224,
+        "p99": 55.2224
+      }
+    }
+  ],
+  "run_id": "2026-08-31-gbz-base-fixture-comparison",
+  "schema_version": 1,
+  "structural_improvement": null,
+  "workload": {
+    "fixed_rng_seed": 5782989464532832077,
+    "queries": [
+      {
+        "class": "hard-MICB",
+        "context": 100,
+        "contig": "chr6",
+        "end": 31511124,
+        "id": "hard-micb",
+        "sample": "GRCh38",
+        "start": 31498145
+      },
+      {
+        "class": "hard-KIR3DL1",
+        "context": 100,
+        "contig": "chr19",
+        "end": 54830779,
+        "id": "hard-kir3dl1",
+        "sample": "GRCh38",
+        "start": 54816436
+      },
+      {
+        "class": "random-1000",
+        "context": 100,
+        "contig": "chr19",
+        "end": 54819630,
+        "id": "random-1000-00000",
+        "sample": "GRCh38",
+        "start": 54818630
+      },
+      {
+        "class": "random-1000",
+        "context": 100,
+        "contig": "chr6",
+        "end": 31355488,
+        "id": "random-1000-00001",
+        "sample": "CHM13",
+        "start": 31354488
+      },
+      {
+        "class": "random-1000",
+        "context": 100,
+        "contig": "chr19",
+        "end": 18940211,
+        "id": "random-1000-00002",
+        "sample": "CHM13",
+        "start": 18939211
+      },
+      {
+        "class": "random-1000",
+        "context": 100,
+        "contig": "chr19",
+        "end": 18931672,
+        "id": "random-1000-00003",
+        "sample": "CHM13",
+        "start": 18930672
+      },
+      {
+        "class": "random-1000",
+        "context": 100,
+        "contig": "chr6",
+        "end": 31510956,
+        "id": "random-1000-00004",
+        "sample": "GRCh38",
+        "start": 31509956
+      },
+      {
+        "class": "random-1000",
+        "context": 100,
+        "contig": "chr6",
+        "end": 31506046,
+        "id": "random-1000-00005",
+        "sample": "GRCh38",
+        "start": 31505046
+      },
+      {
+        "class": "random-1000",
+        "context": 100,
+        "contig": "chr19",
+        "end": 54824280,
+        "id": "random-1000-00006",
+        "sample": "GRCh38",
+        "start": 54823280
+      },
+      {
+        "class": "random-1000",
+        "context": 100,
+        "contig": "chr6",
+        "end": 31504327,
+        "id": "random-1000-00007",
+        "sample": "GRCh38",
+        "start": 31503327
+      },
+      {
+        "class": "random-1000",
+        "context": 100,
+        "contig": "chr19",
+        "end": 54827165,
+        "id": "random-1000-00008",
+        "sample": "GRCh38",
+        "start": 54826165
+      },
+      {
+        "class": "random-1000",
+        "context": 100,
+        "contig": "chr19",
+        "end": 54826783,
+        "id": "random-1000-00009",
+        "sample": "GRCh38",
+        "start": 54825783
+      },
+      {
+        "class": "random-1000",
+        "context": 100,
+        "contig": "chr19",
+        "end": 54825197,
+        "id": "random-1000-00010",
+        "sample": "GRCh38",
+        "start": 54824197
+      },
+      {
+        "class": "random-1000",
+        "context": 100,
+        "contig": "chr6",
+        "end": 31509687,
+        "id": "random-1000-00011",
+        "sample": "GRCh38",
+        "start": 31508687
+      },
+      {
+        "class": "random-1000",
+        "context": 100,
+        "contig": "chr6",
+        "end": 31499578,
+        "id": "random-1000-00012",
+        "sample": "GRCh38",
+        "start": 31498578
+      },
+      {
+        "class": "random-1000",
+        "context": 100,
+        "contig": "chr19",
+        "end": 18935804,
+        "id": "random-1000-00013",
+        "sample": "CHM13",
+        "start": 18934804
+      },
+      {
+        "class": "random-1000",
+        "context": 100,
+        "contig": "chr19",
+        "end": 54819543,
+        "id": "random-1000-00014",
+        "sample": "GRCh38",
+        "start": 54818543
+      },
+      {
+        "class": "random-1000",
+        "context": 100,
+        "contig": "chr19",
+        "end": 54823995,
+        "id": "random-1000-00015",
+        "sample": "GRCh38",
+        "start": 54822995
+      },
+      {
+        "class": "random-1000",
+        "context": 100,
+        "contig": "chr6",
+        "end": 31501086,
+        "id": "random-1000-00016",
+        "sample": "GRCh38",
+        "start": 31500086
+      },
+      {
+        "class": "random-1000",
+        "context": 100,
+        "contig": "chr19",
+        "end": 18936132,
+        "id": "random-1000-00017",
+        "sample": "CHM13",
+        "start": 18935132
+      },
+      {
+        "class": "random-1000",
+        "context": 100,
+        "contig": "chr6",
+        "end": 31501755,
+        "id": "random-1000-00018",
+        "sample": "GRCh38",
+        "start": 31500755
+      },
+      {
+        "class": "random-1000",
+        "context": 100,
+        "contig": "chr6",
+        "end": 31356683,
+        "id": "random-1000-00019",
+        "sample": "CHM13",
+        "start": 31355683
+      },
+      {
+        "class": "random-1000",
+        "context": 100,
+        "contig": "chr6",
+        "end": 31506631,
+        "id": "random-1000-00020",
+        "sample": "GRCh38",
+        "start": 31505631
+      },
+      {
+        "class": "random-1000",
+        "context": 100,
+        "contig": "chr19",
+        "end": 54820258,
+        "id": "random-1000-00021",
+        "sample": "GRCh38",
+        "start": 54819258
+      },
+      {
+        "class": "random-1000",
+        "context": 100,
+        "contig": "chr6",
+        "end": 31363561,
+        "id": "random-1000-00022",
+        "sample": "CHM13",
+        "start": 31362561
+      },
+      {
+        "class": "random-1000",
+        "context": 100,
+        "contig": "chr19",
+        "end": 54819709,
+        "id": "random-1000-00023",
+        "sample": "GRCh38",
+        "start": 54818709
+      },
+      {
+        "class": "random-1000",
+        "context": 100,
+        "contig": "chr6",
+        "end": 31510347,
+        "id": "random-1000-00024",
+        "sample": "GRCh38",
+        "start": 31509347
+      },
+      {
+        "class": "random-1000",
+        "context": 100,
+        "contig": "chr19",
+        "end": 18938374,
+        "id": "random-1000-00025",
+        "sample": "CHM13",
+        "start": 18937374
+      },
+      {
+        "class": "random-1000",
+        "context": 100,
+        "contig": "chr19",
+        "end": 18929542,
+        "id": "random-1000-00026",
+        "sample": "CHM13",
+        "start": 18928542
+      },
+      {
+        "class": "random-1000",
+        "context": 100,
+        "contig": "chr19",
+        "end": 18934366,
+        "id": "random-1000-00027",
+        "sample": "CHM13",
+        "start": 18933366
+      },
+      {
+        "class": "random-1000",
+        "context": 100,
+        "contig": "chr6",
+        "end": 31363297,
+        "id": "random-1000-00028",
+        "sample": "CHM13",
+        "start": 31362297
+      },
+      {
+        "class": "random-1000",
+        "context": 100,
+        "contig": "chr6",
+        "end": 31507359,
+        "id": "random-1000-00029",
+        "sample": "GRCh38",
+        "start": 31506359
+      },
+      {
+        "class": "random-1000",
+        "context": 100,
+        "contig": "chr19",
+        "end": 54828474,
+        "id": "random-1000-00030",
+        "sample": "GRCh38",
+        "start": 54827474
+      },
+      {
+        "class": "random-1000",
+        "context": 100,
+        "contig": "chr19",
+        "end": 54827908,
+        "id": "random-1000-00031",
+        "sample": "GRCh38",
+        "start": 54826908
+      },
+      {
+        "class": "random-1000",
+        "context": 100,
+        "contig": "chr6",
+        "end": 31507225,
+        "id": "random-1000-00032",
+        "sample": "GRCh38",
+        "start": 31506225
+      },
+      {
+        "class": "random-1000",
+        "context": 100,
+        "contig": "chr6",
+        "end": 31510336,
+        "id": "random-1000-00033",
+        "sample": "GRCh38",
+        "start": 31509336
+      },
+      {
+        "class": "random-1000",
+        "context": 100,
+        "contig": "chr19",
+        "end": 54817603,
+        "id": "random-1000-00034",
+        "sample": "GRCh38",
+        "start": 54816603
+      },
+      {
+        "class": "random-1000",
+        "context": 100,
+        "contig": "chr6",
+        "end": 31363547,
+        "id": "random-1000-00035",
+        "sample": "CHM13",
+        "start": 31362547
+      },
+      {
+        "class": "random-1000",
+        "context": 100,
+        "contig": "chr19",
+        "end": 18938052,
+        "id": "random-1000-00036",
+        "sample": "CHM13",
+        "start": 18937052
+      },
+      {
+        "class": "random-1000",
+        "context": 100,
+        "contig": "chr6",
+        "end": 31361965,
+        "id": "random-1000-00037",
+        "sample": "CHM13",
+        "start": 31360965
+      },
+      {
+        "class": "random-1000",
+        "context": 100,
+        "contig": "chr6",
+        "end": 31505269,
+        "id": "random-1000-00038",
+        "sample": "GRCh38",
+        "start": 31504269
+      },
+      {
+        "class": "random-1000",
+        "context": 100,
+        "contig": "chr6",
+        "end": 31504747,
+        "id": "random-1000-00039",
+        "sample": "GRCh38",
+        "start": 31503747
+      },
+      {
+        "class": "random-1000",
+        "context": 100,
+        "contig": "chr19",
+        "end": 18929411,
+        "id": "random-1000-00040",
+        "sample": "CHM13",
+        "start": 18928411
+      },
+      {
+        "class": "random-1000",
+        "context": 100,
+        "contig": "chr19",
+        "end": 54824938,
+        "id": "random-1000-00041",
+        "sample": "GRCh38",
+        "start": 54823938
+      },
+      {
+        "class": "random-1000",
+        "context": 100,
+        "contig": "chr19",
+        "end": 18940757,
+        "id": "random-1000-00042",
+        "sample": "CHM13",
+        "start": 18939757
+      },
+      {
+        "class": "random-1000",
+        "context": 100,
+        "contig": "chr6",
+        "end": 31360247,
+        "id": "random-1000-00043",
+        "sample": "CHM13",
+        "start": 31359247
+      },
+      {
+        "class": "random-1000",
+        "context": 100,
+        "contig": "chr19",
+        "end": 54828982,
+        "id": "random-1000-00044",
+        "sample": "GRCh38",
+        "start": 54827982
+      },
+      {
+        "class": "random-1000",
+        "context": 100,
+        "contig": "chr6",
+        "end": 31503847,
+        "id": "random-1000-00045",
+        "sample": "GRCh38",
+        "start": 31502847
+      },
+      {
+        "class": "random-1000",
+        "context": 100,
+        "contig": "chr19",
+        "end": 18935643,
+        "id": "random-1000-00046",
+        "sample": "CHM13",
+        "start": 18934643
+      },
+      {
+        "class": "random-1000",
+        "context": 100,
+        "contig": "chr6",
+        "end": 31359345,
+        "id": "random-1000-00047",
+        "sample": "CHM13",
+        "start": 31358345
+      },
+      {
+        "class": "random-1000",
+        "context": 100,
+        "contig": "chr19",
+        "end": 54827949,
+        "id": "random-1000-00048",
+        "sample": "GRCh38",
+        "start": 54826949
+      },
+      {
+        "class": "random-1000",
+        "context": 100,
+        "contig": "chr6",
+        "end": 31354875,
+        "id": "random-1000-00049",
+        "sample": "CHM13",
+        "start": 31353875
+      },
+      {
+        "class": "random-10000",
+        "context": 100,
+        "contig": "chr19",
+        "end": 18937515,
+        "id": "random-10000-00000",
+        "sample": "CHM13",
+        "start": 18927515
+      },
+      {
+        "class": "random-10000",
+        "context": 100,
+        "contig": "chr19",
+        "end": 18937048,
+        "id": "random-10000-00001",
+        "sample": "CHM13",
+        "start": 18927048
+      },
+      {
+        "class": "random-10000",
+        "context": 100,
+        "contig": "chr6",
+        "end": 31509564,
+        "id": "random-10000-00002",
+        "sample": "GRCh38",
+        "start": 31499564
+      },
+      {
+        "class": "random-10000",
+        "context": 100,
+        "contig": "chr6",
+        "end": 31363211,
+        "id": "random-10000-00003",
+        "sample": "CHM13",
+        "start": 31353211
+      },
+      {
+        "class": "random-10000",
+        "context": 100,
+        "contig": "chr6",
+        "end": 31361115,
+        "id": "random-10000-00004",
+        "sample": "CHM13",
+        "start": 31351115
+      },
+      {
+        "class": "random-10000",
+        "context": 100,
+        "contig": "chr6",
+        "end": 31510727,
+        "id": "random-10000-00005",
+        "sample": "GRCh38",
+        "start": 31500727
+      },
+      {
+        "class": "random-10000",
+        "context": 100,
+        "contig": "chr19",
+        "end": 18937710,
+        "id": "random-10000-00006",
+        "sample": "CHM13",
+        "start": 18927710
+      },
+      {
+        "class": "random-10000",
+        "context": 100,
+        "contig": "chr19",
+        "end": 54829693,
+        "id": "random-10000-00007",
+        "sample": "GRCh38",
+        "start": 54819693
+      },
+      {
+        "class": "random-10000",
+        "context": 100,
+        "contig": "chr19",
+        "end": 54827489,
+        "id": "random-10000-00008",
+        "sample": "GRCh38",
+        "start": 54817489
+      },
+      {
+        "class": "random-10000",
+        "context": 100,
+        "contig": "chr6",
+        "end": 31363418,
+        "id": "random-10000-00009",
+        "sample": "CHM13",
+        "start": 31353418
+      },
+      {
+        "class": "random-10000",
+        "context": 100,
+        "contig": "chr6",
+        "end": 31362971,
+        "id": "random-10000-00010",
+        "sample": "CHM13",
+        "start": 31352971
+      },
+      {
+        "class": "random-10000",
+        "context": 100,
+        "contig": "chr19",
+        "end": 54828493,
+        "id": "random-10000-00011",
+        "sample": "GRCh38",
+        "start": 54818493
+      },
+      {
+        "class": "random-10000",
+        "context": 100,
+        "contig": "chr19",
+        "end": 54828964,
+        "id": "random-10000-00012",
+        "sample": "GRCh38",
+        "start": 54818964
+      },
+      {
+        "class": "random-10000",
+        "context": 100,
+        "contig": "chr6",
+        "end": 31361555,
+        "id": "random-10000-00013",
+        "sample": "CHM13",
+        "start": 31351555
+      },
+      {
+        "class": "random-10000",
+        "context": 100,
+        "contig": "chr6",
+        "end": 31362241,
+        "id": "random-10000-00014",
+        "sample": "CHM13",
+        "start": 31352241
+      },
+      {
+        "class": "random-10000",
+        "context": 100,
+        "contig": "chr6",
+        "end": 31510220,
+        "id": "random-10000-00015",
+        "sample": "GRCh38",
+        "start": 31500220
+      },
+      {
+        "class": "random-10000",
+        "context": 100,
+        "contig": "chr6",
+        "end": 31508515,
+        "id": "random-10000-00016",
+        "sample": "GRCh38",
+        "start": 31498515
+      },
+      {
+        "class": "random-10000",
+        "context": 100,
+        "contig": "chr19",
+        "end": 18937173,
+        "id": "random-10000-00017",
+        "sample": "CHM13",
+        "start": 18927173
+      },
+      {
+        "class": "random-10000",
+        "context": 100,
+        "contig": "chr19",
+        "end": 54829485,
+        "id": "random-10000-00018",
+        "sample": "GRCh38",
+        "start": 54819485
+      },
+      {
+        "class": "random-10000",
+        "context": 100,
+        "contig": "chr19",
+        "end": 54829535,
+        "id": "random-10000-00019",
+        "sample": "GRCh38",
+        "start": 54819535
+      },
+      {
+        "class": "random-10000",
+        "context": 100,
+        "contig": "chr19",
+        "end": 54827554,
+        "id": "random-10000-00020",
+        "sample": "GRCh38",
+        "start": 54817554
+      },
+      {
+        "class": "random-10000",
+        "context": 100,
+        "contig": "chr19",
+        "end": 18939552,
+        "id": "random-10000-00021",
+        "sample": "CHM13",
+        "start": 18929552
+      },
+      {
+        "class": "random-10000",
+        "context": 100,
+        "contig": "chr19",
+        "end": 54830740,
+        "id": "random-10000-00022",
+        "sample": "GRCh38",
+        "start": 54820740
+      },
+      {
+        "class": "random-10000",
+        "context": 100,
+        "contig": "chr19",
+        "end": 54828932,
+        "id": "random-10000-00023",
+        "sample": "GRCh38",
+        "start": 54818932
+      },
+      {
+        "class": "random-10000",
+        "context": 100,
+        "contig": "chr6",
+        "end": 31361872,
+        "id": "random-10000-00024",
+        "sample": "CHM13",
+        "start": 31351872
+      },
+      {
+        "class": "random-10000",
+        "context": 100,
+        "contig": "chr19",
+        "end": 18938033,
+        "id": "random-10000-00025",
+        "sample": "CHM13",
+        "start": 18928033
+      },
+      {
+        "class": "random-10000",
+        "context": 100,
+        "contig": "chr19",
+        "end": 18939766,
+        "id": "random-10000-00026",
+        "sample": "CHM13",
+        "start": 18929766
+      },
+      {
+        "class": "random-10000",
+        "context": 100,
+        "contig": "chr19",
+        "end": 54828824,
+        "id": "random-10000-00027",
+        "sample": "GRCh38",
+        "start": 54818824
+      },
+      {
+        "class": "random-10000",
+        "context": 100,
+        "contig": "chr6",
+        "end": 31510466,
+        "id": "random-10000-00028",
+        "sample": "GRCh38",
+        "start": 31500466
+      },
+      {
+        "class": "random-10000",
+        "context": 100,
+        "contig": "chr19",
+        "end": 54829488,
+        "id": "random-10000-00029",
+        "sample": "GRCh38",
+        "start": 54819488
+      },
+      {
+        "class": "random-10000",
+        "context": 100,
+        "contig": "chr19",
+        "end": 18939211,
+        "id": "random-10000-00030",
+        "sample": "CHM13",
+        "start": 18929211
+      },
+      {
+        "class": "random-10000",
+        "context": 100,
+        "contig": "chr19",
+        "end": 54828293,
+        "id": "random-10000-00031",
+        "sample": "GRCh38",
+        "start": 54818293
+      },
+      {
+        "class": "random-10000",
+        "context": 100,
+        "contig": "chr6",
+        "end": 31508328,
+        "id": "random-10000-00032",
+        "sample": "GRCh38",
+        "start": 31498328
+      },
+      {
+        "class": "random-10000",
+        "context": 100,
+        "contig": "chr19",
+        "end": 18938926,
+        "id": "random-10000-00033",
+        "sample": "CHM13",
+        "start": 18928926
+      },
+      {
+        "class": "random-10000",
+        "context": 100,
+        "contig": "chr19",
+        "end": 54827527,
+        "id": "random-10000-00034",
+        "sample": "GRCh38",
+        "start": 54817527
+      },
+      {
+        "class": "random-10000",
+        "context": 100,
+        "contig": "chr19",
+        "end": 18940705,
+        "id": "random-10000-00035",
+        "sample": "CHM13",
+        "start": 18930705
+      },
+      {
+        "class": "random-10000",
+        "context": 100,
+        "contig": "chr19",
+        "end": 54829606,
+        "id": "random-10000-00036",
+        "sample": "GRCh38",
+        "start": 54819606
+      },
+      {
+        "class": "random-10000",
+        "context": 100,
+        "contig": "chr19",
+        "end": 54826668,
+        "id": "random-10000-00037",
+        "sample": "GRCh38",
+        "start": 54816668
+      },
+      {
+        "class": "random-10000",
+        "context": 100,
+        "contig": "chr19",
+        "end": 54830649,
+        "id": "random-10000-00038",
+        "sample": "GRCh38",
+        "start": 54820649
+      },
+      {
+        "class": "random-10000",
+        "context": 100,
+        "contig": "chr19",
+        "end": 54828384,
+        "id": "random-10000-00039",
+        "sample": "GRCh38",
+        "start": 54818384
+      },
+      {
+        "class": "random-10000",
+        "context": 100,
+        "contig": "chr19",
+        "end": 18940520,
+        "id": "random-10000-00040",
+        "sample": "CHM13",
+        "start": 18930520
+      },
+      {
+        "class": "random-10000",
+        "context": 100,
+        "contig": "chr19",
+        "end": 54827653,
+        "id": "random-10000-00041",
+        "sample": "GRCh38",
+        "start": 54817653
+      },
+      {
+        "class": "random-10000",
+        "context": 100,
+        "contig": "chr19",
+        "end": 18938104,
+        "id": "random-10000-00042",
+        "sample": "CHM13",
+        "start": 18928104
+      },
+      {
+        "class": "random-10000",
+        "context": 100,
+        "contig": "chr19",
+        "end": 54829543,
+        "id": "random-10000-00043",
+        "sample": "GRCh38",
+        "start": 54819543
+      },
+      {
+        "class": "random-10000",
+        "context": 100,
+        "contig": "chr19",
+        "end": 18939474,
+        "id": "random-10000-00044",
+        "sample": "CHM13",
+        "start": 18929474
+      },
+      {
+        "class": "random-10000",
+        "context": 100,
+        "contig": "chr6",
+        "end": 31510088,
+        "id": "random-10000-00045",
+        "sample": "GRCh38",
+        "start": 31500088
+      },
+      {
+        "class": "random-10000",
+        "context": 100,
+        "contig": "chr19",
+        "end": 18940267,
+        "id": "random-10000-00046",
+        "sample": "CHM13",
+        "start": 18930267
+      },
+      {
+        "class": "random-10000",
+        "context": 100,
+        "contig": "chr19",
+        "end": 54827811,
+        "id": "random-10000-00047",
+        "sample": "GRCh38",
+        "start": 54817811
+      },
+      {
+        "class": "random-10000",
+        "context": 100,
+        "contig": "chr6",
+        "end": 31509038,
+        "id": "random-10000-00048",
+        "sample": "GRCh38",
+        "start": 31499038
+      },
+      {
+        "class": "random-10000",
+        "context": 100,
+        "contig": "chr19",
+        "end": 54830051,
+        "id": "random-10000-00049",
+        "sample": "GRCh38",
+        "start": 54820051
+      }
+    ],
+    "skipped_query_sizes": [
+      100000,
+      1000000
+    ]
+  }
+}

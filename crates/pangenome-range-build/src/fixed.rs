@@ -4205,6 +4205,20 @@ pub fn internal_gbz_base_query(
     Ok(())
 }
 
+/// Builds an upstream GBZ-base `SQLite` database for retained comparison runs.
+///
+/// This is intentionally an internal benchmark helper rather than part of the
+/// `.pngr` encoder path.
+///
+/// # Errors
+///
+/// Returns an error if the source cannot be loaded or the database cannot be
+/// created.
+pub fn internal_build_gbz_base_database(input: &Path, database: &Path) -> ExperimentResult<()> {
+    gbz_base::GBZBase::create_from_files(input, None, database)?;
+    Ok(())
+}
+
 #[derive(Debug)]
 struct ConformanceArchiveParts {
     archive: Vec<u8>,

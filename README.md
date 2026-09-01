@@ -4,10 +4,26 @@
 [![npm](https://img.shields.io/npm/v/pangenome-range?style=for-the-badge&logo=npm)](https://www.npmjs.com/package/pangenome-range)
 [![MIT](https://img.shields.io/badge/license-MIT-blue?style=for-the-badge)](LICENSE)
 
-Open a region of a large pangenome graph in the browser without downloading the
-whole graph or running a query server.
+## Why I built this
 
-[Try the chicken pangenome demo →](https://a-r-d.github.io/pangenome-range/demo?archive=chicken&preset=chicken-igll1-ucd312-deletion)
+This started with recent work I did on
+[PureJsImage](https://github.com/a-r-d/PureJsImage), using HTTP range requests to
+open large TIFF files on [purejsimage.com](https://purejsimage.com/) without
+downloading the whole image first.
+
+I wanted to find another interesting problem for the same approach. Pangenome
+graphs were a good fit: the files are huge, but a browser usually needs only one
+small region. This project is the result.
+
+**This repository records a short experiment in constraint-driven agentic
+development on a scientific domain I did not know beforehand.** A real continuation would need first-class snarl semantics, exact
+coordinate interoperability across fragmented references, a JBrowse adapter,
+and sustained validation with domain experts and more corpora. I am publishing
+the code and evidence as a completed research artifact; **I do not plan to
+maintain it as an ongoing product**.
+
+
+[DEMO! chicken pangenome →](https://a-r-d.github.io/pangenome-range/demo?archive=chicken&preset=chicken-igll1-ucd312-deletion)
 
 ![Published UCD312 chicken example](results/2026-08-30-chicken-merge-hardening/chicken-published-example.png)
 
@@ -35,20 +51,53 @@ A region query is three dependent HTTP rounds against one static file:
 2. **Directory** — coordinates map to a 4 KiB page, `page = first + floor((start − grid) / bucket) × 4096`. That page lists payload offsets, lengths, and BLAKE3-128.
 3. **Payloads** — selected tiles are fetched in parallel, decompressed independently, and decoded. The rest of the object is never read.
 
-On the published HPRC demo this is typically 5 range requests and about 74 KB of an 8.8 GB archive. [Interactive version](https://a-r-d.github.io/pangenome-range/how-range-reads-work).
+On the published HPRC demo this is typically 5 range requests and about 74 KB
+of a 10.84 GB archive. [Interactive
+version](https://a-r-d.github.io/pangenome-range/how-range-reads-work).
 
-## Why I built this
+## Result against range-readable GBZ-base
 
-This started with recent work I did on
-[PureJsImage](https://github.com/a-r-d/PureJsImage), using HTTP range requests to
-open large TIFF files on [purejsimage.com](https://purejsimage.com/) without
-downloading the whole image first.
+It's well known that you can use HTTP Range reads with remote hosted SQLite databases. But, is this actually an optimal format?
 
-I wanted to find another interesting problem for the same approach. Pangenome
-graphs were a good fit: the files are huge, but a browser usually needs only one
-small region. This project is the result.
+We tried to benchmark this scenario using a GBZ-base formatted db file vs our `.pngr` format.
 
-## Live demos
+This benchmark used the complete 5.49 GB HPRC v2.1 graph and the same
+47 fixed-seed intervals against three immutable objects: the untouched 10.05 GB
+GBZ-base SQLite database, a 10.052 GB range-tuned copy with one composite path
+index, and the 10.84 GB `.pngr`. The SQLite runs use the unchanged upstream
+`Subgraph::from_db` query through a strict read-only HTTP Range VFS. Every cold
+query starts with a fresh connection, HTTP client, and byte-bounded cache.
+
+The table compares transport work, not local-disk time with WAN time. SQLite is
+shown at its measured 64 KiB request/overfetch tradeoff; `.pngr` is the retained
+public no-store WASM run.
+
+| Random interval | tuned SQLite requests / bytes p50 | `.pngr` requests / bytes p50 |
+| --- | ---: | ---: |
+| 1 kb | 14 / 852.0 KB | 2 / 25.8 KB |
+| 10 kb | 15 / 917.5 KB | 2 / 46.1 KB |
+| 100 kb | 20 / 1.25 MB | 2 / 196.4 KB |
+| 1 Mb | 64 / 4.13 MB | 2 / 1.57 MB |
+
+Across all 47 cold queries, range-tuned SQLite required **1,249 HTTP requests
+and 78.8 MB**. `.pngr` required **94 requests and 18.6 MB**: 13.3x fewer
+requests and 4.23x fewer transferred bytes. The untouched upstream database was
+much worse at 40,801 requests and 166.9 MB because its path lookup scans the
+`Paths` table. The 1.89 MB composite index removes that avoidable handicap;
+the remaining SQLite page walk is the fairer comparison.
+
+The result is still mixed. `.pngr` is 7.8% larger than GBZ-base, and local
+GBZ-base remains faster for small queries. The SQLite VFS workload here ran
+through the strict loopback Range origin, so its request and byte counts are
+real but its timing is not presented as public-network timing. Publishing the
+HPRC-derived databases for the matching public-route latency run requires
+separate data-egress approval. All 47 HTTP-SQLite outputs matched retained
+source-GBZ JSON hashes; all 47 `.pngr` regions and 730 selected haplotype tiles
+passed their declared source oracle. [Full result](results/2026-08-31-hprc-public-network-gbz-base/REPORT.md).
+
+
+
+## More demos!
 
 | Demo | Data | What it shows |
 | --- | --- | --- |

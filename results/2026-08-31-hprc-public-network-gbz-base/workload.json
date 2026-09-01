@@ -1,0 +1,477 @@
+{
+  "schemaVersion": 1,
+  "archiveSha256": "82585cb612effbf414b1c8f38b049bc415876866168ccc929f9a885f06d97b0a",
+  "seed": "0x504e475248505243",
+  "queries": [
+    {
+      "id": "fixed-micb",
+      "class": "fixed-biological-micb",
+      "sample": "GRCh38",
+      "contig": "chr6",
+      "start": 31498145,
+      "end": 31511124,
+      "context": 100,
+      "expectedCanonicalHash": "1a793dc02db16fdab6f00d1ab14cfaf4f79e1a018ba245bc368ea1e20fb91667"
+    },
+    {
+      "id": "fixed-kir3dl1",
+      "class": "fixed-biological-kir3dl1",
+      "sample": "GRCh38",
+      "contig": "chr19",
+      "start": 54816468,
+      "end": 54830778,
+      "context": 100,
+      "expectedCanonicalHash": "87f800179595c131080670121ba169cb90658eaec261939abfe2cb0bfc756f1b"
+    },
+    {
+      "id": "boundary-start",
+      "class": "boundary-start",
+      "sample": "CHM13",
+      "contig": "chr1",
+      "start": 12668,
+      "end": 13668,
+      "context": 100,
+      "expectedCanonicalHash": "8814bd66174ac1ef176fdc777712eef2189923c13e511c74cc68fb2fbfb796c5"
+    },
+    {
+      "id": "pan-anchor",
+      "class": "pan-anchor",
+      "sample": "CHM13",
+      "contig": "chr1",
+      "start": 60912906,
+      "end": 60922906,
+      "context": 100,
+      "expectedCanonicalHash": "073fc77fbff79bccc66300a56496fc32d904d4982084c8fa956dc7990578e1ae"
+    },
+    {
+      "id": "nearby-pan",
+      "class": "nearby-pan",
+      "sample": "CHM13",
+      "contig": "chr1",
+      "start": 60917906,
+      "end": 60927906,
+      "context": 100,
+      "expectedCanonicalHash": "359410382c604f42cfb208547cd4077611fa14b85fdf984fe086e6cdd5816c60"
+    },
+    {
+      "id": "boundary-end",
+      "class": "boundary-end",
+      "sample": "CHM13",
+      "contig": "chr1",
+      "start": 121822144,
+      "end": 121823144,
+      "context": 100,
+      "expectedCanonicalHash": "bab501e7597ecbf8cfdcf9e5bc9133449b57e706fdca5c6632c588c8c1540c9c"
+    },
+    {
+      "id": "distant-random",
+      "class": "distant-random",
+      "sample": "GRCh38",
+      "contig": "chrY",
+      "start": 28608707,
+      "end": 28618707,
+      "context": 100,
+      "expectedCanonicalHash": "c7c8bde52852053ec63ed71bc3301ed315f297f1ce04ccaa5cb910fac29ecde4"
+    },
+    {
+      "id": "random-1000-00000",
+      "class": "random-1000",
+      "sample": "CHM13",
+      "contig": "chr2",
+      "start": 94715846,
+      "end": 94716846,
+      "context": 100,
+      "expectedCanonicalHash": "0d8602d267b4964c82ef0e60314957481f3d060688ce081d2652d0351b9f6ceb"
+    },
+    {
+      "id": "random-1000-00001",
+      "class": "random-1000",
+      "sample": "GRCh38",
+      "contig": "chrUn_KI270548v1",
+      "start": 93,
+      "end": 1093,
+      "context": 100,
+      "expectedCanonicalHash": "78b1018995ead0ef0edd4a20d3945699e7cf12d3c3176ad0862bdf7addbd370d"
+    },
+    {
+      "id": "random-1000-00002",
+      "class": "random-1000",
+      "sample": "CHM13",
+      "contig": "chr17",
+      "start": 23182138,
+      "end": 23183138,
+      "context": 100,
+      "expectedCanonicalHash": "7baf766c78d46d363ac7e3348bb3035bcb9fe3b916db9d4664ae48f4eaf91af0"
+    },
+    {
+      "id": "random-1000-00003",
+      "class": "random-1000",
+      "sample": "CHM13",
+      "contig": "chr16",
+      "start": 35378588,
+      "end": 35379588,
+      "context": 100,
+      "expectedCanonicalHash": "c4dbf6aff5252ae1c14c0c9b6e19c17986bce2b79cf1eddab002bdb35ad69957"
+    },
+    {
+      "id": "random-1000-00004",
+      "class": "random-1000",
+      "sample": "GRCh38",
+      "contig": "chr1_KI270707v1_random",
+      "start": 30368,
+      "end": 31368,
+      "context": 100,
+      "expectedCanonicalHash": "699e7176f8e7f615eb65b261b56f271c57c4474bf5d2165f4e6307d927422a2c"
+    },
+    {
+      "id": "random-1000-00005",
+      "class": "random-1000",
+      "sample": "CHM13",
+      "contig": "chr2",
+      "start": 94822968,
+      "end": 94823968,
+      "context": 100,
+      "expectedCanonicalHash": "79ad6c4c0d0a5afae31b442da9450d6548c0d2d66dfc4baad9dcfcd97e0321cf"
+    },
+    {
+      "id": "random-1000-00006",
+      "class": "random-1000",
+      "sample": "GRCh38",
+      "contig": "chrUn_KI270757v1",
+      "start": 38740,
+      "end": 39740,
+      "context": 100,
+      "expectedCanonicalHash": "450490f3cc84309b64291895f5c20479736f587b4f3c9e6c9c8c3f6d5d0cdf07"
+    },
+    {
+      "id": "random-1000-00007",
+      "class": "random-1000",
+      "sample": "GRCh38",
+      "contig": "chrUn_KI270429v1",
+      "start": 79,
+      "end": 1079,
+      "context": 100,
+      "expectedCanonicalHash": "086b9937be2ff8bb0485c19aeb578dbbab84372701797a30f3a3a0336b854b53"
+    },
+    {
+      "id": "random-1000-00008",
+      "class": "random-1000",
+      "sample": "GRCh38",
+      "contig": "chrUn_KI270333v1",
+      "start": 1360,
+      "end": 2360,
+      "context": 100,
+      "expectedCanonicalHash": "cf4745fc5d8ea7df84d65d300d52f17e0c4f7f2c7f4a86af5ef27aa631ad5649"
+    },
+    {
+      "id": "random-1000-00009",
+      "class": "random-1000",
+      "sample": "CHM13",
+      "contig": "chr21",
+      "start": 31136057,
+      "end": 31137057,
+      "context": 100,
+      "expectedCanonicalHash": "6a6c75af87b20d8fb56b1fb71ddefa3d485ef2f893907461e08863b9f6c98238"
+    },
+    {
+      "id": "random-10000-00000",
+      "class": "random-10000",
+      "sample": "GRCh38",
+      "contig": "chrUn_KI270745v1",
+      "start": 11145,
+      "end": 21145,
+      "context": 100,
+      "expectedCanonicalHash": "8707f76334f8e152b9a39a39d699d77a00f4e30a413d7f415c9394dfb8fe52ea"
+    },
+    {
+      "id": "random-10000-00001",
+      "class": "random-10000",
+      "sample": "CHM13",
+      "contig": "chr4",
+      "start": 6103196,
+      "end": 6113196,
+      "context": 100,
+      "expectedCanonicalHash": "fc2c83fca3ec159599e6baaea431481f0422608484145397286d6c395e24f2ee"
+    },
+    {
+      "id": "random-10000-00002",
+      "class": "random-10000",
+      "sample": "GRCh38",
+      "contig": "chr17_GL000205v2_random",
+      "start": 65647,
+      "end": 75647,
+      "context": 100,
+      "expectedCanonicalHash": "c652c457b611fea70814d8af353d8da35d562d517bc4a5e952048125f520fe28"
+    },
+    {
+      "id": "random-10000-00003",
+      "class": "random-10000",
+      "sample": "CHM13",
+      "contig": "chrX",
+      "start": 149714910,
+      "end": 149724910,
+      "context": 100,
+      "expectedCanonicalHash": "2c56f1044cc1aa9d04830d4e6660ea5e98d292ce1869f3911745e77e8176009d"
+    },
+    {
+      "id": "random-10000-00004",
+      "class": "random-10000",
+      "sample": "CHM13",
+      "contig": "chr14",
+      "start": 90547485,
+      "end": 90557485,
+      "context": 100,
+      "expectedCanonicalHash": "36cdbcc2ac965056f43dcdf4d0ba23303dd78aeae8e2f968b8363a0823741f59"
+    },
+    {
+      "id": "random-10000-00005",
+      "class": "random-10000",
+      "sample": "CHM13",
+      "contig": "chr20",
+      "start": 30845366,
+      "end": 30855366,
+      "context": 100,
+      "expectedCanonicalHash": "ed5c146bdcfde28926c88eb30722d47a9149fe1c62a9a5d8096b942cce2ba8d9"
+    },
+    {
+      "id": "random-10000-00006",
+      "class": "random-10000",
+      "sample": "CHM13",
+      "contig": "chr7",
+      "start": 73437418,
+      "end": 73447418,
+      "context": 100,
+      "expectedCanonicalHash": "4fa0e2a1cc8cc941fa95145ae16e6e8352116b5ab8ddf1f0653186152f156018"
+    },
+    {
+      "id": "random-10000-00007",
+      "class": "random-10000",
+      "sample": "CHM13",
+      "contig": "chr15",
+      "start": 54267574,
+      "end": 54277574,
+      "context": 100,
+      "expectedCanonicalHash": "229330d366bf5e40a1af5cf2bd38cb0d8b11022a26c176144ed786ad704f64e4"
+    },
+    {
+      "id": "random-10000-00008",
+      "class": "random-10000",
+      "sample": "GRCh38",
+      "contig": "chr13",
+      "start": 106423015,
+      "end": 106433015,
+      "context": 100,
+      "expectedCanonicalHash": "1c5c619b4d174cc68ed4f1b8fc104dd6c2abfe11aab03eea26e699b2aad07497"
+    },
+    {
+      "id": "random-10000-00009",
+      "class": "random-10000",
+      "sample": "CHM13",
+      "contig": "chrX",
+      "start": 37036197,
+      "end": 37046197,
+      "context": 100,
+      "expectedCanonicalHash": "2ca8533a04d7b57ffc7e6c770813e93bed35b41c3f63329bf3c17cc861dc8b47"
+    },
+    {
+      "id": "random-100000-00000",
+      "class": "random-100000",
+      "sample": "GRCh38",
+      "contig": "chr11_KI270721v1_random",
+      "start": 56,
+      "end": 100056,
+      "context": 100,
+      "expectedCanonicalHash": "df8875a37ae0dbf44643714796932b828847dfda761b936e13d2ef89168f58b3"
+    },
+    {
+      "id": "random-100000-00001",
+      "class": "random-100000",
+      "sample": "CHM13",
+      "contig": "chr9",
+      "start": 43843214,
+      "end": 43943214,
+      "context": 100,
+      "expectedCanonicalHash": "6d7a94c925a691295c70ce6bfd9ac0dd997cf568b034771d83a9871463f62e7a"
+    },
+    {
+      "id": "random-100000-00002",
+      "class": "random-100000",
+      "sample": "GRCh38",
+      "contig": "chr1_KI270712v1_random",
+      "start": 22782,
+      "end": 122782,
+      "context": 100,
+      "expectedCanonicalHash": "c123581b0061580207d2fbe8e32d1cf84ce97fb03693e6659cb465303ecafca0"
+    },
+    {
+      "id": "random-100000-00003",
+      "class": "random-100000",
+      "sample": "GRCh38",
+      "contig": "chr17_KI270729v1_random",
+      "start": 38440,
+      "end": 138440,
+      "context": 100,
+      "expectedCanonicalHash": "2e84c6b30a5fd85fd6ae695bb75f58c6de93608b0c27f7143559c7e4fae1e72c"
+    },
+    {
+      "id": "random-100000-00004",
+      "class": "random-100000",
+      "sample": "GRCh38",
+      "contig": "chr22",
+      "start": 30407484,
+      "end": 30507484,
+      "context": 100,
+      "expectedCanonicalHash": "049b551868bc0108b2a20642df9aac9dde415a4e0b320cb011088e5c17b80311"
+    },
+    {
+      "id": "random-100000-00005",
+      "class": "random-100000",
+      "sample": "GRCh38",
+      "contig": "chr2_KI270715v1_random",
+      "start": 46409,
+      "end": 146409,
+      "context": 100,
+      "expectedCanonicalHash": "70798628350f5919b7d4323da19a9bcf11cb39dc6f58540ff468b228d8c2994a"
+    },
+    {
+      "id": "random-100000-00006",
+      "class": "random-100000",
+      "sample": "CHM13",
+      "contig": "chr11",
+      "start": 55470689,
+      "end": 55570689,
+      "context": 100,
+      "expectedCanonicalHash": "bef188b88995a8209bc1db86109ead91afec7e633bfea2f12fd620c9771509bc"
+    },
+    {
+      "id": "random-100000-00007",
+      "class": "random-100000",
+      "sample": "CHM13",
+      "contig": "chr1",
+      "start": 145220434,
+      "end": 145320434,
+      "context": 100,
+      "expectedCanonicalHash": "a62555ea19f3a75b5890e06874084116f73d31cec5778a6075221b584ec19702"
+    },
+    {
+      "id": "random-100000-00008",
+      "class": "random-100000",
+      "sample": "GRCh38",
+      "contig": "chr4",
+      "start": 133689934,
+      "end": 133789934,
+      "context": 100,
+      "expectedCanonicalHash": "3c48827fcfba9cd66de84f81ce44f647526df91c8fe69aee6f12c9e71b9065e6"
+    },
+    {
+      "id": "random-100000-00009",
+      "class": "random-100000",
+      "sample": "CHM13",
+      "contig": "chr1",
+      "start": 142389872,
+      "end": 142489872,
+      "context": 100,
+      "expectedCanonicalHash": "c341217f83e1b126b46856479505bde7844263cd77dc2c216dd1e73938fc3acc"
+    },
+    {
+      "id": "random-1000000-00000",
+      "class": "random-1000000",
+      "sample": "CHM13",
+      "contig": "chr4",
+      "start": 47225981,
+      "end": 48225981,
+      "context": 100,
+      "expectedCanonicalHash": "f44656656d20efe4f8bf2f99ea7e75f3272150cfe3752dd2f1a45e5ad3d4f42e"
+    },
+    {
+      "id": "random-1000000-00001",
+      "class": "random-1000000",
+      "sample": "CHM13",
+      "contig": "chr19",
+      "start": 30828207,
+      "end": 31828207,
+      "context": 100,
+      "expectedCanonicalHash": "3c9166288a580802eaa51d148f5e3635e7731fbd7bd40a3fa65f9d8e6832bc81"
+    },
+    {
+      "id": "random-1000000-00002",
+      "class": "random-1000000",
+      "sample": "CHM13",
+      "contig": "chr12",
+      "start": 9446975,
+      "end": 10446975,
+      "context": 100,
+      "expectedCanonicalHash": "2af310bf8c861bbf12cef8f265b70ab88d3bbcd0baa03829b60aa9d27dd5aae7"
+    },
+    {
+      "id": "random-1000000-00003",
+      "class": "random-1000000",
+      "sample": "CHM13",
+      "contig": "chrX",
+      "start": 73475179,
+      "end": 74475179,
+      "context": 100,
+      "expectedCanonicalHash": "1547b964e274ffeff5c9afd7db0addd9ded8f9fd13a2514db36b7c5b1d052ee3"
+    },
+    {
+      "id": "random-1000000-00004",
+      "class": "random-1000000",
+      "sample": "CHM13",
+      "contig": "chr1",
+      "start": 206658133,
+      "end": 207658133,
+      "context": 100,
+      "expectedCanonicalHash": "d9021e6a78ef7f08b1fbd47f45d5346ddea19529ec39942b01ff6d5d9f5c620e"
+    },
+    {
+      "id": "random-1000000-00005",
+      "class": "random-1000000",
+      "sample": "GRCh38",
+      "contig": "chr7",
+      "start": 142010681,
+      "end": 143010681,
+      "context": 100,
+      "expectedCanonicalHash": "7ba2755bb8c489c628051fd744c336b8e9aa61780ccb0f550e08b54b253bea60"
+    },
+    {
+      "id": "random-1000000-00006",
+      "class": "random-1000000",
+      "sample": "CHM13",
+      "contig": "chr7",
+      "start": 114386209,
+      "end": 115386209,
+      "context": 100,
+      "expectedCanonicalHash": "bd634bd0d5bbbe85f624b83b1026388a887a59b47e04da4e523493185fb709d3"
+    },
+    {
+      "id": "random-1000000-00007",
+      "class": "random-1000000",
+      "sample": "GRCh38",
+      "contig": "chr21",
+      "start": 32520437,
+      "end": 33520437,
+      "context": 100,
+      "expectedCanonicalHash": "7637b2d12d22f489275104dba98f2c0a4919db20e9c7e10d310e5e37b58673a4"
+    },
+    {
+      "id": "random-1000000-00008",
+      "class": "random-1000000",
+      "sample": "CHM13",
+      "contig": "chr7",
+      "start": 26416742,
+      "end": 27416742,
+      "context": 100,
+      "expectedCanonicalHash": "0eb602143b94f6e88a4c9783ba11ca6e7be9624c5b94b22beccf6cbfa4c132fd"
+    },
+    {
+      "id": "random-1000000-00009",
+      "class": "random-1000000",
+      "sample": "CHM13",
+      "contig": "chr8",
+      "start": 10660690,
+      "end": 11660690,
+      "context": 100,
+      "expectedCanonicalHash": "25a72f33a3ae88bc4ff68166471e25b9cafa64ebd2789b68e1f32f7132ac14e0"
+    }
+  ]
+}

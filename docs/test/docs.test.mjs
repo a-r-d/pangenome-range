@@ -132,8 +132,10 @@ test("Pages defaults to the content-addressed whole-genome demo archive", async 
   assert.doesNotMatch(source, /PANGENOME_RANGE_DEMO_POPLAR_ARCHIVE_URL/);
 });
 
-test("README leads with the four project parts and useful demo links", async () => {
+test("README records completed-project status, measured results, and demos", async () => {
   const source = await readFile(readmeUrl, "utf8");
+  assert.match(source, /short experiment in constraint-driven agentic/);
+  assert.match(source, /do not plan to\s+maintain it as an ongoing product/);
   assert.match(source, /## What is in this repository/);
   assert.match(source, /\*\*The `\.pngr` file format\*\*/);
   assert.match(source, /\*\*A Rust encoder\*\*/);
@@ -145,7 +147,16 @@ test("README leads with the four project parts and useful demo links", async () 
   assert.match(source, /PNGRNG01/);
   assert.match(source, /https:\/\/github\.com\/a-r-d\/PureJsImage/);
   assert.match(source, /https:\/\/purejsimage\.com\//);
-  assert.match(source, /## Live demos/);
+  assert.match(source, /## Result against range-readable GBZ-base/);
+  assert.match(source, /1,249 HTTP requests\s+and 78\.8 MB/);
+  assert.match(source, /13\.3x fewer\s+requests and 4\.23x fewer/);
+  assert.match(source, /strict loopback Range origin/);
+  assert.match(source, /7\.8% larger than GBZ-base/);
+  assert.match(
+    source,
+    /results\/2026-08-31-hprc-public-network-gbz-base\/REPORT\.md/,
+  );
+  assert.match(source, /## More demos!/);
   assert.match(source, /archive=chicken&preset=chicken-igll1-ucd312-deletion/);
   assert.match(source, /archive=hprc&locus=HLA-B/);
   assert.match(source, /archive=hprc&locus=KIR3DL1/);
@@ -156,7 +167,7 @@ test("README leads with the four project parts and useful demo links", async () 
   assert.match(source, /zoom=[^&]+&center=[^&]+&vscale=/);
   assert.match(source, /Local files still require you to choose the file/);
 
-  const demos = source.indexOf("## Live demos");
+  const demos = source.indexOf("## More demos!");
   const rawPathId = source.indexOf("UCD312#2#h2tg000050l#fragment=1251366");
   assert.ok(demos >= 0);
   assert.ok(

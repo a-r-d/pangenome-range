@@ -1,0 +1,79 @@
+{
+  "schemaVersion": 1,
+  "status": "passed",
+  "source": {
+    "kind": "GBZ",
+    "bytes": 5492627216,
+    "sha256": "11d6047f79575ffb83757462484bad134ed20928bd2c8171ec52e35a54976e2b"
+  },
+  "gbzBase": {
+    "bytes": 10050412544,
+    "buildCommandWallSeconds": 507.4,
+    "buildCommandReleaseCompilationSeconds": 9.37,
+    "buildCommandPeakRssKiB": 12240204,
+    "buildCommandSwaps": 0,
+    "openWallMs": 3.903214,
+    "queryTimingScope": "Subgraph::from_db only; database open, serialization, hashing, and source comparison excluded",
+    "cacheScope": "first pass with uncontrolled mixed OS cache"
+  },
+  "pngr": {
+    "bytes": 10836425558,
+    "sha256": "82585cb612effbf414b1c8f38b049bc415876866168ccc929f9a885f06d97b0a",
+    "bytesRelativeToGbzBase": 1.0782070398164145,
+    "publicUrl": "https://archives.ard.ninja/pangenome-range/sha256/82585cb612effbf414b1c8f38b049bc415876866168ccc929f9a885f06d97b0a/hprc-v2.1-gencode-v50-named-membership-82585cb612effbf4.pngr",
+    "publicEtag": "\"6a95a096-285e6bb56\""
+  },
+  "workload": {
+    "sha256": "c2a88ba48b0221ed69fc8d7c09c221dedacacf4f2d3a40d44e0faf682aacfaba",
+    "queryCount": 47,
+    "randomQueriesPerSize": 10,
+    "randomSizes": [1000, 10000, 100000, 1000000],
+    "context": 100
+  },
+  "correctness": {
+    "gbzBaseSourceEqualMeasurements": 94,
+    "gbzBaseSourceEqualPassed": 94,
+    "pngrSourceOracleQueries": 47,
+    "pngrSourceOraclePassed": 47,
+    "pngrHaplotypeTilesChecked": 730,
+    "pngrHaplotypeTilesPassed": 730,
+    "nodeNetworkMeasurementsPassed": 188,
+    "nodeLocalMeasurementsPassed": 94
+  },
+  "randomQueryClasses": [
+    {
+      "size": 1000,
+      "gbzBaseLocalFirstPassMs": { "p50": 6.325478, "p95": 998.062182 },
+      "pngrLocalColdWasmMs": { "p50": 84.735614, "p95": 6433.983222 },
+      "pngrPublicColdWasmMs": { "p50": 384.260657, "p95": 6062.999962 },
+      "pngrPublicColdBytes": { "p50": 25847, "p95": 402128 }
+    },
+    {
+      "size": 10000,
+      "gbzBaseLocalFirstPassMs": { "p50": 33.540791, "p95": 74.935068 },
+      "pngrLocalColdWasmMs": { "p50": 140.886932, "p95": 314.350321 },
+      "pngrPublicColdWasmMs": { "p50": 428.223459, "p95": 610.352356 },
+      "pngrPublicColdBytes": { "p50": 46117, "p95": 66191 }
+    },
+    {
+      "size": 100000,
+      "gbzBaseLocalFirstPassMs": { "p50": 517.709058, "p95": 1992.217063 },
+      "pngrLocalColdWasmMs": { "p50": 719.854394, "p95": 2861.752829 },
+      "pngrPublicColdWasmMs": { "p50": 1024.994052, "p95": 3319.189977 },
+      "pngrPublicColdBytes": { "p50": 196383, "p95": 481072 }
+    },
+    {
+      "size": 1000000,
+      "gbzBaseLocalFirstPassMs": { "p50": 8617.588342, "p95": 15117.734309 },
+      "pngrLocalColdWasmMs": { "p50": 6652.089794, "p95": 13187.152102 },
+      "pngrPublicColdWasmMs": { "p50": 7397.71506, "p95": 14269.185962 },
+      "pngrPublicColdBytes": { "p50": 1570680, "p95": 2321292 }
+    }
+  ],
+  "limitations": [
+    "Each random size class has 10 queries, so nearest-rank p95 equals the class maximum.",
+    "GBZ-base is a local SQLite query baseline; it has no static HTTP range-query contract.",
+    "The public-network run used Node, not a browser, from one host and route with uncontrolled CDN and kernel cache state.",
+    "The two formats return related but different haplotype models; each is independently checked against its declared source semantics rather than claimed byte-identical to the other."
+  ]
+}

@@ -24,6 +24,9 @@ serde_json.workspace = true
 sha2.workspace = true
 simple-sds.workspace = true
 
+[features]
+remote-sqlite-benchmark = ["pangenome-range-build/remote-sqlite-benchmark"]
+
 [lints]
 workspace = true
 
